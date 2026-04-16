@@ -11,6 +11,12 @@
       "allowedVersions": "!/^3\\.14/"
     }
   ],
+  "git-submodules": {
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true
+  },
   "automerge": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",

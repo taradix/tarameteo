@@ -1,4 +1,6 @@
 name: tarameteo
+include:
+  - path: ./taracert/compose.dev.yml
 services:
   api:
     volumes:
@@ -11,11 +13,3 @@ services:
       - ./backend/tarameteo:/app/tarameteo
     command: >
       bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.issuer:app --log-config=/app/log-config.dev.yaml --reload --reload-exclude='.*'"
-
-  certbot:
-    volumes:
-      - ./certbot/generate-cert.sh:/generate-cert.sh:ro
-    environment:
-      - IPV4_NETWORK=${IPV4_NETWORK:-172.22.1}
-    command: >
-      sh -c "trap exit TERM; /generate-cert.sh; /deploy-hook.sh; echo Ready; sleep infinity"

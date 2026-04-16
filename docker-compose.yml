@@ -1,7 +1,8 @@
 x-build-args: &python-build-args
   PYTHON_VERSION: ${PYTHON_VERSION:-3.13.10}
 name: tarameteo
-
+include:
+  - path: ./taracert/compose.yml
 services:
   api:
     build:
@@ -26,32 +27,6 @@ services:
       start_period: 10s
       interval: 10s
       timeout: 5s
-
-  certbot:
-    image: certbot/certbot:v5.3.1
-    volumes:
-      - ./certbot/deploy-hook.sh:/deploy-hook.sh:ro,Z
-      - certbot-certs:/etc/letsencrypt
-      - certbot-www:/var/www/html
-    environment:
-      - SERVER_HOSTNAME=${SERVER_HOSTNAME}
-    networks:
-      default:
-        aliases:
-          - tarameteo-certbot
-    command: >
-      sh -c "trap exit TERM; while :; do
-        certbot renew --webroot --webroot-path=/var/www/html --deploy-hook /deploy-hook.sh;
-        sleep 12h;
-      done"
-    entrypoint: ""
-    restart: always
-    healthcheck:
-      test: [ "CMD", "test", "-e", "/etc/letsencrypt/live/fullchain.pem" ]
-      start_period: 10s
-      interval: 10s
-      timeout: 5s
-      retries: 15
 
   issuer:
     build:
@@ -130,8 +105,6 @@ networks:
         - subnet: ${IPV4_NETWORK:-172.22.1}.0/24
 
 volumes:
-  certbot-certs:
-  certbot-www:
   mosquitto-data:
   pki-root:
   pki-trust:
