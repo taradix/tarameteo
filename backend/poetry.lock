@@ -1189,24 +1189,29 @@ pytest = ">=9.0.0,<10.0.0"
 
 [[package]]
 name = "pytest-xdocker"
-version = "0.2.7"
+version = "0.2.8"
 description = "Pytest fixture to run docker across test runs."
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["test"]
 files = [
-    {file = "pytest_xdocker-0.2.7-py3-none-any.whl", hash = "sha256:9e235535e8207183f0e2f5b95776e31db6833658eb254b6601b6ab3c6d64e0db"},
-    {file = "pytest_xdocker-0.2.7.tar.gz", hash = "sha256:01dcde4420296ee0269fa6da3366a3fd7b15c708e264122b6b103b3bcfaba204"},
+    {file = "pytest_xdocker-0.2.8-py3-none-any.whl", hash = "sha256:d7fcb352470aaa5c8d29f38ee9f8a338bb302329a5ed33edf317ee6c950fe017"},
+    {file = "pytest_xdocker-0.2.8.tar.gz", hash = "sha256:625ca2b673ea3f3fb4a8799de7b352fd28614f1751a2bd488198ff43e8386f44"},
 ]
 
 [package.dependencies]
-attrs = ">=25.3.0,<26.0.0"
-netifaces2 = ">=0.0.22,<1.0.0"
-psutil = ">=6.1.1,<7.0.0"
-pyhamcrest = ">=2.1.0,<3.0.0"
-pytest = ">=9.0.0,<10.0.0"
-pytest-cache = ">=1.0,<2.0"
-pytest-xprocess = ">=1.0.2,<2.0.0"
+attrs = ">=25.3.0"
+netifaces2 = ">=0.0.22"
+psutil = ">=6.1.1"
+pyhamcrest = ">=2.1.0"
+pytest = ">=9.0.0"
+pytest-cache = ">=1.0"
+pytest-xprocess = ">=1.0.2"
+
+[package.extras]
+check = ["ruff (>=0.9.0,<1.0.0)"]
+docs = ["sphinx (>=6.1.3,<7.0.0)", "sphinx-rtd-theme (>=1.2.0,<2.0.0)", "sphinxcontrib-log-cabinet (>=1.0.1,<2.0.0)"]
+test = ["coverage (>=7.2.3,<8.0.0)", "pytest-unique (>=0.1.7,<1.0.0)", "yarl (>=1.18.3,<2.0.0)"]
 
 [[package]]
 name = "pytest-xprocess"
