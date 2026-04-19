@@ -1,15 +1,11 @@
-# Configuration files
 include/config.h
-
-# Environments
-.pio
-.venv
-
-# Unit test / coverage reports
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pio/
+.venv/
 *.gcno
 coverage.info
 coverage.cleaned.info
 coverage_html/
-
-# Lint checking
 compile_commands.json
