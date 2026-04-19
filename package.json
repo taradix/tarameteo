@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "lint": "dclint --fix docker-compose.yml docker-compose.dev.yml"
+    "lint": "dclint --fix compose.yml compose.dev.yml"
   },
   "devDependencies": {
     "dclint": "^3.1.0"
