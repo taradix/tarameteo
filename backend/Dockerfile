@@ -1,40 +1,44 @@
-ARG PYTHON_VERSION=3.13.10
-FROM python:${PYTHON_VERSION}-slim AS base
+ARG PYTHON_VERSION=3.14.2
+FROM python:${PYTHON_VERSION}-alpine AS base
 
-ARG POETRY_VERSION=2.1.1
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_VERSION=${POETRY_VERSION} \
-    POETRY_HOME="/opt/poetry" \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_NO_INTERACTION=1
+    PYTHONDONTWRITEBYTECODE=1
 
 FROM base AS build
 
-ENV PATH="$POETRY_HOME/bin:$PATH"
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-RUN apt update \
-  && apt install -y --no-install-recommends \
-  build-essential \
-  curl \
-  pkg-config \
-  && curl -sSL https://install.python-poetry.org | python3 -
+RUN apk add --no-cache \
+  build-base \
+  libffi-dev \
+  mariadb-connector-c-dev \
+  pkgconf
 
 WORKDIR /app
 
-COPY poetry.lock pyproject.toml ./
-RUN poetry install --only main --no-root
+COPY uv.lock pyproject.toml ./
+RUN uv sync --frozen --no-install-project
 
 COPY . ./
-RUN poetry install --only main
+RUN uv sync --frozen
+
+FROM build AS docs
+
+RUN uv sync --frozen --no-install-project --extra=docs --extra=test
+RUN uv run sphinx-build -W -d build/doctrees docs build/html
 
 FROM base AS runtime
 
+EXPOSE 80
+
 ENV PATH="/app/.venv/bin:$PATH"
+
+RUN apk add --no-cache \
+  mariadb-connector-c \
+  nftables \
+  py3-nftables
 
 WORKDIR /app
 
 COPY --from=build /app ./
+COPY --from=docs /app/build/html ./docs/html

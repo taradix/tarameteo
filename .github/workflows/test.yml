@@ -23,10 +23,17 @@ jobs:
         with:
           node-version: 24
 
-      - name: Set up Python environment
-        uses: ./.github/actions/setup-poetry-env
+      - name: Set up backend environment
+        uses: ./.github/actions/setup-uv-env
         with:
-          python-version: "3.13"
+          extras: check
+          python-version: "3.14"
+          working-directory: backend
+
+      - name: Set up firmware environment
+        uses: ./.github/actions/setup-uv-env
+        with:
+          python-version: "3.14"
           working-directory: firmware
 
       - name: Run check target
@@ -40,9 +47,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Python environment
-        uses: ./.github/actions/setup-poetry-env
+        uses: ./.github/actions/setup-uv-env
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           working-directory: firmware
 
       - name: Create config.h from example
@@ -58,7 +65,7 @@ jobs:
         run: make test
 
       - name: "Upload coverage data"
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-coverage
           path: firmware/.pio/build/native
@@ -79,13 +86,13 @@ jobs:
           version: 1.0
 
       - name: Set up Python environment
-        uses: ./.github/actions/setup-poetry-env
+        uses: ./.github/actions/setup-uv-env
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           working-directory: firmware
 
       - name: Download coverage data
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: firmware
 
@@ -94,7 +101,7 @@ jobs:
         run: make coverage
 
       - name: Upload HTML report if check failed.
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-report
           path: firmware
@@ -104,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.12', '3.13', '3.14']
       fail-fast: false
     steps:
       - name: Check out
@@ -113,8 +120,9 @@ jobs:
           submodules: true
 
       - name: Set up Python environment
-        uses: ./.github/actions/setup-poetry-env
+        uses: ./.github/actions/setup-uv-env
         with:
+          extras: test
           python-version: ${{ matrix.python-version }}
           working-directory: backend
 
@@ -123,7 +131,7 @@ jobs:
         run: make test
 
       - name: "Upload coverage data"
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-data-${{ matrix.python-version }}
           path: backend/.coverage.*
@@ -139,14 +147,14 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Python environment
-        uses: ./.github/actions/setup-poetry-env
+        uses: ./.github/actions/setup-uv-env
         with:
-          python-version: "3.13"
-          poetry-options: --only=test
+          extras: test
+          python-version: "3.14"
           working-directory: backend
 
       - name: Download coverage data
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: backend
           pattern: coverage-data-*
@@ -157,7 +165,7 @@ jobs:
         run: make coverage
 
       - name: Upload HTML report if check failed.
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: backend-report
           path: htmlcov

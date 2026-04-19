@@ -3,5 +3,5 @@
 !docs
 !log-config.*
 !pyproject.toml
-!poetry.lock
+!uv.lock
 !tarameteo

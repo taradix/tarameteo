@@ -1,15 +1,17 @@
-PYTHON := poetry run python
-PIO := poetry run pio
+RUN := uv run
+PYTHON := $(RUN) python
+PIO := $(RUN) pio
 TOUCH := $(PYTHON) -c 'import sys; from pathlib import Path; Path(sys.argv[1]).touch()'
+
+uv.lock: pyproject.toml
+	uv lock
 
 include/config.h: include/config.h.example
 	@cp -u $< $@
 
-.venv/pyvenv.cfg: poetry.lock
-	@echo "==> Building Python virtualenv..."
-	@$(PYTHON) -m venv .venv
-	@echo "==> Installing Poetry environment..."
-	@poetry install
+.venv/pyvenv.cfg: uv.lock
+	@echo "==> Installing environment..."
+	@uv sync --frozen
 	@$(TOUCH) $@
 
 .pio/libdeps/%/integrity.dat: .venv/pyvenv.cfg platformio.ini

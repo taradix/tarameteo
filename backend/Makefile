@@ -1,14 +1,16 @@
 VENV := .venv
 
-PYTHON := poetry run python
+RUN := uv run
+PYTHON := $(RUN) python
 TOUCH := $(PYTHON) -c 'import sys; from pathlib import Path; Path(sys.argv[1]).touch()'
 
+uv.lock: pyproject.toml
+	uv lock
+
 # Build .venv with deps.
-$(VENV): poetry.lock
-	@echo "==> Building Python virtualenv..."
-	@$(PYTHON) -m venv $@
-	@echo "==> Installing Poetry environment..."
-	@poetry install
+$(VENV): uv.lock
+	@echo "==> Installing environment..."
+	@uv sync --frozen --all-extras
 	@$(TOUCH) $@
 
 # Convenience target to build venv
@@ -17,26 +19,26 @@ setup: $(VENV)
 
 .PHONY: check
 check: $(VENV)
-	@echo "==> Checking Poetry lock..."
-	@poetry check --lock
+	@echo "==> Checking uv lock..."
+	@uv lock --check
 	@echo "==> Linting Python code..."
-	@poetry run ruff check .
+	@$(RUN) ruff check .
 
 .PHONY: test
 test: $(VENV)
 	@echo "==> Testing Python code..."
-	@poetry run coverage run -p -m pytest
+	@$(RUN) coverage run -p -m pytest
 
 .PHONY: coverage
 coverage: $(VENV)
 	@echo "==> Checking coverage..."
-	@poetry run coverage combine
-	@poetry run coverage html --skip-covered --skip-empty
-	@poetry run coverage report
+	@$(RUN) coverage combine
+	@$(RUN) coverage html --skip-covered --skip-empty
+	@$(RUN) coverage report
 
 .PHONY: docs
 docs: $(VENV)
 	@echo "==> Building docs..."
-	@poetry run sphinx-build -W -d build/doctrees docs build/html
+	@$(RUN) sphinx-build -W -d build/doctrees docs build/html
 
 .DEFAULT_GOAL := test

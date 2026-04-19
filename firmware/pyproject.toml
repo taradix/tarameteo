@@ -1,20 +1,19 @@
 [project]
 name = "tarameteo"
 version = "0.0.0"
-description = "Weather station at Notre-Dame-du-Laus"
+description = "Weather station firmware"
 authors = [
     {name = "Marc Tardif", email = "marc@taram.ca"}
 ]
 readme = "README.rst"
-repository = "https://github.com/cr3/tarameteo"
-requires-python = ">=3.11,<4.0"
+requires-python = ">=3.12,<4.0"
 dependencies = [
     "platformio (>=6.1.18,<7.0.0)"
 ]
 
-[tool.poetry]
-package-mode = false
-
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
