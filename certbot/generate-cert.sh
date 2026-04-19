@@ -16,8 +16,43 @@ fi
 
 mkdir -p "${LIVE_DIR}" "${ARCHIVE_DIR}" "${RENEWAL_DIR}"
 
-# Generate private key and self-signed certificate
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "${ARCHIVE_DIR}/privkey1.pem" -out "${ARCHIVE_DIR}/cert1.pem" -subj "/CN=${SERVER_HOSTNAME}" -addext "subjectAltName=IP:${IPV4_NETWORK}.240"
+# Generate private key and signed certificate
+cat <<EOF > "$ARCHIVE_DIR/san.cnf"
+[ req ]
+distinguished_name = dn
+req_extensions = req_ext
+prompt = no
+
+[ dn ]
+CN = $SERVER_HOSTNAME
+
+[ req_ext ]
+subjectAltName = @alt_names
+
+[ alt_names ]
+DNS.1 = $SERVER_HOSTNAME
+IP.1  = $IPV4_NETWORK.2
+IP.2  = $IPV4_NETWORK.3
+IP.3  = $IPV4_NETWORK.4
+IP.4  = $IPV4_NETWORK.5
+IP.5  = $IPV4_NETWORK.6
+EOF
+
+openssl ecparam -name prime256v1 -genkey -noout -out "${ARCHIVE_DIR}/privkey1.pem"
+
+SERIAL_HEX="0x$(openssl rand -hex 16)"
+openssl req -new \
+  -key "$ARCHIVE_DIR/privkey1.pem" \
+  -config "$ARCHIVE_DIR/san.cnf" \
+| openssl x509 -req \
+  -CA /ca/ca.pem \
+  -CAkey /ca/ca.key \
+  -set_serial "$SERIAL_HEX" \
+  -out "$ARCHIVE_DIR/cert1.pem" \
+  -days 365 \
+  -sha256 \
+  -extfile "$ARCHIVE_DIR/san.cnf" \
+  -extensions req_ext
 
 # Create chain.pem (self-signed so chain = cert) and fullchain.pem (cert + chain)
 cp "${ARCHIVE_DIR}/cert1.pem" "${ARCHIVE_DIR}/chain1.pem"

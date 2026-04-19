@@ -16,10 +16,7 @@ autosave_interval 60
 
 log_dest file ${MOSQUITTO_DATA_DIR}/mosquitto.log
 log_dest stdout
-log_type error
-log_type warning
-log_type notice
-log_type information
+log_type all
 log_timestamp true
 log_timestamp_format %Y-%m-%dT%H:%M:%S
 
@@ -33,7 +30,7 @@ protocol mqtt
 listener 8883
 protocol mqtt
 
-cafile /etc/mosquitto/pki/ca.crt
+cafile /etc/mosquitto/pki/ca.pem
 certfile ${MOSQUITTO_CONFIG_DIR}/certs/cert.pem
 keyfile ${MOSQUITTO_CONFIG_DIR}/certs/key.pem
 

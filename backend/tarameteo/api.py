@@ -11,11 +11,11 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from tarameteo.issuer import (
-    IssuerClient,
-    MintRequest,
-    MintResponse,
-    get_issuer_client,
+from tarameteo.ca_client import (
+    CAClient,
+    IssueCertificateRequest,
+    IssueCertificateResponse,
+    get_ca_client,
 )
 
 logger = logging.getLogger("uvicorn")
@@ -40,12 +40,12 @@ app.add_middleware(
 )
 
 
-@app.post("/api/certs", response_model=MintResponse)
-async def post_cert(
-    request: MintRequest,
-    issuer_client: Annotated[IssuerClient, Depends(get_issuer_client)],
-) -> MintResponse:
-    return await issuer_client.mint(request)
+@app.post("/api/certs", response_model=IssueCertificateResponse)
+def post_cert(
+    request: IssueCertificateRequest,
+    ca_client: Annotated[CAClient, Depends(get_ca_client)],
+) -> IssueCertificateResponse:
+    return ca_client.issue_certificate(request)
 
 
 @app.exception_handler(Exception)

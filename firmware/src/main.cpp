@@ -274,7 +274,7 @@ void loop() {
     data.retryCount = mqttClient.getRetryCount();
   } else {
     printStatus("Data Publish", true);
-    Serial.printf("Data published successfully to topic: weather/%s\n", certManager.getSensorName());
+    Serial.printf("Data published successfully to topic: weather/%s/event\n", certManager.getSensorName());
   }
 
   // Disconnect from MQTT (reduces power consumption during sleep)

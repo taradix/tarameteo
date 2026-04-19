@@ -3,6 +3,7 @@
 from datetime import (
     UTC,
     datetime,
+    timedelta,
 )
 
 from hamcrest import (
@@ -12,10 +13,10 @@ from hamcrest import (
 )
 
 from tarameteo.api import app
-from tarameteo.issuer import (
-    MintRequest,
-    MintResponse,
-    get_issuer_client,
+from tarameteo.ca_client import (
+    IssueCertificateRequest,
+    IssueCertificateResponse,
+    get_ca_client,
 )
 
 
@@ -27,29 +28,34 @@ def test_healthz_get(api_app):
 
 
 def test_certs_post(api_app, unique):
-    device_id = unique("text")
-    key_pem, cert_pem, ca_pem = unique("text"), unique("text"), unique("text")
-    serial = unique("text")
+    csr_pem, cert_pem, ca_pem = unique("text"), unique("text"), unique("text")
+    serial_number, subject, issuer = unique("integer"), unique("text"), unique("text")
+    now = datetime.now(UTC)
+    not_before = now - timedelta(hours=2)
+    not_after = now + timedelta(days=30)
 
-    class StubIssuerClient:
-        async def mint(self, request: MintRequest) -> MintResponse:
-            assert_that(request, has_properties(device_id=device_id))
-            return MintResponse(
-                key_pem=key_pem,
+    class StubCAClient:
+        def issue_certificate(self, request: IssueCertificateRequest) -> IssueCertificateResponse:
+            assert_that(request, has_properties(csr_pem=csr_pem))
+            return IssueCertificateResponse(
                 cert_pem=cert_pem,
-                ca_pem=ca_pem,
-                expires_at=datetime.now(UTC),
-                serial=serial,
+                chain_pem=[ca_pem],
+                serial_number=serial_number,
+                not_before=not_before,
+                not_after=not_after,
+                subject=subject,
+                issuer=issuer,
             )
 
-    app.dependency_overrides[get_issuer_client] = lambda: StubIssuerClient()
+    app.dependency_overrides[get_ca_client] = lambda: StubCAClient()
 
     response = api_app.post("/api/certs", json={
-        "device_id": device_id,
+        "csr_pem": csr_pem,
     })
     assert_that(response.json(), has_entries(
-        key_pem=key_pem,
         cert_pem=cert_pem,
-        ca_pem=ca_pem,
-        serial=serial,
+        chain_pem=[ca_pem],
+        serial_number=serial_number,
+        subject=subject,
+        issuer=issuer,
     ))

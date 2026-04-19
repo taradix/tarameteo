@@ -29,7 +29,7 @@ bool MqttClient::begin() {
   // Initialize topics using sensor name from certificate CN
   const char *sensorName = _certManager->getSensorName();
   if (sensorName && strlen(sensorName) > 0) {
-    snprintf(_topic, sizeof(_topic), "weather/%s", sensorName);
+    snprintf(_topic, sizeof(_topic), "weather/%s/event", sensorName);
     snprintf(_clientId, sizeof(_clientId), "tarameteo-%s", sensorName);
     snprintf(_lwTopic, sizeof(_lwTopic), "status/%s", sensorName);
     Serial.printf("MqttClient: Initialized for sensor: %s\n", sensorName);

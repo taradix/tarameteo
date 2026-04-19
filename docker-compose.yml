@@ -9,23 +9,78 @@ services:
       args:
         <<: *python-build-args
     depends_on:
-      issuer:
+      ca:
         condition: service_healthy
-    command: >
-      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.yaml"
     environment:
-      - ISSUER_URL=http://tarameteo-issuer
-      - ISSUER_TOKEN=${ISSUER_TOKEN}
+      - CA_URL=http://tarameteo-ca/v1/certs
+      - CA_TOKEN=${CA_TOKEN}
     networks:
       default:
         aliases:
           - tarameteo-api
+    command: >
+      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.yaml"
     restart: always
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)"]
+      test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]
       start_period: 10s
       interval: 10s
       timeout: 5s
+
+  ca:
+    build:
+      context: backend
+      args:
+        <<: *python-build-args
+    depends_on:
+      ca-init:
+        condition: service_completed_successfully
+    #      certbot:
+    #        condition: service_healthy
+    volumes:
+      - ca-tls:/ca:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    environment:
+      - CA_KEY=/ca/ca.key
+      - CA_CERT=/ca/ca.pem
+      #      - CA_KEY=/etc/letsencrypt/live/privkey.pem
+      #      - CA_CERT=/etc/letsencrypt/live/fullchain.pem
+      - CA_TOKEN=${CA_TOKEN}
+    networks:
+      default:
+        aliases:
+          - tarameteo-ca
+    command: >
+      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.ca:app --log-config=/app/log-config.yaml"
+    restart: always
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+
+  ca-init:
+    build: ca
+    volumes:
+      - ca-tls:/ca
+    environment:
+      - CA_DIR=/ca
+    command: /init.sh
+    restart: no
+
+  ca-publish:
+    build: ca
+    depends_on:
+      ca-init:
+        condition: service_completed_successfully
+    volumes:
+      - ca-tls:/ca-tls:ro
+      - ca-trust:/ca-trust
+    environment:
+      - CA_TLS_DIR=/ca-tls
+      - CA_TRUST_DIR=/ca-trust
+    command: /publish.sh
+    restart: no
 
   certbot:
     image: certbot/certbot:v5.3.1
@@ -53,41 +108,118 @@ services:
       timeout: 5s
       retries: 15
 
-  issuer:
+  consumer:
     build:
       context: backend
       args:
         <<: *python-build-args
     depends_on:
-      pki-init:
+      consumer-init:
         condition: service_completed_successfully
+      influxdb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
     volumes:
-      - pki-root:/pki:ro
-    command: >
-      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.issuer:app --log-config=/app/log-config.yaml"
+      - consumer-tls:/tls:ro
     environment:
-      - ISSUER_TOKEN=${ISSUER_TOKEN}
+      - MQTT_BROKER_HOST=tarameteo-mosquitto
+      - MQTT_BROKER_PORT=8883
+      - MQTT_CERT_PATH=/tls/consumer.pem
+      - MQTT_KEY_PATH=/tls/consumer.key
+      - MQTT_CA_PATH=/tls/ca.pem
+      - INFLUX_URL=http://tarameteo-influxdb:8086
+      - INFLUX_TOKEN=${INFLUX_TOKEN}
+      - INFLUX_ORG=${INFLUX_ORG:-tarameteo}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:-weather}
     networks:
       default:
         aliases:
-          - tarameteo-issuer
+          - tarameteo-consumer
+    command: tarameteo-consumer
+    restart: always
+
+  consumer-init:
+    build:
+      context: backend
+      args:
+        <<: *python-build-args
+    depends_on:
+      ca:
+        condition: service_healthy
+    volumes:
+      - consumer-tls:/tls
+    environment:
+      - PKI_API_URL=http://tarameteo-ca/v1/certs
+      - PKI_API_TOKEN=${CA_TOKEN}
+      - PKI_OUTPUT_DIR=/tls
+    command: tarameteo-pki rotate consumer
+    restart: no
+
+  consumer-rotate:
+    build:
+      context: backend
+      args:
+        <<: *python-build-args
+    depends_on:
+      ca:
+        condition: service_healthy
+      consumer-init:
+        condition: service_completed_successfully
+    volumes:
+      - consumer-tls:/tls
+    environment:
+      - PKI_API_URL=http://tarameteo-ca/v1/certs
+      - PKI_API_TOKEN=${CA_TOKEN}
+      - PKI_OUTPUT_DIR=/tls
+    command: >
+      sh -c "while :; do
+        tarameteo-pki check consumer
+        case $? in
+          0) : ;;
+          1) tarameteo-pki renew consumer ;;
+          2) tarameteo-pki rotate consumer ;;
+          *) exit 1
+        esac
+        sleep 12h
+      done"
+    restart: always
+
+  influxdb:
+    image: influxdb:2.7
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-tarameteo}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-weather}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN}
+      - DOCKER_INFLUXDB_INIT_RETENTION=${INFLUX_RETENTION:-7d}
+    networks:
+      default:
+        aliases:
+          - tarameteo-influx
     restart: always
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)"]
-      start_period: 10s
+      test: [ "CMD", "influx", "ping" ]
+      start_period: 30s
       interval: 10s
       timeout: 5s
+      retries: 5
 
   mosquitto:
     build: mosquitto
     depends_on:
+      ca-publish:
+        condition: service_completed_successfully
       certbot:
         condition: service_healthy
-      pki-publish:
-        condition: service_completed_successfully
     volumes:
+      - ca-trust:/etc/mosquitto/pki:ro
       - certbot-certs:/etc/letsencrypt:ro
-      - pki-trust:/etc/mosquitto/pki:ro
       - mosquitto-data:/mosquitto/data
       - ./mosquitto/mosquitto.tpl:/mosquitto.tpl
     environment:
@@ -103,24 +235,6 @@ services:
           - tarameteo-mosquitto
     restart: always
 
-  pki-init:
-    build: pki
-    volumes:
-      - pki-root:/pki
-    command: /init.sh
-    restart: "no"
-
-  pki-publish:
-    build: pki
-    depends_on:
-      pki-init:
-        condition: service_completed_successfully
-    volumes:
-      - pki-root:/pki:ro
-      - pki-trust:/trust
-    command: /publish.sh
-    restart: "no"
-
 networks:
   default:
     driver: bridge
@@ -130,8 +244,11 @@ networks:
         - subnet: ${IPV4_NETWORK:-172.22.1}.0/24
 
 volumes:
+  ca-tls:
+  ca-trust:
   certbot-certs:
   certbot-www:
+  consumer-tls:
+  influxdb-data:
+  influxdb-config:
   mosquitto-data:
-  pki-root:
-  pki-trust:

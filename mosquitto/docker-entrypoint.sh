@@ -16,7 +16,12 @@ envsubst < "$MOSQUITTO_TEMPLATE" > "$MOSQUITTO_CONF"
 # Create ACL config.
 MOSQUITTO_ACL_CONF=$MOSQUITTO_CONFIG_DIR/acl.conf
 install -o mosquitto -g mosquitto -m 600 /dev/null "$MOSQUITTO_ACL_CONF"
-echo "pattern write weather/%u/#" > "$MOSQUITTO_ACL_CONF"
+cat <<EOF > "$MOSQUITTO_ACL_CONF"
+user weather-consumer
+topic read weather/+/event
+
+pattern write weather/%u/#
+EOF
 
 # Copy certs from letsencrypt.
 LE_DIR=/etc/letsencrypt

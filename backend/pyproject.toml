@@ -13,12 +13,17 @@ packages = [
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "attrs>=23.2.0",
+    "configargparse (>=1.7.1,<2.0.0)",
     "cryptography (>=46.0.3,<47.0.0)",
     "fastapi>=0.109.0",
+    "influxdb-client (>=1.49.0,<2.0.0)",
     "httpx (>=0.28.1,<0.29.0)",
     "more-itertools (>=10.7.0,<11.0.0)",
     "pydantic>=2.6.0",
     "uvicorn[standard] (>=0.34.0,<1.0.0)",
+    "paho-mqtt (>=2.1.0,<3.0.0)",
+    "watchdog (>=6.0.0,<7.0.0)",
+    "yarl (>=1.22.0,<2.0.0)",
 ]
 
 [tool.poetry.group.test.dependencies]
@@ -47,9 +52,12 @@ sphinx-rtd-theme = "^3.1.0-rc.0"
 tarameteo = "tarameteo.testing.fixtures"
 tarameteo-services = "tarameteo.testing.services"
 
+[project.entry-points."pytest_unique"]
+subject = "tarameteo.testing.unique:unique_subject"
+
 [project.scripts]
-consumer = "tarameteo.consumer:main"
-tarameteo = "tarameteo.cli:main"
+tarameteo-consumer = "tarameteo.consumer:main"
+tarameteo-pki = "tarameteo.pki_cli:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
