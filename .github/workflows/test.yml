@@ -126,9 +126,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
           working-directory: backend
 
+      - name: Validate Docker Compose configuration
+        run: |
+          docker compose version
+          docker compose --file compose.yml --file compose.dev.yml config --quiet
+
       - name: Run backend test target
         working-directory: backend
         run: make test
+
+      - name: Upload xprocess logs on failure
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: xprocess-logs-${{ matrix.python-version }}
+          path: .xprocess/
+          if-no-files-found: ignore
+          include-hidden-files: true
 
       - name: "Upload coverage data"
         uses: actions/upload-artifact@v7
