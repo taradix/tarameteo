@@ -1,4 +1,8 @@
 name: tarameteo
+
+include:
+  - path: ./taracert/compose.dev.yml
+
 services:
   api:
     volumes:
@@ -17,9 +21,8 @@ services:
       ca-init:
         condition: service_completed_successfully
     volumes:
-      - ./certbot/generate-cert.sh:/generate-cert.sh:ro
       - ca-tls:/ca:ro
     environment:
-      - IPV4_NETWORK=${IPV4_NETWORK:-172.22.1}
-    command: >
-      sh -c "trap exit TERM; /generate-cert.sh; /deploy-hook.sh; echo Ready; sleep infinity"
+      - SAN_IPS=${IPV4_NETWORK:-172.22.1}.2 ${IPV4_NETWORK:-172.22.1}.3 ${IPV4_NETWORK:-172.22.1}.4 ${IPV4_NETWORK:-172.22.1}.5 ${IPV4_NETWORK:-172.22.1}.6
+      - CA_CERT_PATH=/ca/ca.pem
+      - CA_KEY_PATH=/ca/ca.key
