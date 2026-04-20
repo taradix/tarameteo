@@ -71,7 +71,7 @@ class CAClient:
     def from_url(cls, url: URL | str, token: str | None = None, timeout: float = 10.0):
         url = URL(url)
         headers = {}
-        if token is not None:
+        if token:
             headers["Authorization"] = f"Bearer {token}"
 
         with httpx.Client(

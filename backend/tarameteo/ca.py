@@ -26,10 +26,12 @@ CA_CERT = Path(os.getenv("CA_CERT", "/ca/ca.pem"))
 
 
 def require_token(authorization: str | None = Header(default=None), env = os.environ) -> None:
+    expected = env.get("CA_TOKEN", "")
+    if not expected:
+        return
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     token = authorization.removeprefix("Bearer ").strip()
-    expected = env["CA_TOKEN"]
     if not secrets.compare_digest(token, expected):
         raise HTTPException(status_code=403, detail="Invalid token")
 
