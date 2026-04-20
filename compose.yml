@@ -162,18 +162,40 @@ services:
         sleep 12h
       done"
     restart: always
+
   frontend:
     build:
       context: frontend
     depends_on:
       api:
         condition: service_healthy
-    ports:
-      - '${HTTP_PORT:-80}:80'
     networks:
       default:
         aliases:
           - tarameteo-frontend
+    restart: always
+
+  nginx:
+    build: nginx
+    depends_on:
+      certbot:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    volumes:
+      - certbot-certs:/etc/letsencrypt:ro
+      - certbot-www:/web:ro
+      - ./nginx/conf.d/:/etc/nginx/conf.d/:ro
+    environment:
+      SERVER_HOSTNAME: ${SERVER_HOSTNAME}
+      ADDITIONAL_SERVER_NAMES: ${ADDITIONAL_SERVER_NAMES:-}
+      TRUSTED_NETWORK: ${TRUSTED_NETWORK:-}
+      IPV4_NETWORK: ${IPV4_NETWORK:-172.22.1}
+    networks:
+      default:
+        ipv4_address: ${IPV4_NETWORK:-172.22.1}.240
+        aliases:
+          - tarameteo-nginx
     restart: always
 
   influxdb:
