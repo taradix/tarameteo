@@ -15,14 +15,13 @@ services:
       ca:
         condition: service_healthy
     environment:
-      - CA_URL=http://tarameteo-ca/v1/certs
-      - CA_TOKEN=${CA_TOKEN}
+      CA_URL: http://tarameteo-ca/v1/certs
+      CA_TOKEN: ${CA_TOKEN}
     networks:
       default:
         aliases:
           - tarameteo-api
-    command: >
-      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.yaml"
+    command: uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.yaml
     restart: always
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]
@@ -44,17 +43,14 @@ services:
       - ca-tls:/ca:ro
       - certbot-certs:/etc/letsencrypt:ro
     environment:
-      - CA_KEY=/ca/ca.key
-      - CA_CERT=/ca/ca.pem
-      #      - CA_KEY=/etc/letsencrypt/live/privkey.pem
-      #      - CA_CERT=/etc/letsencrypt/live/fullchain.pem
-      - CA_TOKEN=${CA_TOKEN}
+      CA_KEY: /ca/ca.key
+      CA_CERT: /ca/ca.pem
+      CA_TOKEN: ${CA_TOKEN}
     networks:
       default:
         aliases:
           - tarameteo-ca
-    command: >
-      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.ca:app --log-config=/app/log-config.yaml"
+    command: uvicorn --host=0.0.0.0 --port=80 tarameteo.ca:app --log-config=/app/log-config.yaml
     restart: always
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]
@@ -67,7 +63,7 @@ services:
     volumes:
       - ca-tls:/ca
     environment:
-      - CA_DIR=/ca
+      CA_DIR: /ca
     command: /init.sh
     restart: no
 
@@ -80,8 +76,8 @@ services:
       - ca-tls:/ca-tls:ro
       - ca-trust:/ca-trust
     environment:
-      - CA_TLS_DIR=/ca-tls
-      - CA_TRUST_DIR=/ca-trust
+      CA_TLS_DIR: /ca-tls
+      CA_TRUST_DIR: /ca-trust
     command: /publish.sh
     restart: no
 
@@ -100,15 +96,15 @@ services:
     volumes:
       - consumer-tls:/tls:ro
     environment:
-      - MQTT_BROKER_HOST=tarameteo-mosquitto
-      - MQTT_BROKER_PORT=8883
-      - MQTT_CERT_PATH=/tls/consumer.pem
-      - MQTT_KEY_PATH=/tls/consumer.key
-      - MQTT_CA_PATH=/tls/ca.pem
-      - INFLUX_URL=http://tarameteo-influxdb:8086
-      - INFLUX_TOKEN=${INFLUX_TOKEN}
-      - INFLUX_ORG=${INFLUX_ORG:-tarameteo}
-      - INFLUX_BUCKET=${INFLUX_BUCKET:-weather}
+      MQTT_BROKER_HOST: tarameteo-mosquitto
+      MQTT_BROKER_PORT: 8883
+      MQTT_CERT_PATH: /tls/consumer.pem
+      MQTT_KEY_PATH: /tls/consumer.key
+      MQTT_CA_PATH: /tls/ca.pem
+      INFLUX_URL: http://tarameteo-influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG:-tarameteo}
+      INFLUX_BUCKET: ${INFLUX_BUCKET:-weather}
     networks:
       default:
         aliases:
@@ -127,9 +123,9 @@ services:
     volumes:
       - consumer-tls:/tls
     environment:
-      - PKI_API_URL=http://tarameteo-ca/v1/certs
-      - PKI_API_TOKEN=${CA_TOKEN}
-      - PKI_OUTPUT_DIR=/tls
+      PKI_API_URL: http://tarameteo-ca/v1/certs
+      PKI_API_TOKEN: ${CA_TOKEN}
+      PKI_OUTPUT_DIR: /tls
     command: tarameteo-pki rotate consumer
     restart: no
 
@@ -146,9 +142,9 @@ services:
     volumes:
       - consumer-tls:/tls
     environment:
-      - PKI_API_URL=http://tarameteo-ca/v1/certs
-      - PKI_API_TOKEN=${CA_TOKEN}
-      - PKI_OUTPUT_DIR=/tls
+      PKI_API_URL: http://tarameteo-ca/v1/certs
+      PKI_API_TOKEN: ${CA_TOKEN}
+      PKI_OUTPUT_DIR: /tls
     command: >
       sh -c "while :; do
         tarameteo-pki check consumer
@@ -168,13 +164,13 @@ services:
       - influxdb-data:/var/lib/influxdb2
       - influxdb-config:/etc/influxdb2
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USERNAME:-admin}
-      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD}
-      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-tarameteo}
-      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-weather}
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN}
-      - DOCKER_INFLUXDB_INIT_RETENTION=${INFLUX_RETENTION:-7d}
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USERNAME:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-tarameteo}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-weather}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+      DOCKER_INFLUXDB_INIT_RETENTION: ${INFLUX_RETENTION:-7d}
     networks:
       default:
         aliases:
@@ -200,9 +196,9 @@ services:
       - mosquitto-data:/mosquitto/data
       - ./mosquitto/mosquitto.tpl:/mosquitto.tpl
     environment:
-      - MQTT_USERNAME=${MQTT_USERNAME:-admin}
-      - MQTT_PASSWORD=${MQTT_PASSWORD}
-      - MOSQUITTO_TEMPLATE=/mosquitto.tpl
+      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      MOSQUITTO_TEMPLATE: /mosquitto.tpl
     ports:
       - '${MQTT_PORT:-1883}:1883'
       - '${MQTTS_PORT:-8883}:8883'

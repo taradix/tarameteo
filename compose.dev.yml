@@ -7,14 +7,12 @@ services:
   api:
     volumes:
       - ./backend/tarameteo:/app/tarameteo
-    command: >
-      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.dev.yaml --reload --reload-exclude='.*'"
+    command: uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.dev.yaml --reload --reload-exclude='.*'
 
   ca:
     volumes:
       - ./backend/tarameteo:/app/tarameteo
-    command: >
-      bash -c "uvicorn --host=0.0.0.0 --port=80 tarameteo.ca:app --log-config=/app/log-config.dev.yaml --reload --reload-exclude='.*'"
+    command: uvicorn --host=0.0.0.0 --port=80 tarameteo.ca:app --log-config=/app/log-config.dev.yaml --reload --reload-exclude='.*'
 
   certbot:
     depends_on:
@@ -23,6 +21,6 @@ services:
     volumes:
       - ca-tls:/ca:ro
     environment:
-      - SAN_IPS=${IPV4_NETWORK:-172.22.1}.2 ${IPV4_NETWORK:-172.22.1}.3 ${IPV4_NETWORK:-172.22.1}.4 ${IPV4_NETWORK:-172.22.1}.5 ${IPV4_NETWORK:-172.22.1}.6
-      - CA_CERT_PATH=/ca/ca.pem
-      - CA_KEY_PATH=/ca/ca.key
+      SAN_IPS: ${IPV4_NETWORK:-172.22.1}.2 ${IPV4_NETWORK:-172.22.1}.3 ${IPV4_NETWORK:-172.22.1}.4 ${IPV4_NETWORK:-172.22.1}.5 ${IPV4_NETWORK:-172.22.1}.6
+      CA_CERT_PATH: /ca/ca.pem
+      CA_KEY_PATH: /ca/ca.key
