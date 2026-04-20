@@ -157,7 +157,7 @@ services:
     restart: always
 
   influxdb:
-    image: influxdb:2.7
+    image: influxdb:2.8
     volumes:
       - influxdb-data:/var/lib/influxdb2
       - influxdb-config:/etc/influxdb2
