@@ -41,11 +41,6 @@ check = [
   "ruff>=0.15.0,<1.0.0",
 ]
 
-docs = [
-  "sphinx>=9.0.0,<10.0.0",
-  "sphinxcontrib-log-cabinet>=1.0.1,<2.0.0",
-]
-
 [project.entry-points."pytest11"]
 tarameteo = "tarameteo.testing.fixtures"
 tarameteo-services = "tarameteo.testing.services"
@@ -123,7 +118,6 @@ addopts = [
 ]
 testpaths = [
     "tarameteo",
-    "docs",
     "tests",
 ]
 

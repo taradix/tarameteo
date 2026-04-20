@@ -80,7 +80,7 @@ Setting up
     .. code-block:: text
 
         > git config --global credential.helper manager
-        > git clone https://github.com/cr3/tarameteo
+        > git clone https://github.com/taradix/tarameteo
         Cloning into 'tarameteo'...
 
     - Select "manager"

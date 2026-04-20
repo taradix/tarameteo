@@ -36,9 +36,4 @@ coverage: $(VENV)
 	@$(RUN) coverage html --skip-covered --skip-empty
 	@$(RUN) coverage report
 
-.PHONY: docs
-docs: $(VENV)
-	@echo "==> Building docs..."
-	@$(RUN) sphinx-build -W -d build/doctrees docs build/html
-
 .DEFAULT_GOAL := test
