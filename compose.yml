@@ -37,8 +37,6 @@ services:
     depends_on:
       ca-init:
         condition: service_completed_successfully
-    #      certbot:
-    #        condition: service_healthy
     volumes:
       - ca-tls:/ca:ro
       - certbot-certs:/etc/letsencrypt:ro
