@@ -8,6 +8,9 @@ from datetime import (
 
 from hamcrest import (
     assert_that,
+    contains_exactly,
+    contains_inanyorder,
+    equal_to,
     has_entries,
     has_properties,
 )
@@ -18,6 +21,15 @@ from tarameteo.ca_client import (
     IssueCertificateResponse,
     get_ca_client,
 )
+
+
+def make_weather(temperature=20.0, humidity=50.0, pressure=1000.0, **extra):
+    return {
+        "temperature": temperature,
+        "humidity": humidity,
+        "pressure": pressure,
+        **extra,
+    }
 
 
 def test_healthz_get(api_app):
@@ -58,4 +70,113 @@ def test_certs_post(api_app, unique):
         serial_number=serial_number,
         subject=subject,
         issuer=issuer,
+    ))
+
+
+def test_sensors_list(api_app, memory_writer, unique):
+    name_a, name_b = unique("text"), unique("text")
+    now = datetime.now(UTC)
+
+    memory_writer.write_point(
+        "weather", make_weather(), tags={"device_id": name_a}, timestamp=now,
+    )
+    memory_writer.write_point(
+        "weather", make_weather(), tags={"device_id": name_b}, timestamp=now,
+    )
+
+    response = api_app.get("/api/sensors")
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json()["sensors"], contains_inanyorder(name_a, name_b))
+
+
+def test_sensor_get(api_app, memory_writer, unique):
+    name = unique("text")
+    now = datetime.now(UTC)
+
+    memory_writer.write_point(
+        "weather",
+        make_weather(temperature=20.0, humidity=50.0, pressure=1000.0, rssi=-70),
+        tags={"device_id": name},
+        timestamp=now - timedelta(hours=1),
+    )
+    memory_writer.write_point(
+        "weather",
+        make_weather(temperature=22.0, humidity=60.0, pressure=1020.0, rssi=-74),
+        tags={"device_id": name},
+        timestamp=now - timedelta(minutes=5),
+    )
+
+    response = api_app.get(f"/api/sensors/{name}")
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json(), has_entries(
+        name=name,
+        statistics=has_entries(
+            total_readings=2,
+            last_24h_readings=2,
+            average_temperature=21.0,
+            average_humidity=55.0,
+            average_pressure=1010.0,
+            average_rssi=-72,
+        ),
+    ))
+
+
+def test_sensor_weather_latest(api_app, memory_writer, unique):
+    name = unique("text")
+    now = datetime.now(UTC)
+
+    memory_writer.write_point(
+        "weather",
+        make_weather(temperature=19.0),
+        tags={"device_id": name},
+        timestamp=now - timedelta(minutes=10),
+    )
+    memory_writer.write_point(
+        "weather",
+        make_weather(temperature=23.5),
+        tags={"device_id": name},
+        timestamp=now - timedelta(minutes=1),
+    )
+
+    response = api_app.get(f"/api/sensors/{name}/weather/latest")
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json(), has_entries(
+        sensor=name,
+        temperature=23.5,
+    ))
+
+
+def test_sensor_weather_latest_missing(api_app, unique):
+    name = unique("text")
+
+    response = api_app.get(f"/api/sensors/{name}/weather/latest")
+
+    assert_that(response.status_code, equal_to(404))
+
+
+def test_sensor_weather_range(api_app, memory_writer, unique):
+    name = unique("text")
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = datetime(2026, 1, 2, tzinfo=UTC)
+
+    memory_writer.write_point(
+        "weather", make_weather(temperature=1.0),
+        tags={"device_id": name}, timestamp=start + timedelta(hours=1),
+    )
+    memory_writer.write_point(
+        "weather", make_weather(temperature=2.0),
+        tags={"device_id": name}, timestamp=end + timedelta(hours=1),
+    )
+
+    response = api_app.get(
+        f"/api/sensors/{name}/weather",
+        params={"start": start.isoformat(), "end": end.isoformat(), "limit": 500},
+    )
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json(), contains_exactly(
+        has_entries(sensor=name, temperature=1.0),
     ))

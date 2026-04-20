@@ -43,11 +43,13 @@ def weather_handler(ts_writer: TSWriter, message: MQTTMessage):
         logger.exception("Invalid weather data format")
         return
 
+    fields = weather_data.model_dump(exclude={"timestamp"}, exclude_none=True)
     try:
         ts_writer.write_point(
             "weather",
-            fields=weather_data.asdict(),
+            fields=fields,
             tags={"device_id": device_id},
+            timestamp=weather_data.timestamp,
         )
     except Exception:
         logger.exception("Error storing weather data")

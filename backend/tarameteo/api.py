@@ -1,11 +1,14 @@
 """API service."""
 
 import logging
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import (
     Depends,
     FastAPI,
+    HTTPException,
+    Query,
     Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +19,15 @@ from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
     get_ca_client,
+)
+from tarameteo.sensors import (
+    SensorInfo,
+    SensorService,
+    WeatherReading,
+)
+from tarameteo.ts import (
+    InfluxReader,
+    TSReader,
 )
 
 logger = logging.getLogger("uvicorn")
@@ -29,6 +41,7 @@ origins = [
     "http://172.22.1.5",
     "http://localhost",
     "http://localhost:3000",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
@@ -40,12 +53,58 @@ app.add_middleware(
 )
 
 
+def get_ts_reader() -> TSReader:
+    return InfluxReader.from_env()
+
+
+TSReaderDep = Annotated[TSReader, Depends(get_ts_reader)]
+
+
+def get_sensor_service(ts_reader: TSReaderDep) -> SensorService:
+    return SensorService(ts_reader=ts_reader)
+
+
+SensorServiceDep = Annotated[SensorService, Depends(get_sensor_service)]
+
+
 @app.post("/api/certs", response_model=IssueCertificateResponse)
 def post_cert(
     request: IssueCertificateRequest,
     ca_client: Annotated[CAClient, Depends(get_ca_client)],
 ) -> IssueCertificateResponse:
     return ca_client.issue_certificate(request)
+
+
+@app.get("/api/sensors")
+def get_sensors(service: SensorServiceDep) -> dict[str, list[str]]:
+    return {"sensors": service.list_sensors()}
+
+
+@app.get("/api/sensors/{name}")
+def get_sensor(name: str, service: SensorServiceDep) -> SensorInfo:
+    return service.get_sensor(name)
+
+
+@app.get("/api/sensors/{name}/weather/latest")
+def get_sensor_weather_latest(
+    name: str,
+    service: SensorServiceDep,
+) -> WeatherReading:
+    reading = service.get_latest(name)
+    if reading is None:
+        raise HTTPException(status_code=404, detail=f"No readings for sensor {name!r}")
+    return reading
+
+
+@app.get("/api/sensors/{name}/weather")
+def get_sensor_weather(
+    name: str,
+    service: SensorServiceDep,
+    start: Annotated[datetime, Query(description="ISO timestamp (inclusive)")],
+    end: Annotated[datetime | None, Query(description="ISO timestamp (exclusive)")] = None,
+    limit: Annotated[int | None, Query(ge=1, le=10000)] = None,
+) -> list[WeatherReading]:
+    return service.get_weather(name, start=start, end=end, limit=limit)
 
 
 @app.exception_handler(Exception)

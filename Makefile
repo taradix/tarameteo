@@ -1,5 +1,5 @@
 ENV := .env
-SUBDIRS := backend firmware
+SUBDIRS := backend firmware frontend
 TARGETS := setup check test coverage
 
 -include $(ENV)

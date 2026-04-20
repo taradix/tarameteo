@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tarameteo.api import app as _api_app
+from tarameteo.api import get_ts_reader
 from tarameteo.ca import app as _ca_app
 from tarameteo.ca_client import IssueCertificateRequest
 from tarameteo.crypto import generate_key_pem
@@ -13,13 +14,40 @@ from tarameteo.fs import atomic_write
 from tarameteo.logger import setup_logger
 from tarameteo.pki import create_csr_pem
 from tarameteo.testing.logger import LoggerHandler
+from tarameteo.ts import (
+    MemoryReader,
+    MemoryStore,
+    MemoryWriter,
+)
 
 
 @pytest.fixture
-def api_app():
+def memory_store():
+    """Shared backing store for the memory reader and writer."""
+    return MemoryStore()
+
+
+@pytest.fixture
+def memory_reader(memory_store):
+    """In-memory TSReader backed by `memory_store`."""
+    return MemoryReader(store=memory_store)
+
+
+@pytest.fixture
+def memory_writer(memory_store):
+    """In-memory TSWriter backed by `memory_store`."""
+    return MemoryWriter(store=memory_store)
+
+
+@pytest.fixture
+def api_app(memory_reader):
     """API testing app."""
-    with TestClient(_api_app) as client:
-        yield client
+    _api_app.dependency_overrides[get_ts_reader] = lambda: memory_reader
+    try:
+        with TestClient(_api_app) as client:
+            yield client
+    finally:
+        _api_app.dependency_overrides.pop(get_ts_reader, None)
 
 
 @pytest.fixture

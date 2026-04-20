@@ -1,11 +1,13 @@
 """Time series abstraction and implementation."""
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from datetime import (
     UTC,
     datetime,
+    timedelta,
 )
 from itertools import count
 from time import sleep
@@ -519,3 +521,152 @@ class InfluxWriter(TSWriter):
 
                 # exponential backoff: base * 2^attempt
                 sleep(self.retry_backoff_seconds * (2 ** attempt))
+
+
+_DURATION_UNITS = {
+    "ns": timedelta(microseconds=0.001),
+    "us": timedelta(microseconds=1),
+    "ms": timedelta(milliseconds=1),
+    "s": timedelta(seconds=1),
+    "m": timedelta(minutes=1),
+    "h": timedelta(hours=1),
+    "d": timedelta(days=1),
+    "w": timedelta(weeks=1),
+}
+
+
+def _parse_duration(s: str) -> timedelta:
+    match = re.fullmatch(r"\s*(\d+)\s*([a-z]+)\s*", s)
+    if not match:
+        raise ValueError(f"Invalid duration: {s!r}")
+    n, unit = int(match.group(1)), match.group(2)
+    if unit not in _DURATION_UNITS:
+        raise ValueError(f"Unknown duration unit: {unit!r}")
+    return _DURATION_UNITS[unit] * n
+
+
+@define
+class MemoryStore:
+    """Shared in-memory backing store for MemoryReader and MemoryWriter."""
+
+    points: list[TSPoint] = field(factory=list)
+
+
+@define(frozen=True)
+class MemoryReader(TSReader):
+    """In-memory TSReader for tests."""
+
+    store: MemoryStore
+
+    def query_points(
+        self,
+        *,
+        measurement: str,
+        start: datetime,
+        stop: datetime | None = None,
+        tags: Mapping[str, str] | None = None,
+        fields: Sequence[str] | None = None,
+        every: str | None = None,
+        aggregate: Aggregate | None = None,
+    ) -> list[TSPoint]:
+        matched = [
+            p for p in self.store.points
+            if p.measurement == measurement
+            and p.timestamp >= start
+            and (stop is None or p.timestamp < stop)
+            and _tags_match(p.tags, tags)
+        ]
+        if fields:
+            matched = [
+                TSPoint(
+                    measurement=p.measurement,
+                    fields={k: v for k, v in p.fields.items() if k in fields},
+                    tags=p.tags,
+                    timestamp=p.timestamp,
+                )
+                for p in matched
+            ]
+            matched = [p for p in matched if p.fields]
+        matched.sort(key=lambda p: p.timestamp)
+        return matched
+
+    def latest(
+        self,
+        measurement: str,
+        *,
+        tags: Mapping[str, str] | None = None,
+        fields: Sequence[str] | None = None,
+        lookback: str | None = None,
+    ) -> TSPoint | None:
+        start = datetime.now(UTC) - _parse_duration(lookback or "1h")
+        points = self.query_points(
+            measurement=measurement,
+            start=start,
+            tags=tags,
+            fields=fields,
+        )
+        return points[-1] if points else None
+
+    def list_tag_values(
+        self,
+        *,
+        measurement: str,
+        tag_key: str,
+        start: datetime | None = None,
+        stop: datetime | None = None,
+        contains: str | None = None,
+        limit: int = 1000,
+    ) -> list[str]:
+        if limit <= 0:
+            return []
+
+        seen: set[str] = set()
+        out: list[str] = []
+        for p in self.store.points:
+            if p.measurement != measurement:
+                continue
+            if start is not None and p.timestamp < start:
+                continue
+            if stop is not None and p.timestamp >= stop:
+                continue
+            v = p.tags.get(tag_key)
+            if v is None or v in seen:
+                continue
+            if contains is not None and contains not in v:
+                continue
+            seen.add(v)
+            out.append(v)
+            if len(out) >= limit:
+                break
+        return out
+
+
+@define(frozen=True)
+class MemoryWriter(TSWriter):
+    """In-memory TSWriter for tests."""
+
+    store: MemoryStore
+
+    def write_point(
+        self,
+        measurement: str,
+        fields: Mapping[str, Scalar],
+        tags: Mapping[str, str] | None = None,
+        timestamp: datetime | None = None,
+    ) -> None:
+        point = TSPoint(
+            measurement=measurement,
+            fields=dict(fields),
+            tags=dict(tags) if tags else {},
+            timestamp=timestamp or datetime.now(UTC),
+        )
+        self.write_points([point])
+
+    def write_points(self, points: Sequence[TSPoint]) -> None:
+        self.store.points.extend(points)
+
+
+def _tags_match(point_tags: Mapping[str, str], wanted: Mapping[str, str] | None) -> bool:
+    if not wanted:
+        return True
+    return all(point_tags.get(k) == v for k, v in wanted.items())

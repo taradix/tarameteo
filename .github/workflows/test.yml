@@ -170,3 +170,46 @@ jobs:
           name: backend-report
           path: htmlcov
         if: ${{ failure() }}
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['20', '22', '24']
+      fail-fast: false
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up Node environment
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run test target
+        working-directory: frontend
+        run: make test
+
+  frontend-coverage:
+    runs-on: ubuntu-latest
+    needs: frontend-test
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up Node environment
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Run coverage target
+        working-directory: frontend
+        run: make coverage
+
+      - name: Upload HTML report if check failed.
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-report
+          path: coverage
+        if: ${{ failure() }}
