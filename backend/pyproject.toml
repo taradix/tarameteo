@@ -6,24 +6,21 @@ authors = [
     {name = "Marc Tardif", email = "marc@taram.ca"},
 ]
 readme = "README.rst"
-repository = "https://github.com/taradix/tarameteo"
-packages = [
-    {include = "tarameteo"},
-]
+
 requires-python = ">=3.12,<4.0"
 dependencies = [
     "attrs>=26.1.0",
-    "configargparse (>=1.7.1,<2.0.0)",
-    "cryptography (>=46.0.3,<47.0.0)",
+    "configargparse>=1.7.1,<2.0.0",
+    "cryptography>=46.0.3,<47.0.0",
     "fastapi>=0.109.0",
-    "influxdb-client (>=1.49.0,<2.0.0)",
-    "httpx (>=0.28.1,<0.29.0)",
-    "more-itertools (>=11.0.1,<11.1.0)",
-    "pydantic (>=2.12.3, <3.0.0)",
-    "uvicorn[standard] (>=0.34.0,<1.0.0)",
-    "paho-mqtt (>=2.1.0,<3.0.0)",
-    "watchdog (>=6.0.0,<7.0.0)",
-    "yarl (>=1.22.0,<2.0.0)",
+    "influxdb-client>=1.49.0,<2.0.0",
+    "httpx>=0.28.1,<0.29.0",
+    "more-itertools>=11.0.1,<11.1.0",
+    "pydantic>=2.12.3,<3.0.0",
+    "uvicorn[standard]>=0.34.0,<1.0.0",
+    "paho-mqtt>=2.1.0,<3.0.0",
+    "watchdog>=6.0.0,<7.0.0",
+    "yarl>=1.22.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +48,9 @@ subject = "tarameteo.testing.unique:unique_subject"
 [project.scripts]
 tarameteo-consumer = "tarameteo.consumer:main"
 tarameteo-pki = "tarameteo.pki_cli:main"
+
+[project.urls]
+Repository = "https://github.com/taradix/tarameteo"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -106,7 +106,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]  # Ignore assert statements in test files
+"tests/*" = ["S101", "S106"]
 
 # Pytest options:
 #   https://docs.pytest.org/en/6.2.x/reference.html#ini-options-ref
