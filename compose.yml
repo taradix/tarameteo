@@ -293,7 +293,7 @@ services:
     volumes:
       - certbot-certs:/etc/letsencrypt:ro
       - certbot-www:/web:ro
-      - ./nginx/conf.d/:/etc/nginx/conf.d/:ro
+      - ./nginx/conf.d/:/etc/nginx/conf.d/:z
     environment:
       SERVER_HOSTNAME: ${SERVER_HOSTNAME}
       ADDITIONAL_SERVER_NAMES: ${ADDITIONAL_SERVER_NAMES:-}
