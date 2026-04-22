@@ -149,17 +149,20 @@ services:
       PKI_API_URL: http://tarameteo-ca/v1/certs
       PKI_API_TOKEN: ${CA_TOKEN}
       PKI_OUTPUT_DIR: /tls
-    command: >
-      while :; do
-        tarameteo-pki check consumer
-        case $? in
-          0) : ;;
-          1) tarameteo-pki renew consumer ;;
-          2) tarameteo-pki rotate consumer ;;
-          *) exit 1
-        esac
-        sleep 12h
-      done
+    command:
+      - sh
+      - -ec
+      - |
+        while :; do
+          tarameteo-pki check consumer
+          case $? in
+            0) ;;
+            1) tarameteo-pki renew consumer ;;
+            2) tarameteo-pki rotate consumer ;;
+            *) exit 1 ;;
+          esac
+          sleep 12h
+        done
     restart: always
 
   frontend:
@@ -238,10 +241,13 @@ services:
       PKI_API_URL: http://tarameteo-ca/v1/certs
       PKI_API_TOKEN: ${CA_TOKEN}
       PKI_OUTPUT_DIR: /tls
-    command: >
-      tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns ${SERVER_HOSTNAME}
+    command:
+      - sh
+      - -ec
+      - |
+        tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "$$SERVER_HOSTNAME"
+        chown -R 1883:1883 /tls
     restart: no
-    user: "1883:1883"
 
   mosquitto-rotate:
     build:
@@ -263,25 +269,29 @@ services:
       PKI_API_TOKEN: ${CA_TOKEN}
       PKI_OUTPUT_DIR: /tls
       SERVER_HOSTNAME: ${SERVER_HOSTNAME}
-    command: >
-      while :; do
-        tarameteo-pki check mosquitto
-        case $? in
-          0) : ;;
-          1) tarameteo-pki renew mosquitto
-             --san-dns tarameteo-mosquitto
-             --san-dns $$SERVER_HOSTNAME
-             && /docker-reload.py mosquitto ;;
-          2) tarameteo-pki rotate mosquitto
-             --san-dns tarameteo-mosquitto
-             --san-dns $$SERVER_HOSTNAME
-             && /docker-reload.py mosquitto ;;
-          *) exit 1
-        esac
-        sleep 12h
-      done
+    command:
+      - sh
+      - -ec
+      - |
+        while :; do
+          tarameteo-pki check mosquitto
+          case $? in
+            0) ;;
+            1)
+              tarameteo-pki renew mosquitto --san-dns tarameteo-mosquitto --san-dns "$$SERVER_HOSTNAME"
+              chown -R 1883:1883 /tls
+              /docker-reload.py mosquitto
+              ;;
+            2)
+              tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "$$SERVER_HOSTNAME"
+              chown -R 1883:1883 /tls
+              /docker-reload.py mosquitto
+              ;;
+            *) exit 1 ;;
+          esac
+          sleep 12h
+        done
     restart: always
-    user: "1883:1883"
 
   nginx:
     build: nginx
