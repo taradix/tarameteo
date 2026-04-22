@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import mkstemp
 
 
-def atomic_write(path: Path | str, content: str, *, mode: int = 0o644) -> None:
+def atomic_write(path: Path | str, content: str, mode: int = 0o644) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 

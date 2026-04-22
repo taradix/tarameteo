@@ -6,6 +6,7 @@ from datetime import (
     datetime,
     timedelta,
 )
+from ipaddress import ip_address
 
 from cryptography import x509
 from cryptography.hazmat.primitives import (
@@ -44,16 +45,30 @@ class CertificateMaterial(BaseModel):
     issuer: str
 
 
-def create_csr_pem(key_pem: str, common_name: str) -> str:
+def create_csr_pem(
+    key_pem: str,
+    common_name: str,
+    *,
+    san_dns: list[str] | None = None,
+    san_ip: list[str] | None = None,
+) -> str:
     """Create a Certificate Signing Request from an existing private key."""
     key = load_key(key_pem)
-    csr = (
-        x509.CertificateSigningRequestBuilder()
-        .subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, common_name),
-        ]))
-        .sign(key, hashes.SHA256())
-    )
+    builder = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+    ]))
+
+    sans: list[x509.GeneralName] = []
+    if san_dns:
+        sans.extend(x509.DNSName(name) for name in san_dns)
+    if san_ip:
+        sans.extend(x509.IPAddress(ip_address(addr)) for addr in san_ip)
+    if sans:
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName(sans),
+            critical=False,
+        )
+    csr = builder.sign(key, hashes.SHA256())
 
     return csr.public_bytes(serialization.Encoding.PEM).decode("utf-8")
 
@@ -75,6 +90,10 @@ def sign_csr_pem(
     ca_cert = load_cert(ca_cert_pem)
     ca_key = load_key(ca_key_pem)
 
+    san = _extract_san(csr)
+    if server_auth and san is None:
+        raise ValueError("server_auth certificates require at least one SAN")
+
     builder = _build_base_certificate(
         subject=csr.subject,
         issuer=ca_cert.subject,
@@ -88,9 +107,18 @@ def sign_csr_pem(
         issuer_public_key=ca_cert.public_key(),
         client_auth=client_auth,
         server_auth=server_auth,
+        san=san,
     )
 
     return _sign_builder(builder, signer_key=ca_key, chain_pem=[ca_cert_pem])
+
+
+def _extract_san(csr: x509.CertificateSigningRequest) -> x509.SubjectAlternativeName | None:
+    try:
+        ext = csr.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+    except x509.ExtensionNotFound:
+        return None
+    return ext.value
 
 
 def self_sign_ca_key_pem(
@@ -187,6 +215,7 @@ def _add_leaf_extensions(
     issuer_public_key,
     client_auth: bool = True,
     server_auth: bool = False,
+    san: x509.SubjectAlternativeName | None = None,
 ) -> x509.CertificateBuilder:
     builder = builder.add_extension(
         x509.BasicConstraints(
@@ -218,6 +247,9 @@ def _add_leaf_extensions(
         eku.append(ExtendedKeyUsageOID.SERVER_AUTH)
     if eku:
         builder = builder.add_extension(x509.ExtendedKeyUsage(eku), critical=False)
+
+    if san is not None:
+        builder = builder.add_extension(san, critical=False)
 
     builder = _add_subject_and_authority_key_ids(
         builder,

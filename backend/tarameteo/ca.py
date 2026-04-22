@@ -21,8 +21,8 @@ app = FastAPI(
     title="TaraMeteo Certificate Authority",
 )
 
-CA_KEY = Path(os.getenv("CA_KEY", "/ca/ca.key"))
-CA_CERT = Path(os.getenv("CA_CERT", "/ca/ca.pem"))
+CA_KEY = Path(os.getenv("CA_KEY", "/tls/ca.key"))
+CA_CERT = Path(os.getenv("CA_CERT", "/tls/ca.pem"))
 
 
 def require_token(authorization: str | None = Header(default=None), env = os.environ) -> None:

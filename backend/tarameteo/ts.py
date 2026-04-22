@@ -345,36 +345,29 @@ class InfluxReader(TSReader):
         contains: str | None,
         limit: int,
     ) -> tuple[str, dict[str, Any]]:
-        params = {
+        params: dict[str, Any] = {
             "bucket": self.bucket,
             "measurement": measurement,
             "tag_key": tag_key,
             "n": limit,
+            "start": start if start is not None else datetime(1970, 1, 1, tzinfo=UTC),
         }
-        if start is not None:
-            params["start"] = start
         if stop is not None:
             params["stop"] = stop
         if contains is not None:
             params["contains"] = contains
 
-        # We can use schema.tagValues (requires the "influxdata/influxdb/schema" package).
-        # This is convenient and efficient for listing tag values.
         flux_lines = [
-            'import "influxdata/influxdb/schema"',
-            'schema.tagValues(',
-            '  bucket: bucket,',
-            '  tag: tag_key,',
-            # Optional time bounds:
-            ('  start: start,' if start is not None else ''),
-            ('  stop: stop,' if stop is not None else ''),
-            '  predicate: (r) => r._measurement == measurement,',
-            ')',
+            'from(bucket: bucket)',
+            '  |> range(start: start' + (', stop: stop' if stop is not None else '') + ')',
+            '  |> filter(fn: (r) => r._measurement == measurement)',
+            '  |> keep(columns: [tag_key])',
+            '  |> group()',
+            '  |> distinct(column: tag_key)',
+            '  |> rename(columns: {"_value": "value"})',
         ]
-        flux_lines = [ln for ln in flux_lines if ln]  # drop empty lines
 
         if contains is not None:
-            # Filter returned tag values (column is "value")
             flux_lines.append('  |> filter(fn: (r) => containsStr(v: r.value, substr: contains))')
 
         flux_lines.append('  |> limit(n: n)')

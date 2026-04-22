@@ -268,6 +268,10 @@ def renew(
     ca_client: CAClient,
     common_name: str,
     ttl_days: int | None = None,
+    client_auth: bool = True,
+    server_auth: bool = False,
+    san_dns: list[str] | None = None,
+    san_ip: list[str] | None = None,
 ) -> RenewResult:
     try:
         key_pem = key_path.read_text()
@@ -279,8 +283,13 @@ def renew(
             ca_cert_path=ca_cert_path,
         )
 
-    csr_pem = create_csr_pem(key_pem, common_name)
-    request = IssueCertificateRequest(csr_pem=csr_pem, ttl_days=ttl_days)
+    csr_pem = create_csr_pem(key_pem, common_name, san_dns=san_dns, san_ip=san_ip)
+    request = IssueCertificateRequest(
+        csr_pem=csr_pem,
+        ttl_days=ttl_days,
+        client_auth=client_auth,
+        server_auth=server_auth,
+    )
 
     try:
         response = ca_client.issue_certificate(request)
@@ -357,11 +366,20 @@ def rotate(
     common_name: str,
     ttl_days: int | None = None,
     key_algorithm: KeyAlgorithm,
+    client_auth: bool = True,
+    server_auth: bool = False,
+    san_dns: list[str] | None = None,
+    san_ip: list[str] | None = None,
 ) -> RotateResult:
     key_spec = KeySpec(algorithm=key_algorithm)
     key_pem = generate_key_pem(key_spec)
-    csr_pem = create_csr_pem(key_pem, common_name)
-    request = IssueCertificateRequest(csr_pem=csr_pem, ttl_days=ttl_days)
+    csr_pem = create_csr_pem(key_pem, common_name, san_dns=san_dns, san_ip=san_ip)
+    request = IssueCertificateRequest(
+        csr_pem=csr_pem,
+        ttl_days=ttl_days,
+        client_auth=client_auth,
+        server_auth=server_auth,
+    )
 
     try:
         response = ca_client.issue_certificate(request)
@@ -478,6 +496,20 @@ def make_args_parser():
         help="Certificate time-to-live in days (default: server default)",
     )
     renew_parser.add_argument(
+        "--san-dns",
+        action="append",
+        default=[],
+        metavar="DNS",
+        help="DNS SubjectAlternativeName (repeatable; presence requests a server-auth certificate)",
+    )
+    renew_parser.add_argument(
+        "--san-ip",
+        action="append",
+        default=[],
+        metavar="IP",
+        help="IP SubjectAlternativeName (repeatable; presence requests a server-auth certificate)",
+    )
+    renew_parser.add_argument(
         "device_id",
         help="Device identifier (used as Common Name in certificate)",
     )
@@ -507,6 +539,20 @@ def make_args_parser():
         choices=list(KeyAlgorithm),
         default=KeyAlgorithm.EC,
         help="Public key algorithm (default: %(default)s)",
+    )
+    rotate_parser.add_argument(
+        "--san-dns",
+        action="append",
+        default=[],
+        metavar="DNS",
+        help="DNS SubjectAlternativeName (repeatable; presence requests a server-auth certificate)",
+    )
+    rotate_parser.add_argument(
+        "--san-ip",
+        action="append",
+        default=[],
+        metavar="IP",
+        help="IP SubjectAlternativeName (repeatable; presence requests a server-auth certificate)",
     )
     rotate_parser.add_argument(
         "device_id",
@@ -551,6 +597,7 @@ def main(argv=None) -> int:
             )
 
         case "renew":
+            server_auth = bool(args.san_dns or args.san_ip)
             with CAClient.from_url(args.api_url, args.api_token) as ca_client:
                 result = renew(
                     key_path=args.output_dir / f"{args.device_id}.key",
@@ -559,9 +606,14 @@ def main(argv=None) -> int:
                     ca_client=ca_client,
                     common_name=args.device_id,
                     ttl_days=args.ttl_days,
+                    client_auth=not server_auth,
+                    server_auth=server_auth,
+                    san_dns=args.san_dns,
+                    san_ip=args.san_ip,
                 )
 
         case "rotate":
+            server_auth = bool(args.san_dns or args.san_ip)
             with CAClient.from_url(args.api_url, args.api_token) as ca_client:
                 result = rotate(
                     key_path=args.output_dir / f"{args.device_id}.key",
@@ -571,6 +623,10 @@ def main(argv=None) -> int:
                     common_name=args.device_id,
                     ttl_days=args.ttl_days,
                     key_algorithm=args.key_algorithm,
+                    client_auth=not server_auth,
+                    server_auth=server_auth,
+                    san_dns=args.san_dns,
+                    san_ip=args.san_ip,
                 )
 
         case command:

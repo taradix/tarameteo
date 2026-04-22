@@ -6,7 +6,6 @@ include:
   - path: ./taracert/compose.yml
 
 services:
-
   api:
     build:
       context: backend
@@ -45,11 +44,11 @@ services:
       ca-init:
         condition: service_completed_successfully
     volumes:
-      - ca-tls:/ca:ro
+      - ca-tls:/tls:ro
       - certbot-certs:/etc/letsencrypt:ro
     environment:
-      CA_KEY: /ca/ca.key
-      CA_CERT: /ca/ca.pem
+      CA_KEY: /tls/ca.key
+      CA_CERT: /tls/ca.pem
       CA_TOKEN: ${CA_TOKEN}
     networks:
       default:
@@ -66,9 +65,9 @@ services:
   ca-init:
     build: ca
     volumes:
-      - ca-tls:/ca
+      - ca-tls:/tls
     environment:
-      CA_DIR: /ca
+      CA_DIR: /tls
     command: /init.sh
     restart: no
 
@@ -78,11 +77,11 @@ services:
       ca-init:
         condition: service_completed_successfully
     volumes:
-      - ca-tls:/ca-tls:ro
-      - ca-trust:/ca-trust
+      - ca-tls:/tls:ro
+      - ca-trust:/trust
     environment:
-      CA_TLS_DIR: /ca-tls
-      CA_TRUST_DIR: /ca-trust
+      CA_TLS_DIR: /tls
+      CA_TRUST_DIR: /trust
     command: /publish.sh
     restart: no
 
@@ -151,7 +150,7 @@ services:
       PKI_API_TOKEN: ${CA_TOKEN}
       PKI_OUTPUT_DIR: /tls
     command: >
-      sh -c "while :; do
+      while :; do
         tarameteo-pki check consumer
         case $? in
           0) : ;;
@@ -160,7 +159,7 @@ services:
           *) exit 1
         esac
         sleep 12h
-      done"
+      done
     restart: always
 
   frontend:
@@ -174,6 +173,115 @@ services:
         aliases:
           - tarameteo-frontend
     restart: always
+
+  influxdb:
+    image: influxdb:2.8
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USERNAME:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-tarameteo}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-weather}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+      DOCKER_INFLUXDB_INIT_RETENTION: ${INFLUX_RETENTION:-7d}
+    networks:
+      default:
+        aliases:
+          - tarameteo-influxdb
+    restart: always
+    healthcheck:
+      test: [ "CMD", "influx", "ping" ]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mosquitto:
+    build: mosquitto
+    depends_on:
+      ca-publish:
+        condition: service_completed_successfully
+      mosquitto-init:
+        condition: service_completed_successfully
+    volumes:
+      - ca-trust:/etc/mosquitto/pki:ro
+      - mosquitto-tls:/tls:ro
+      - mosquitto-data:/mosquitto/data
+      - ./mosquitto/mosquitto.tpl:/mosquitto.tpl
+    environment:
+      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      MOSQUITTO_TEMPLATE: /mosquitto.tpl
+    ports:
+      - '${MQTT_PORT:-1883}:1883'
+      - '${MQTTS_PORT:-8883}:8883'
+    networks:
+      default:
+        aliases:
+          - tarameteo-mosquitto
+    restart: always
+
+  mosquitto-init:
+    build:
+      context: backend
+      args:
+        <<: *python-build-args
+    depends_on:
+      ca:
+        condition: service_healthy
+    volumes:
+      - mosquitto-tls:/tls
+    environment:
+      PKI_API_URL: http://tarameteo-ca/v1/certs
+      PKI_API_TOKEN: ${CA_TOKEN}
+      PKI_OUTPUT_DIR: /tls
+    command: >
+      tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns ${SERVER_HOSTNAME}
+    restart: no
+    user: "1883:1883"
+
+  mosquitto-rotate:
+    build:
+      context: backend
+      args:
+        <<: *python-build-args
+    depends_on:
+      ca:
+        condition: service_healthy
+      mosquitto-init:
+        condition: service_completed_successfully
+    volumes:
+      - mosquitto-tls:/tls
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./taracert/docker-reload.py:/docker-reload.py:ro
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
+      PKI_API_URL: http://tarameteo-ca/v1/certs
+      PKI_API_TOKEN: ${CA_TOKEN}
+      PKI_OUTPUT_DIR: /tls
+      SERVER_HOSTNAME: ${SERVER_HOSTNAME}
+    command: >
+      while :; do
+        tarameteo-pki check mosquitto
+        case $? in
+          0) : ;;
+          1) tarameteo-pki renew mosquitto
+             --san-dns tarameteo-mosquitto
+             --san-dns $$SERVER_HOSTNAME
+             && /docker-reload.py mosquitto ;;
+          2) tarameteo-pki rotate mosquitto
+             --san-dns tarameteo-mosquitto
+             --san-dns $$SERVER_HOSTNAME
+             && /docker-reload.py mosquitto ;;
+          *) exit 1
+        esac
+        sleep 12h
+      done
+    restart: always
+    user: "1883:1883"
 
   nginx:
     build: nginx
@@ -198,56 +306,6 @@ services:
           - tarameteo-nginx
     restart: always
 
-  influxdb:
-    image: influxdb:2.8
-    volumes:
-      - influxdb-data:/var/lib/influxdb2
-      - influxdb-config:/etc/influxdb2
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USERNAME:-admin}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
-      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-tarameteo}
-      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-weather}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
-      DOCKER_INFLUXDB_INIT_RETENTION: ${INFLUX_RETENTION:-7d}
-    networks:
-      default:
-        aliases:
-          - tarameteo-influx
-    restart: always
-    healthcheck:
-      test: [ "CMD", "influx", "ping" ]
-      start_period: 30s
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  mosquitto:
-    build: mosquitto
-    depends_on:
-      ca-publish:
-        condition: service_completed_successfully
-      certbot:
-        condition: service_healthy
-    volumes:
-      - ca-trust:/etc/mosquitto/pki:ro
-      - certbot-certs:/etc/letsencrypt:ro
-      - mosquitto-data:/mosquitto/data
-      - ./mosquitto/mosquitto.tpl:/mosquitto.tpl
-    environment:
-      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
-      MQTT_PASSWORD: ${MQTT_PASSWORD}
-      MOSQUITTO_TEMPLATE: /mosquitto.tpl
-    ports:
-      - '${MQTT_PORT:-1883}:1883'
-      - '${MQTTS_PORT:-8883}:8883'
-    networks:
-      default:
-        aliases:
-          - tarameteo-mosquitto
-    restart: always
-
 networks:
   default:
     driver: bridge
@@ -263,3 +321,4 @@ volumes:
   influxdb-data:
   influxdb-config:
   mosquitto-data:
+  mosquitto-tls:

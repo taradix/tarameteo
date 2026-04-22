@@ -2,8 +2,8 @@
 
 set -eu
 
-CA_TLS_DIR="${CA_TLS_DIR:-/ca-tls}"
-CA_TRUST_DIR="${CA_TRUST_DIR:-/ca-trust}"
+CA_TLS_DIR="${CA_TLS_DIR:-/tls}"
+CA_TRUST_DIR="${CA_TRUST_DIR:-/trust}"
 
 mkdir -p "$CA_TRUST_DIR"
 

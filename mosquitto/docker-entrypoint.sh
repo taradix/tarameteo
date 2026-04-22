@@ -23,15 +23,4 @@ topic read weather/+/event
 pattern write weather/%u/#
 EOF
 
-# Copy certs from letsencrypt.
-LE_DIR=/etc/letsencrypt
-MOSQUITTO_CERTS_DIR=$MOSQUITTO_CONFIG_DIR/certs
-install -d -o mosquitto -g mosquitto -m 700 "$MOSQUITTO_CERTS_DIR"
-install -o mosquitto -g mosquitto -m 600 \
-  $LE_DIR/live/privkey.pem \
-  $MOSQUITTO_CERTS_DIR/key.pem
-install -o mosquitto -g mosquitto -m 644 \
-  $LE_DIR/live/fullchain.pem \
-  $MOSQUITTO_CERTS_DIR/cert.pem
-
 exec "$@"

@@ -9,7 +9,7 @@ from datetime import (
 import pytest
 from hamcrest import (
     assert_that,
-    contains,
+    contains_exactly,
     contains_string,
     greater_than_or_equal_to,
     has_entries,
@@ -31,7 +31,7 @@ async def test_api_certs_post(api_client, unique):
     })
     assert_that(response.json(), has_entries(
         cert_pem=contains_string("-----BEGIN CERTIFICATE-----"),
-        chain_pem=contains(contains_string("-----BEGIN CERTIFICATE-----")),
+        chain_pem=contains_exactly(contains_string("-----BEGIN CERTIFICATE-----")),
     ))
 
 

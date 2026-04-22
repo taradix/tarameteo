@@ -31,8 +31,8 @@ listener 8883
 protocol mqtt
 
 cafile /etc/mosquitto/pki/ca.pem
-certfile ${MOSQUITTO_CONFIG_DIR}/certs/cert.pem
-keyfile ${MOSQUITTO_CONFIG_DIR}/certs/key.pem
+certfile /tls/mosquitto.pem
+keyfile /tls/mosquitto.key
 
 # =============================================================================
 # Security

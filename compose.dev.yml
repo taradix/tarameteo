@@ -17,10 +17,18 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./taracert/generate-cert.sh:/generate-cert.sh:ro
-      - ca-tls:/ca:ro
+      - ca-tls:/tls:ro
     environment:
-      CA_CERT_PATH: /ca/ca.pem
-      CA_KEY_PATH: /ca/ca.key
-      SAN_IPS: ${IPV4_NETWORK:-172.22.1}.0/24
+      CA_CERT_PATH: /tls/ca.pem
+      CA_KEY_PATH: /tls/ca.key
     command: >
       sh -c "trap exit TERM; /generate-cert.sh; /deploy-hook.sh; echo Ready; sleep infinity"
+
+  mosquitto:
+    networks:
+      default:
+        ipv4_address: ${IPV4_NETWORK:-172.22.1}.241
+
+  mosquitto-init:
+    command: >
+      tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns ${SERVER_HOSTNAME} --san-ip ${IPV4_NETWORK:-172.22.1}.241

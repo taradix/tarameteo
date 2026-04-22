@@ -7,7 +7,7 @@ from datetime import (
 
 from hamcrest import (
     assert_that,
-    contains,
+    contains_exactly,
     contains_string,
     greater_than,
     has_properties,
@@ -29,7 +29,7 @@ def test_ca_issue_certificate(ca_client, unique):
 
     assert_that(response, has_properties(
         cert_pem=contains_string("-----BEGIN CERTIFICATE-----"),
-        chain_pem=contains(contains_string("-----BEGIN CERTIFICATE-----")),
+        chain_pem=contains_exactly(contains_string("-----BEGIN CERTIFICATE-----")),
         not_before=less_than(datetime.now(UTC)),
         not_after=greater_than(datetime.now(UTC)),
         subject=contains_string(device_id),
