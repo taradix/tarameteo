@@ -349,7 +349,7 @@ class InfluxReader(TSReader):
             "bucket": self.bucket,
             "measurement": measurement,
             "tag_key": tag_key,
-            "limit": limit,
+            "n": limit,
         }
         if start is not None:
             params["start"] = start
@@ -377,7 +377,7 @@ class InfluxReader(TSReader):
             # Filter returned tag values (column is "value")
             flux_lines.append('  |> filter(fn: (r) => containsStr(v: r.value, substr: contains))')
 
-        flux_lines.append('  |> limit(n: limit)')
+        flux_lines.append('  |> limit(n: n)')
         flux = "\n".join(flux_lines)
         return flux, params
 
