@@ -25,6 +25,9 @@ class KeyAlgorithm(Enum):
     RSA = "rsa"
     EC = "ec"
 
+    def __str__(self):
+        return self.value
+
 
 @define(frozen=True)
 class KeySpec:
