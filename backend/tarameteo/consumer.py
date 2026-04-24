@@ -26,7 +26,7 @@ from tarameteo.weather import WeatherDataRequest
 logger = logging.getLogger(__name__)
 
 
-def weather_handler(ts_writer: TSWriter, message: MQTTMessage):
+def weather_handler(message: MQTTMessage, ts_writer: TSWriter):
     try:
         domain, device_id, category = message.topic.split("/")
     except ValueError:
