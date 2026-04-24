@@ -131,7 +131,14 @@ bool MqttClient::publishWeatherData(const WeatherData &data) {
 
     if (success) {
       Serial.printf("Published to topic: %s\n", _topic);
-      _mqttClient.loop();
+      // Pump the network loop until the broker acknowledges or times out.
+      // publish() only writes to the TLS send buffer; without this the WiFi
+      // stack is powered down by deep sleep before the packet leaves the chip.
+      unsigned long deadline = millis() + 2000;
+      while (millis() < deadline && _mqttClient.connected()) {
+        _mqttClient.loop();
+        delay(10);
+      }
       return true;
     }
 
@@ -151,7 +158,10 @@ bool MqttClient::publishWeatherData(const WeatherData &data) {
 void MqttClient::disconnect() {
   if (_mqttClient.connected()) {
     _mqttClient.publish(_lwTopic, "offline", true);
+    delay(100);
+    _mqttClient.loop();
     _mqttClient.disconnect();
+    delay(100);
   }
 }
 
