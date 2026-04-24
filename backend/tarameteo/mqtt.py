@@ -93,8 +93,10 @@ class MQTTBase:
 
     host: str
     cafile: str = field(kw_only=True)
-    certfile: str = field(kw_only=True)
-    keyfile: str = field(kw_only=True)
+    certfile: str | None = field(default=None, kw_only=True)
+    keyfile: str | None = field(default=None, kw_only=True)
+    username: str | None = field(default=None, kw_only=True)
+    password: str | None = field(default=None, kw_only=True)
     client_id: str = field(kw_only=True)
     port: int = field(default=8883, kw_only=True)
     keepalive: int = field(default=60, kw_only=True)
@@ -111,8 +113,10 @@ class MQTTBase:
             host=env.get("MQTT_BROKER_HOST", "mqtt"),
             port=int(env.get("MQTT_BROKER_PORT", "8883")),
             cafile=env["MQTT_CA_PATH"],
-            certfile=env["MQTT_CERT_PATH"],
-            keyfile=env["MQTT_KEY_PATH"],
+            certfile=env.get("MQTT_CERT_PATH"),
+            keyfile=env.get("MQTT_KEY_PATH"),
+            username=env.get("MQTT_USERNAME"),
+            password=env.get("MQTT_PASSWORD"),
             **kwargs,
         )
 
@@ -132,6 +136,8 @@ class MQTTBase:
             cert_reqs=ssl.CERT_REQUIRED,
             tls_version=ssl.PROTOCOL_TLS_CLIENT,
         )
+        if self.username is not None:
+            client.username_pw_set(self.username, self.password)
         client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
         return client
@@ -195,6 +201,8 @@ class MQTTBase:
         cert_paths = set()
         watch_dirs = set()
         for path_str in (self.cafile, self.certfile, self.keyfile):
+            if path_str is None:
+                continue
             resolved = str(Path(path_str).resolve())
             cert_paths.add(resolved)
             watch_dirs.add(os.path.dirname(resolved))

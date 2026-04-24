@@ -22,15 +22,18 @@ from tarameteo.mqtt import (
 @pytest.fixture
 def make_mqtt_consumer(mosquitto_service, make_certs):
     created: list[MQTTConsumer] = []
+    certs = make_certs("weather-consumer")
 
     def _make(topic: str, on_message):
         consumer = MQTTConsumer(
             host=mosquitto_service.ip,
-            port=8883,
+            port=8884,
             client_id="weather-consumer",
             topic=topic,
             on_message=on_message,
-            **make_certs("weather-consumer"),
+            username="admin",
+            password="test",
+            cafile=certs["cafile"],
         )
         consumer.connect()
         consumer.wait_connected()

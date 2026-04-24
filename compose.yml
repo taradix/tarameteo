@@ -91,20 +91,18 @@ services:
       args:
         <<: *python-build-args
     depends_on:
-      consumer-init:
-        condition: service_completed_successfully
       influxdb:
         condition: service_healthy
       mosquitto:
         condition: service_started
     volumes:
-      - consumer-tls:/tls:ro
+      - ca-trust:/ca:ro
     environment:
       MQTT_BROKER_HOST: tarameteo-mosquitto
-      MQTT_BROKER_PORT: 8883
-      MQTT_CERT_PATH: /tls/consumer.pem
-      MQTT_KEY_PATH: /tls/consumer.key
-      MQTT_CA_PATH: /tls/ca.pem
+      MQTT_BROKER_PORT: 8884
+      MQTT_CA_PATH: /ca/ca.pem
+      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
       INFLUX_URL: http://tarameteo-influxdb:8086
       INFLUX_TOKEN: ${INFLUX_TOKEN}
       INFLUX_ORG: ${INFLUX_ORG:-tarameteo}
@@ -114,55 +112,6 @@ services:
         aliases:
           - tarameteo-consumer
     command: tarameteo-consumer
-    restart: always
-
-  consumer-init:
-    build:
-      context: backend
-      args:
-        <<: *python-build-args
-    depends_on:
-      ca:
-        condition: service_healthy
-    volumes:
-      - consumer-tls:/tls
-    environment:
-      PKI_API_URL: http://tarameteo-ca/v1/certs
-      PKI_API_TOKEN: ${CA_TOKEN}
-      PKI_OUTPUT_DIR: /tls
-    command: tarameteo-pki rotate consumer
-    restart: no
-
-  consumer-rotate:
-    build:
-      context: backend
-      args:
-        <<: *python-build-args
-    depends_on:
-      ca:
-        condition: service_healthy
-      consumer-init:
-        condition: service_completed_successfully
-    volumes:
-      - consumer-tls:/tls
-    environment:
-      PKI_API_URL: http://tarameteo-ca/v1/certs
-      PKI_API_TOKEN: ${CA_TOKEN}
-      PKI_OUTPUT_DIR: /tls
-    command:
-      - sh
-      - -ec
-      - |
-        while :; do
-          tarameteo-pki check consumer
-          case $? in
-            0) ;;
-            1) tarameteo-pki renew consumer ;;
-            2) tarameteo-pki rotate consumer ;;
-            *) exit 1 ;;
-          esac
-          sleep 12h
-        done
     restart: always
 
   frontend:
@@ -219,7 +168,6 @@ services:
       MQTT_PASSWORD: ${MQTT_PASSWORD}
       MOSQUITTO_TEMPLATE: /mosquitto.tpl
     ports:
-      - '${MQTT_PORT:-1883}:1883'
       - '${MQTTS_PORT:-8883}:8883'
     networks:
       default:
@@ -328,7 +276,6 @@ networks:
 volumes:
   ca-tls:
   ca-trust:
-  consumer-tls:
   influxdb-data:
   influxdb-config:
   mosquitto-data:

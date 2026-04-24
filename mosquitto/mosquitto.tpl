@@ -24,32 +24,34 @@ log_timestamp_format %Y-%m-%dT%H:%M:%S
 # Network Listeners
 # =============================================================================
 
-listener 1883
-protocol mqtt
+per_listener_settings true
 
+# Sensor listener — mTLS only. Certificate CN becomes the MQTT username.
 listener 8883
 protocol mqtt
-
 cafile /etc/mosquitto/pki/ca.pem
 certfile /tls/mosquitto.pem
 keyfile /tls/mosquitto.key
-
 # TLS 1.3 dropped RSA key exchange; pin to 1.2 so the cipher list below works.
 tls_version tlsv1.2
 # RSA key exchange only — no ephemeral DH. The client encrypts the session key
 # with the server's RSA public key, so no EC scalar multiplications are needed
 # on the ESP32, cutting TLS handshake time from ~15s to ~1s.
 ciphers AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256
-
-# =============================================================================
-# Security
-# =============================================================================
-
 require_certificate true
 use_identity_as_username true
+acl_file ${MOSQUITTO_CONFIG_DIR}/acl_sensor.conf
 
+# Consumer listener — TLS + password only. Internal Docker network, not published
+# on the host. Separate ACL file keeps the two username namespaces isolated.
+listener 8884
+protocol mqtt
+cafile /etc/mosquitto/pki/ca.pem
+certfile /tls/mosquitto.pem
+keyfile /tls/mosquitto.key
 allow_anonymous false
-acl_file ${MOSQUITTO_CONFIG_DIR}/acl.conf
+password_file ${MOSQUITTO_CONFIG_DIR}/passwd
+acl_file ${MOSQUITTO_CONFIG_DIR}/acl_consumer.conf
 
 # =============================================================================
 # Performance & Limits
