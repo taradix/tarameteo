@@ -21,6 +21,7 @@ user weather-consumer
 topic read weather/+/event
 
 pattern write weather/%u/#
+pattern write status/%u
 EOF
 
 exec "$@"
