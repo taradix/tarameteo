@@ -13,12 +13,10 @@ Provision a new sensor
 
 Generate a key and client certificate for a new sensor::
 
-    export PKI_API_URL=https://meteo.taram.ca/api/certs
     export PKI_API_TOKEN=<CA_TOKEN>
-    export PKI_OUTPUT_DIR=/path/to/sensor-tls
     tarameteo-pki rotate <device_id>
 
-Outputs written to ``$PKI_OUTPUT_DIR``:
+Outputs:
 
 - ``<device_id>.key`` — private key (mode 0600)
 - ``<device_id>.pem`` — client certificate (CN = ``<device_id>``)
