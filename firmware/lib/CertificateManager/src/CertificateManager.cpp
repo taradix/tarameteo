@@ -150,9 +150,8 @@ bool CertificateManager::loadCertificates(IWiFiClient &client) {
     client.setCACert(_caCert);
     _arduino->log("CertificateManager: CA certificate loaded");
   } else {
-    // If no CA cert, we need to set insecure mode for server verification
-    // But we still have client cert for client authentication
-    _arduino->log("CertificateManager: WARNING - No CA cert, server validation disabled");
+    client.setInsecure();
+    _arduino->log("CertificateManager: WARNING - No CA cert, skipping server certificate verification");
   }
 
   client.setCertificate(_clientCert);

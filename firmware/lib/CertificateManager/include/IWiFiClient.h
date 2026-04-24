@@ -5,6 +5,7 @@ class IWiFiClient {
 public:
     virtual ~IWiFiClient() {}
     virtual void setCACert(const char* rootCA) = 0;
+    virtual void setInsecure() = 0;
     virtual void setCertificate(const char* client_ca) = 0;
     virtual void setPrivateKey(const char* private_key) = 0;
 };
