@@ -178,8 +178,6 @@ void MqttClient::disconnect() {
   }
 }
 
-void MqttClient::setCACert(const char *caCert) { _wifiClientSecure.setCACert(caCert); }
-
 bool MqttClient::buildPayload(const WeatherData &data, char *buffer, size_t size) {
   StaticJsonDocument<MQTT_BUFFER_SIZE> doc;
 

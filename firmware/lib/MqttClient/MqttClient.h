@@ -2,7 +2,6 @@
 #define MQTT_CLIENT_H
 
 #include <Arduino.h>
-#include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -36,7 +35,6 @@ public:
     void disconnect();
     const char* getLastError() const { return _lastError; }
     int getRetryCount() const { return _retryCount; }
-    void setCACert(const char* caCert);
 
 private:
     const char* _server;
@@ -48,7 +46,6 @@ private:
     char _clientId[32];
     char _lwTopic[64];
 
-    WiFiClient _wifiClient;
     WiFiClientSecure _wifiClientSecure;
     PubSubClient _mqttClient;
 
