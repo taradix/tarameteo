@@ -19,11 +19,8 @@ public:
     const char* getLastError() const { return _lastError; }
 
 private:
-    unsigned long _sleepDuration;  // Sleep duration in seconds
+    unsigned long _sleepDuration;
     char _lastError[128];
-    
-    void updateLastError(const char* error);
-    void prepareForSleep();
 };
 
 #endif 
