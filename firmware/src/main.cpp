@@ -58,6 +58,9 @@ void setup() {
   Serial.begin(115200);
   delay(1000); // Give serial connection time to start
 
+  // Configure deep sleep timer before any possible sleep() call.
+  powerManager.begin();
+
   Serial.println("\n=== TaraMeteo Weather Station ===");
   Serial.println("Sensor: (will be determined from certificate CN)");
   Serial.println("Initializing components...");
@@ -142,10 +145,8 @@ void setup() {
   Serial.println("Connecting to WiFi...");
   if (!wifiManager.connect()) {
     printStatus("WiFi Connection", false, wifiManager.getLastError());
-    Serial.println("Failed to connect to WiFi. Please re-provision.");
-    delay(5000);
-    wifiManager.clearCredentials();
-    ESP.restart();
+    Serial.println("WiFi connection failed, will retry after sleep.");
+    powerManager.sleep();
   }
   printStatus("WiFi Connection", true);
   Serial.printf("Connected to %s (IP: %s)\n", wifiManager.getSSID(), wifiManager.getIP());
@@ -203,13 +204,6 @@ void setup() {
     printStatus("MQTT Connection", true);
     Serial.printf("Connected to %s:%d\n", MQTT_SERVER, MQTT_PORT);
   }
-
-  // Initialize power management
-  if (!powerManager.begin()) {
-    printStatus("Power Manager", false, powerManager.getLastError());
-    powerManager.sleep();
-  }
-  printStatus("Power Manager", true);
 
   Serial.println("All components initialized successfully");
   Serial.printf("Sleep duration: %d seconds (%.1f minutes)\n", SLEEP_DURATION, SLEEP_DURATION / 60.0);
