@@ -24,6 +24,8 @@ class MqttClient {
 public:
     static const int MAX_RETRIES = 3;
     static const int MQTT_BUFFER_SIZE = 512;
+    static const int DNS_RETRIES = 3;
+    static const int DNS_RETRY_DELAY_MS = 2000;
 
     MqttClient(const char* server, int port, CertificateManager* certManager);
 

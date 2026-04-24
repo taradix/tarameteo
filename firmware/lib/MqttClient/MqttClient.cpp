@@ -1,6 +1,7 @@
 #include "MqttClient.h"
 #include "CertificateManager.h"
 #include "WiFiClientSecureAdapter.h"
+#include <WiFi.h>
 
 MqttClient::MqttClient(const char *server, int port, CertificateManager *certManager)
     : _server(server), _port(port), _certManager(certManager), _retryCount(0), _mqttClient(_wifiClientSecure) {
@@ -15,7 +16,6 @@ MqttClient::MqttClient(const char *server, int port, CertificateManager *certMan
 
 bool MqttClient::begin() {
   _mqttClient.setBufferSize(MQTT_BUFFER_SIZE);
-  _mqttClient.setServer(_server, _port);
 
   // Load client certificates for mTLS authentication
   // Wrap WiFiClientSecure with adapter to match IWiFiClient interface
@@ -47,6 +47,19 @@ bool MqttClient::connect() {
   }
 
   Serial.printf("Connecting to MQTT broker at %s:%d using mTLS...\n", _server, _port);
+
+  // Pre-resolve hostname with retries — DNS over UDP is unreliable at weak signal.
+  IPAddress serverIP;
+  bool resolved = false;
+  for (int i = 0; i < DNS_RETRIES && !resolved; i++) {
+    if (i > 0) delay(DNS_RETRY_DELAY_MS);
+    resolved = WiFi.hostByName(_server, serverIP);
+  }
+  if (!resolved) {
+    setError("DNS resolution failed");
+    return false;
+  }
+  _mqttClient.setServer(serverIP, _port);
 
   const char *lwMessage = "offline";
 
