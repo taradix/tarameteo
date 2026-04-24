@@ -32,7 +32,7 @@
 BME280Sensor sensor(BME280_ADDRESS, BME280_SDA, BME280_SCL, SEA_LEVEL_PRESSURE);
 
 // WiFi credentials and sensor name will be loaded from NVS (supports "flash once, provision many")
-WiFiManager wifiManager;
+WiFiManager wifiManager(nullptr, nullptr, WIFI_TIMEOUT_MS);
 
 // CertificateManager dependencies (must be global to persist)
 Preferences certPrefs;

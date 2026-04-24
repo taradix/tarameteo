@@ -10,7 +10,7 @@ public:
 
     // Constructor with optional credentials (NULL = load from NVS)
     // This enables "flash once, provision many" for WiFi credentials
-    WiFiManager(const char* ssid = nullptr, const char* password = nullptr);
+    WiFiManager(const char* ssid = nullptr, const char* password = nullptr, int connectTimeoutMs = 30000);
     ~WiFiManager();
 
     bool begin();
@@ -37,6 +37,8 @@ private:
     char _lastError[128];
     int _reconnectAttempts;
     Preferences _prefs;
+
+    int _connectTimeoutMs;
 
     void updateLastError(const char* error);
     bool attemptConnection();

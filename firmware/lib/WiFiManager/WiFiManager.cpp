@@ -8,7 +8,7 @@
 #include <WiFi.h>
 #endif
 
-WiFiManager::WiFiManager(const char *ssid, const char *password) : _reconnectAttempts(0) {
+WiFiManager::WiFiManager(const char *ssid, const char *password, int connectTimeoutMs) : _reconnectAttempts(0), _connectTimeoutMs(connectTimeoutMs) {
   _lastError[0] = '\0';
   _ssid[0] = '\0';
   _password[0] = '\0';
@@ -83,8 +83,18 @@ bool WiFiManager::attemptConnection() {
   // Wait for connection with timeout
   unsigned long startTime = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - startTime > 10000) { // 10 second timeout
+    if (millis() - startTime > (unsigned long)_connectTimeoutMs) {
       updateLastError("Connection timeout");
+      return false;
+    }
+    delay(100);
+  }
+
+  // WL_CONNECTED means association succeeded but DHCP may still be in flight.
+  // Wait until the stack has assigned a non-zero local IP before returning.
+  while (WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
+    if (millis() - startTime > (unsigned long)_connectTimeoutMs) {
+      updateLastError("DHCP timeout");
       return false;
     }
     delay(100);
