@@ -54,9 +54,6 @@ public:
         _server.send(code, content_type, content);
     }
 
-    // Expose the underlying server for special operations
-    WebServer& getServer() { return _server; }
-
 private:
     WebServer _server;
     std::map<std::string, String> _argBuffers;
