@@ -12,8 +12,8 @@ class WiFiManager;
 
 class CertificateManager {
 public:
-    static const int MAX_CERT_SIZE = 2048;
-    static const int MAX_KEY_SIZE = 2048;
+    static const int MAX_CERT_SIZE = 4096;
+    static const int MAX_KEY_SIZE = 4096;
     static const int MAX_CN_LENGTH = 64;
     static const int CERT_EXPIRY_WARNING_DAYS = 30;
 
