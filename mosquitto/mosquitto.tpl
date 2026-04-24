@@ -34,6 +34,13 @@ cafile /etc/mosquitto/pki/ca.pem
 certfile /tls/mosquitto.pem
 keyfile /tls/mosquitto.key
 
+# TLS 1.3 dropped RSA key exchange; pin to 1.2 so the cipher list below works.
+tls_version tlsv1.2
+# RSA key exchange only — no ephemeral DH. The client encrypts the session key
+# with the server's RSA public key, so no EC scalar multiplications are needed
+# on the ESP32, cutting TLS handshake time from ~15s to ~1s.
+ciphers AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256
+
 # =============================================================================
 # Security
 # =============================================================================

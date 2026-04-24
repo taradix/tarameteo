@@ -1,0 +1,4 @@
+# Enable RSA key exchange cipher suites in mbedTLS.
+# Required for TLS handshake without EC scalar multiplications on the ESP32-C3,
+# which has no hardware crypto and makes ECDHE prohibitively slow (~15s per handshake).
+CONFIG_MBEDTLS_KEY_EXCHANGE_RSA=y

@@ -245,7 +245,7 @@ services:
       - sh
       - -ec
       - |
-        tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "$$SERVER_HOSTNAME"
+        tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
         chown -R 1883:1883 /tls
     restart: no
 
@@ -268,7 +268,6 @@ services:
       PKI_API_URL: http://tarameteo-ca/v1/certs
       PKI_API_TOKEN: ${CA_TOKEN}
       PKI_OUTPUT_DIR: /tls
-      SERVER_HOSTNAME: ${SERVER_HOSTNAME}
     command:
       - sh
       - -ec
@@ -278,12 +277,12 @@ services:
           case $? in
             0) ;;
             1)
-              tarameteo-pki renew mosquitto --san-dns tarameteo-mosquitto --san-dns "$$SERVER_HOSTNAME"
+              tarameteo-pki renew mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
               chown -R 1883:1883 /tls
               /docker-reload.py mosquitto
               ;;
             2)
-              tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "$$SERVER_HOSTNAME"
+              tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
               chown -R 1883:1883 /tls
               /docker-reload.py mosquitto
               ;;

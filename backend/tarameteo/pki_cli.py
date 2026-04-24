@@ -451,7 +451,7 @@ def make_args_parser():
         "--key-algorithm",
         type=KeyAlgorithm,
         choices=list(KeyAlgorithm),
-        default=KeyAlgorithm.EC,
+        default=KeyAlgorithm.RSA,
         help="Public key algorithm (default: %(default)s)",
     )
 
@@ -537,7 +537,7 @@ def make_args_parser():
         "--key-algorithm",
         type=KeyAlgorithm,
         choices=list(KeyAlgorithm),
-        default=KeyAlgorithm.EC,
+        default=KeyAlgorithm.RSA,
         help="Public key algorithm (default: %(default)s)",
     )
     rotate_parser.add_argument(
