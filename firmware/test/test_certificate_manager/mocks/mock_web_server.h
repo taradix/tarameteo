@@ -14,6 +14,10 @@ public:
         handlers[std::string(uri)] = handler;
     }
 
+    void onPost(const char* uri, std::function<void()> handler) override {
+        handlers[std::string(uri)] = handler;
+    }
+
     void onNotFound(std::function<void()> handler) override {
         notFoundHandler = handler;
     }

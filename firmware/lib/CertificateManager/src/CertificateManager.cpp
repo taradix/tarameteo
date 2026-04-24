@@ -494,7 +494,7 @@ void CertificateManager::setupProvisioningServer() {
     handleRootRequest();
   });
 
-  _provisioningServer->on("/provision", [this]() {
+  _provisioningServer->onPost("/provision", [this]() {
     _arduino->log("CertificateManager: Received POST request for /provision");
     handleProvisionRequest();
   });

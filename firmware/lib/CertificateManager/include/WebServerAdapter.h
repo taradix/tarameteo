@@ -4,6 +4,8 @@
 #include "IWebServer.h"
 #include <WebServer.h>
 #include <functional>
+#include <map>
+#include <string>
 
 // Adapter that wraps the real WebServer
 class WebServerAdapter : public IWebServer {
@@ -12,6 +14,10 @@ public:
 
     void on(const char* uri, std::function<void()> handler) override {
         _server.on(uri, HTTP_GET, handler);
+    }
+
+    void onPost(const char* uri, std::function<void()> handler) override {
+        _server.on(uri, HTTP_POST, handler);
     }
 
     void onNotFound(std::function<void()> handler) override {
@@ -35,8 +41,8 @@ public:
     }
 
     const char* arg(const char* name) override {
-        _argBuffer = _server.arg(name);
-        return _argBuffer.c_str();
+        _argBuffers[name] = _server.arg(name);
+        return _argBuffers[name].c_str();
     }
 
     const char* uri() override {
@@ -53,7 +59,7 @@ public:
 
 private:
     WebServer _server;
-    String _argBuffer;
+    std::map<std::string, String> _argBuffers;
     String _uriBuffer;
 };
 

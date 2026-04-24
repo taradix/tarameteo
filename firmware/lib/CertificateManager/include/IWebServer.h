@@ -7,6 +7,7 @@ class IWebServer {
 public:
     virtual ~IWebServer() {}
     virtual void on(const char* uri, std::function<void()> handler) = 0;
+    virtual void onPost(const char* uri, std::function<void()> handler) = 0;
     virtual void onNotFound(std::function<void()> handler) = 0;
     virtual void begin() = 0;
     virtual void stop() = 0;
