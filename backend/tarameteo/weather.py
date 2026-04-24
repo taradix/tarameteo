@@ -1,12 +1,17 @@
 """Weather data."""
 
-from datetime import datetime
+import logging
+from datetime import UTC, datetime
 
 from pydantic import (
     BaseModel,
     Field,
     field_validator,
 )
+
+logger = logging.getLogger(__name__)
+
+_MIN_TIMESTAMP = datetime(2020, 1, 1, tzinfo=UTC)
 
 
 class WeatherDataRequest(BaseModel):
@@ -25,7 +30,10 @@ class WeatherDataRequest(BaseModel):
     def validate_timestamp(cls, v):
         """Convert Unix timestamp to datetime if needed."""
         if isinstance(v, int):
-            return datetime.fromtimestamp(v)
+            v = datetime.fromtimestamp(v, tz=UTC)
+        if v < _MIN_TIMESTAMP:
+            logger.warning("Firmware sent invalid timestamp %s (NTP sync likely failed); using server time", v)
+            v = datetime.now(UTC)
         return v
 
     def __str__(self):
