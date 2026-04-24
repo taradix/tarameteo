@@ -159,6 +159,13 @@ public:
         return true;
     }
 
+    // DNS
+    bool hostByName(const char* hostname, IPAddress& result) {
+        (void)hostname;
+        result = IPAddress(127, 0, 0, 1);
+        return true;
+    }
+
     // Mock helpers for testing
     void setStatus(wl_status_t status) {
         _status = status;
