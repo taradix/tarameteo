@@ -1,4 +1,4 @@
-import { useDashboardState } from "../hooks/useDashboardState";
+import { useDashboardState, DEFAULT_END } from "../hooks/useDashboardState";
 import { useSensorInfo, useSensorList, useWeather } from "../hooks/useSensors";
 import { DateRangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
@@ -18,7 +18,8 @@ export function Dashboard() {
   const sensorList = useSensorList();
   const firstSensor = sensors[0] ?? null;
   const sensorInfo = useSensorInfo(firstSensor);
-  const weather = useWeather(sensors, start.toISOString(), end.toISOString());
+  const liveEnd = end === DEFAULT_END ? null : end;
+  const weather = useWeather(sensors, start.toISOString(), liveEnd);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-4">
@@ -62,7 +63,7 @@ export function Dashboard() {
               sensors={sensors}
               readings={weather.data}
               start={start}
-              end={end}
+              end={liveEnd}
             />
           ))}
         </div>

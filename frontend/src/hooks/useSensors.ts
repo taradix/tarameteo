@@ -21,11 +21,12 @@ export function useSensorInfo(name: string | null) {
   });
 }
 
-export function useWeather(names: string[], start: string, end: string) {
+// end=null means live mode: fetch up to now() at query time so new readings appear
+export function useWeather(names: string[], start: string, end: Date | null) {
   return useQueries({
     queries: names.map((name) => ({
-      queryKey: ["weather", name, start, end],
-      queryFn: () => api.getWeather(name, start, end),
+      queryKey: end ? ["weather", name, start, end.toISOString()] : ["weather", name, start],
+      queryFn: () => api.getWeather(name, start, (end ?? new Date()).toISOString()),
       refetchInterval: REFETCH_MS,
     })),
     combine: (results) => ({

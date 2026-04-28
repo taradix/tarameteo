@@ -27,7 +27,7 @@ interface Props {
   sensors: string[];
   readings: WeatherReading[];
   start: Date;
-  end: Date;
+  end: Date | null;
 }
 
 type Point = { x: number; y: number };
@@ -59,7 +59,7 @@ export function WeatherChart({ title, unit, field, sensors, readings, start, end
         x: {
           type: "time",
           min: start.getTime(),
-          max: end.getTime(),
+          ...(end ? { max: end.getTime() } : {}),
           time: {
             displayFormats: {
               minute: "MM/dd HH:mm",
