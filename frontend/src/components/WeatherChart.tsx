@@ -21,7 +21,7 @@ interface Props {
   readings: WeatherReading[];
 }
 
-type Row = { timestamp: string } & Record<string, number | null | string>;
+type Row = { timestamp: string; ts: number } & Record<string, number | null | string>;
 
 export function WeatherChart({ title, unit, field, sensors, readings }: Props) {
   const data = useMemo(() => pivot(readings, sensors, field), [readings, sensors, field]);
@@ -42,13 +42,16 @@ export function WeatherChart({ title, unit, field, sensors, readings }: Props) {
         <LineChart data={data} margin={{ top: 8, right: 24, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
-            dataKey="timestamp"
-            tickFormatter={(t) => format(parseISO(t), "MM/dd HH:mm")}
+            dataKey="ts"
+            type="number"
+            scale="time"
+            domain={["auto", "auto"]}
+            tickFormatter={(t) => format(new Date(t), "MM/dd HH:mm")}
             minTickGap={40}
           />
           <YAxis label={{ value: unit, angle: -90, position: "insideLeft" }} />
           <Tooltip
-            labelFormatter={(t) => format(parseISO(t as string), "PPpp")}
+            labelFormatter={(t) => format(new Date(t as number), "PPpp")}
             formatter={(v) => [`${v} ${unit}`, ""]}
           />
           <Legend />
@@ -75,7 +78,7 @@ function pivot(readings: WeatherReading[], sensors: string[], field: WeatherFiel
   for (const r of readings) {
     let row = byTs.get(r.timestamp);
     if (!row) {
-      row = { timestamp: r.timestamp };
+      row = { timestamp: r.timestamp, ts: parseISO(r.timestamp).getTime() };
       byTs.set(r.timestamp, row);
     }
     row[r.sensor] = r[field] ?? null;
