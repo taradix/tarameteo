@@ -61,6 +61,8 @@ export function Dashboard() {
               field={c.field}
               sensors={sensors}
               readings={weather.data}
+              start={start}
+              end={end}
             />
           ))}
         </div>

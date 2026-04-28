@@ -7,6 +7,7 @@ import {
   LineElement,
   Tooltip,
   Legend,
+  Decimation,
   type ChartOptions,
   type ChartData,
 } from "chart.js";
@@ -17,7 +18,7 @@ import { parseISO } from "date-fns";
 import { colorFor } from "../colors";
 import type { WeatherField, WeatherReading } from "../types";
 
-ChartJS.register(TimeScale, LinearScale, PointElement, LineElement, Tooltip, Legend, zoomPlugin);
+ChartJS.register(TimeScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Decimation, zoomPlugin);
 
 interface Props {
   title: string;
@@ -25,11 +26,13 @@ interface Props {
   field: WeatherField;
   sensors: string[];
   readings: WeatherReading[];
+  start: Date;
+  end: Date;
 }
 
 type Point = { x: number; y: number };
 
-export function WeatherChart({ title, unit, field, sensors, readings }: Props) {
+export function WeatherChart({ title, unit, field, sensors, readings, start, end }: Props) {
   const data = useMemo<ChartData<"line", Point[]>>(
     () => ({
       datasets: sensors.map((name) => ({
@@ -42,6 +45,7 @@ export function WeatherChart({ title, unit, field, sensors, readings }: Props) {
         backgroundColor: colorFor(name),
         pointRadius: 0,
         tension: 0,
+        parsing: false,
       })),
     }),
     [readings, sensors, field],
@@ -50,10 +54,12 @@ export function WeatherChart({ title, unit, field, sensors, readings }: Props) {
   const options = useMemo<ChartOptions<"line">>(
     () => ({
       responsive: true,
-      animation: { duration: 400 },
+      animation: false,
       scales: {
         x: {
           type: "time",
+          min: start.getTime(),
+          max: end.getTime(),
           time: {
             displayFormats: {
               minute: "MM/dd HH:mm",
@@ -69,6 +75,11 @@ export function WeatherChart({ title, unit, field, sensors, readings }: Props) {
       },
       plugins: {
         legend: { position: "bottom" },
+        decimation: {
+          enabled: true,
+          algorithm: "lttb",
+          samples: 500,
+        },
         tooltip: {
           callbacks: {
             label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} ${unit}`,
@@ -84,7 +95,7 @@ export function WeatherChart({ title, unit, field, sensors, readings }: Props) {
         },
       },
     }),
-    [unit],
+    [unit, start, end],
   );
 
   const hasData = readings.length > 0;

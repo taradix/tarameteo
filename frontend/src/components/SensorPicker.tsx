@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 
 interface Props {
   selected: string[];
@@ -7,13 +7,16 @@ interface Props {
 }
 
 export function SensorPicker({ selected, available, onChange }: Props) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
+  const [focused, setFocused] = useState(false);
 
   const add = () => {
     const name = input.trim();
     if (!name || selected.includes(name)) return;
     onChange([...selected, name]);
     setInput("");
+    inputRef.current?.blur();
   };
 
   const remove = (name: string) => onChange(selected.filter((s) => s !== name));
@@ -22,7 +25,7 @@ export function SensorPicker({ selected, available, onChange }: Props) {
     if (e.key === "Enter") add();
   };
 
-  const suggestions = available.filter((s) => !selected.includes(s));
+  const suggestions = focused ? available.filter((s) => !selected.includes(s)) : [];
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
@@ -30,10 +33,13 @@ export function SensorPicker({ selected, available, onChange }: Props) {
 
       <div className="flex gap-2">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder="Add sensor by name…"
           className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
           list="sensor-suggestions"

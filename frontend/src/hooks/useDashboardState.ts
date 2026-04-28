@@ -1,13 +1,14 @@
 import { useQueryStates, parseAsArrayOf, parseAsString, parseAsIsoDateTime } from "nuqs";
 import { subDays } from "date-fns";
 
-const defaultStart = () => subDays(new Date(), 7);
-const defaultEnd = () => new Date();
+export const DEFAULT_SENSORS: string[] = [];
+export const DEFAULT_START = subDays(new Date(), 7);
+export const DEFAULT_END = new Date();
 
 export function useDashboardState() {
   return useQueryStates({
-    sensors: parseAsArrayOf(parseAsString).withDefault([]),
-    start: parseAsIsoDateTime.withDefault(defaultStart()),
-    end: parseAsIsoDateTime.withDefault(defaultEnd()),
+    sensors: parseAsArrayOf(parseAsString).withDefault(DEFAULT_SENSORS),
+    start: parseAsIsoDateTime.withDefault(DEFAULT_START),
+    end: parseAsIsoDateTime.withDefault(DEFAULT_END),
   });
 }

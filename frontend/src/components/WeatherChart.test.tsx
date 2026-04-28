@@ -4,6 +4,7 @@ import { WeatherChart } from "./WeatherChart";
 
 describe("WeatherChart", () => {
   it("renders an empty state when there are no readings", () => {
+    const now = new Date();
     render(
       <WeatherChart
         title="Temperature"
@@ -11,6 +12,8 @@ describe("WeatherChart", () => {
         field="temperature"
         sensors={["s1"]}
         readings={[]}
+        start={new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)}
+        end={now}
       />,
     );
     expect(screen.getByText(/no data in range/i)).toBeInTheDocument();
