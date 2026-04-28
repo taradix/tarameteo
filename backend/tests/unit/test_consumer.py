@@ -2,7 +2,6 @@
 
 from datetime import UTC, datetime
 
-import pytest
 from hamcrest import (
     assert_that,
     contains_exactly,
