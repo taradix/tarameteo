@@ -59,7 +59,10 @@ bool MqttClient::connect() {
     setError("DNS resolution failed");
     return false;
   }
-  _mqttClient.setServer(serverIP, _port);
+  // Pass hostname (not IP) so PubSubClient calls connect(hostname) on WiFiClientSecure,
+  // giving mbedTLS the name it needs for SNI and DNS-SAN hostname verification.
+  (void)serverIP;
+  _mqttClient.setServer(_server, _port);
 
   const char *lwMessage = "offline";
 
