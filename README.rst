@@ -22,8 +22,8 @@ Outputs:
 - ``<device_id>.pem`` — client certificate (CN = ``<device_id>``)
 - ``ca.pem`` — CA certificate
 
-Wire a new sensor
------------------
+Wire a sensor
+-------------
 
 This configuration uses the
 `Seeed Studio XIAO ESP32-C3 <https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/>`_
@@ -44,3 +44,10 @@ in I²C mode.
 +----------------------+---------------------------+------------------------------+
 | SDI                  | SDA (I²C Data)            | Data line                    |
 +----------------------+---------------------------+------------------------------+
+
+Flash a sensor
+--------------
+
+% uv run pio run -t upload
+% uv run pio run -t erase
+% uv run pio device monitor                                                                                                         [
