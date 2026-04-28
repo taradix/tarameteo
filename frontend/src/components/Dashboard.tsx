@@ -5,11 +5,10 @@ import { SensorPicker } from "./SensorPicker";
 import { SensorStatistics } from "./SensorStatistics";
 import { WeatherChart } from "./WeatherChart";
 
-const CHARTS: { field: "temperature" | "humidity" | "pressure" | "altitude" | "rssi"; title: string; unit: string }[] = [
+const CHARTS: { field: "temperature" | "humidity" | "pressure" | "rssi"; title: string; unit: string }[] = [
   { field: "temperature", title: "Temperature", unit: "°C" },
   { field: "humidity", title: "Humidity", unit: "%" },
   { field: "pressure", title: "Pressure", unit: "hPa" },
-  { field: "altitude", title: "Altitude", unit: "m" },
   { field: "rssi", title: "WiFi signal", unit: "dBm" },
 ];
 
