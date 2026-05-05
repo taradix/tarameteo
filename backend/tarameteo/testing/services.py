@@ -36,6 +36,7 @@ def env_vars(project):
         "INFLUX_TOKEN": "test",
         "MQTT_PASSWORD": "test",
         "PYTHON_VERSION": python_version,
+        "REDIS_PASSWORD": "test",
         "SERVER_HOSTNAME": "test.local",
     }
 
@@ -153,3 +154,25 @@ def mosquitto_service(compose_server):
     server = compose_server("mosquitto version 2.0.22 running")
     with server.run("mosquitto") as service:
         yield service
+
+
+@pytest.fixture(scope="session")
+def redis_service(compose_server):
+    """Redis service fixture."""
+    server = compose_server("Ready to accept connections tcp")
+    with server.run("redis") as service:
+        yield service
+
+
+@pytest.fixture(scope="session")
+def redis_client(redis_service, env_vars):
+    """Redis client to the service fixture."""
+    from redis import StrictRedis
+
+    return StrictRedis(
+        host=redis_service.ip,
+        port=6379,
+        decode_responses=True,
+        db=0,
+        password=env_vars["REDIS_PASSWORD"],
+    )

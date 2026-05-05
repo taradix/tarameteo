@@ -21,7 +21,7 @@ dependencies = [
     "paho-mqtt>=2.1.0,<3.0.0",
     "watchdog>=6.0.0,<7.0.0",
     "yarl>=1.22.0,<2.0.0",
-    "taraqueue[redis]>=0.2.0",
+    "taraqueue[redis]>=0.3.0",
 ]
 
 [project.optional-dependencies]
