@@ -947,6 +947,15 @@ wheels = [
 ]
 
 [[package]]
+name = "redis"
+version = "7.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/7f/3759b1d0d72b7c92f0d70ffd9dc962b7b7b5ee74e135f9d7d8ab06b8a318/redis-7.4.0.tar.gz", hash = "sha256:64a6ea7bf567ad43c964d2c30d82853f8df927c5c9017766c55a1d1ed95d18ad", size = 4943913, upload-time = "2026-03-24T09:14:37.53Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/3a/95deec7db1eb53979973ebd156f3369a72732208d1391cd2e5d127062a32/redis-7.4.0-py3-none-any.whl", hash = "sha256:a9c74a5c893a5ef8455a5adb793a31bb70feb821c86eccb62eebef5a19c429ec", size = 409772, upload-time = "2026-03-24T09:14:35.968Z" },
+]
+
+[[package]]
 name = "ruff"
 version = "0.15.12"
 source = { registry = "https://pypi.org/simple" }
@@ -1007,6 +1016,7 @@ dependencies = [
     { name = "more-itertools" },
     { name = "paho-mqtt" },
     { name = "pydantic" },
+    { name = "taraqueue", extra = ["redis"] },
     { name = "uvicorn", extra = ["standard"] },
     { name = "watchdog" },
     { name = "yarl" },
@@ -1043,11 +1053,29 @@ requires-dist = [
     { name = "pytest-unique", marker = "extra == 'test'", specifier = ">=0.1.8,<1.0.0" },
     { name = "pytest-xdocker", marker = "extra == 'test'", specifier = ">=0.2.8,<1.0.0" },
     { name = "ruff", marker = "extra == 'check'", specifier = ">=0.15.0,<1.0.0" },
+    { name = "taraqueue", extras = ["redis"], specifier = ">=0.2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
     { name = "watchdog", specifier = ">=6.0.0,<7.0.0" },
     { name = "yarl", specifier = ">=1.22.0,<2.0.0" },
 ]
 provides-extras = ["test", "check"]
+
+[[package]]
+name = "taraqueue"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "yarl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/e3/232d6fd448cc8be796c7d7cdfbb78486c61aaec7f48c013b8ab9e9ec6f02/taraqueue-0.2.0.tar.gz", hash = "sha256:b0295e02719cd52b505130e353816bf484430e47d5661a2b8fe974205a5be432", size = 76193, upload-time = "2026-05-04T14:20:57.947Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/19/62823739b871be8cb72669a4a82a4f99a6011ee591677d5f87f42808c997/taraqueue-0.2.0-py3-none-any.whl", hash = "sha256:9230028de0a9b47fdd05d6e47bf30ad0d67c1e5824dde0bd5180b9d50d04206b", size = 8471, upload-time = "2026-05-04T14:20:57.057Z" },
+]
+
+[package.optional-dependencies]
+redis = [
+    { name = "redis" },
+]
 
 [[package]]
 name = "typing-extensions"

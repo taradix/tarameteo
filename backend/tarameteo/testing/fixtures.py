@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tarameteo.api import app as _api_app
-from tarameteo.api import get_ts_reader
+from tarameteo.api import get_queue, get_ts_reader
 from tarameteo.ca import app as _ca_app
 from tarameteo.ca_client import IssueCertificateRequest
 from tarameteo.crypto import generate_key_pem
@@ -40,14 +40,16 @@ def memory_writer(memory_store):
 
 
 @pytest.fixture
-def api_app(memory_reader):
+def api_app(memory_reader, memory_queue):
     """API testing app."""
     _api_app.dependency_overrides[get_ts_reader] = lambda: memory_reader
+    _api_app.dependency_overrides[get_queue] = lambda: memory_queue
     try:
         with TestClient(_api_app) as client:
             yield client
     finally:
         _api_app.dependency_overrides.pop(get_ts_reader, None)
+        _api_app.dependency_overrides.pop(get_queue, None)
 
 
 @pytest.fixture

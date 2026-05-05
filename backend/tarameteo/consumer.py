@@ -2,11 +2,11 @@
 
 import asyncio
 import logging
+import os
 import signal
 from argparse import ArgumentParser
-from functools import partial
 
-from pydantic import ValidationError
+from taraqueue import Queue
 
 from tarameteo.logger import (
     LoggerHandlerAction,
@@ -26,7 +26,7 @@ from tarameteo.weather import WeatherDataRequest
 logger = logging.getLogger(__name__)
 
 
-def weather_handler(message: MQTTMessage, ts_writer: TSWriter):
+async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queue):
     try:
         domain, device_id, category = message.topic.split("/")
     except ValueError:
@@ -39,7 +39,7 @@ def weather_handler(message: MQTTMessage, ts_writer: TSWriter):
 
     try:
         weather_data = WeatherDataRequest(**message.data)
-    except ValidationError:
+    except Exception:
         logger.exception("Invalid weather data format")
         return
 
@@ -54,6 +54,11 @@ def weather_handler(message: MQTTMessage, ts_writer: TSWriter):
     except Exception:
         logger.exception("Error storing weather data")
         return
+
+    try:
+        await queue.publish(f"weather:{device_id}", weather_data.model_dump_json())
+    except Exception:
+        logger.exception("Error publishing weather data to queue")
 
     logger.info(
         f"Stored weather data for sensor {device_id}: "
@@ -89,16 +94,22 @@ async def async_main(argv=None) -> None:
     setup_logger(args.log_level, args.log_file)
 
     ts_writer = InfluxWriter.from_env()
-    handler = partial(weather_handler, ts_writer=ts_writer)
+    queue = Queue.from_url(os.environ["QUEUE_URL"])
+    loop = asyncio.get_running_loop()
+
+    async def _async_handler(message: MQTTMessage) -> None:
+        await weather_handler(message, ts_writer=ts_writer, queue=queue)
+
+    def _sync_handler(message: MQTTMessage) -> None:
+        asyncio.run_coroutine_threadsafe(_async_handler(message), loop)
+
     consumer = MQTTConsumer.from_env(
         client_id=args.client_id,
         topic=args.topic_filter,
-        on_message=handler,
+        on_message=_sync_handler,
     )
     consumer.connect()
 
-    # Handle signals
-    loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, consumer.disconnect)
 

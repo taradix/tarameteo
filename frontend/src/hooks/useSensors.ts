@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import type { WeatherReading } from "../types";
@@ -21,13 +22,13 @@ export function useSensorInfo(name: string | null) {
   });
 }
 
-// end=null means live mode: fetch up to now() at query time so new readings appear
+// end=null means live mode: initial REST fetch + SSE for incremental updates.
 export function useWeather(names: string[], start: string, end: Date | null) {
-  return useQueries({
+  const queries = useQueries({
     queries: names.map((name) => ({
       queryKey: end ? ["weather", name, start, end.toISOString()] : ["weather", name, start],
       queryFn: () => api.getWeather(name, start, (end ?? new Date()).toISOString()),
-      refetchInterval: REFETCH_MS,
+      refetchInterval: end ? REFETCH_MS : false,
     })),
     combine: (results) => ({
       data: results.flatMap<WeatherReading>((r) => r.data ?? []),
@@ -36,4 +37,33 @@ export function useWeather(names: string[], start: string, end: Date | null) {
       error: results.find((r) => r.error)?.error ?? null,
     }),
   });
+
+  const [liveReadings, setLiveReadings] = useState<WeatherReading[]>([]);
+
+  useEffect(() => {
+    if (end !== null || names.length === 0) {
+      return;
+    }
+
+    const sources = names.map((name) => {
+      const es = new EventSource(`/api/sensors/${encodeURIComponent(name)}/weather/stream`);
+      es.onmessage = (e: MessageEvent) => {
+        const reading = JSON.parse(e.data as string) as WeatherReading;
+        setLiveReadings((prev) => [...prev, reading]);
+      };
+      return es;
+    });
+
+    return () => {
+      sources.forEach((es) => es.close());
+      setLiveReadings([]);
+    };
+  }, [names, end]);
+
+  return {
+    data: [...queries.data, ...liveReadings],
+    isLoading: queries.isLoading,
+    isFetching: queries.isFetching,
+    error: queries.error,
+  };
 }

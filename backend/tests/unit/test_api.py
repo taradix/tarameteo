@@ -1,10 +1,12 @@
 """Unit tests for the api module."""
 
+import json
 from datetime import (
     UTC,
     datetime,
     timedelta,
 )
+from unittest.mock import AsyncMock
 
 from hamcrest import (
     assert_that,
@@ -15,7 +17,7 @@ from hamcrest import (
     has_properties,
 )
 
-from tarameteo.api import app
+from tarameteo.api import app, stream_sensor_weather
 from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
@@ -180,3 +182,28 @@ def test_sensor_weather_range(api_app, memory_writer, unique):
     assert_that(response.json(), contains_exactly(
         has_entries(sensor=name, temperature=1.0),
     ))
+
+
+async def test_stream_sensor_weather(memory_queue, unique):
+    name = unique("text")
+    payload = json.dumps({
+        "sensor": name,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "temperature": 22.5,
+        "humidity": 60.0,
+        "pressure": 1013.25,
+        "altitude": None,
+        "rssi": None,
+        "retry_count": None,
+    })
+    await memory_queue.publish(f"weather:{name}", payload)
+
+    # is_disconnected returns False once (allow one event through) then True
+    mock_request = AsyncMock()
+    mock_request.is_disconnected.side_effect = [False, True]
+
+    response = await stream_sensor_weather(name=name, request=mock_request, queue=memory_queue)
+
+    events = [chunk async for chunk in response.body_iterator]
+
+    assert_that(events, contains_exactly(f"data: {payload}\n\n"))

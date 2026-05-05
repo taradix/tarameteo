@@ -1,6 +1,7 @@
 """API service."""
 
 import logging
+import os
 from datetime import datetime
 from typing import Annotated
 
@@ -12,7 +13,8 @@ from fastapi import (
     Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from taraqueue import Queue, QueueEmpty
 
 from tarameteo.ca_client import (
     CAClient,
@@ -67,6 +69,13 @@ def get_sensor_service(ts_reader: TSReaderDep) -> SensorService:
 SensorServiceDep = Annotated[SensorService, Depends(get_sensor_service)]
 
 
+def get_queue() -> Queue:
+    return Queue.from_url(os.environ["QUEUE_URL"])
+
+
+QueueDep = Annotated[Queue, Depends(get_queue)]
+
+
 @app.post("/api/certs", response_model=IssueCertificateResponse)
 def post_cert(
     request: IssueCertificateRequest,
@@ -105,6 +114,24 @@ def get_sensor_weather(
     limit: Annotated[int | None, Query(ge=1, le=10000)] = None,
 ) -> list[WeatherReading]:
     return service.get_weather(name, start=start, end=end, limit=limit)
+
+
+@app.get("/api/sensors/{name}/weather/stream")
+async def stream_sensor_weather(name: str, request: Request, queue: QueueDep) -> StreamingResponse:
+    async def event_generator():
+        async with queue.connect(f"weather:{name}") as q:
+            while not await request.is_disconnected():
+                try:
+                    message = await q.receive(timeout=60)
+                    yield f"data: {message}\n\n"
+                except QueueEmpty:
+                    pass
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.exception_handler(Exception)
