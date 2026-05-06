@@ -125,7 +125,7 @@ async def stream_sensor_weather(name: str, request: Request, queue: QueueDep) ->
                     message = await q.receive(timeout=60)
                     yield f"data: {message}\n\n"
                 except QueueEmpty:
-                    pass
+                    yield ": ping\n\n"
 
     return StreamingResponse(
         event_generator(),
