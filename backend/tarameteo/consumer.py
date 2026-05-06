@@ -21,7 +21,7 @@ from tarameteo.ts import (
     InfluxWriter,
     TSWriter,
 )
-from tarameteo.weather import WeatherDataRequest
+from tarameteo.sensors import WeatherReading
 
 logger = logging.getLogger(__name__)
 
@@ -38,34 +38,33 @@ async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queu
         return
 
     try:
-        weather_data = WeatherDataRequest(**message.data)
+        reading = WeatherReading(sensor=device_id, **message.data)
     except Exception:
         logger.exception("Invalid weather data format")
         return
 
-    fields = weather_data.model_dump(exclude={"timestamp"}, exclude_none=True)
     try:
         ts_writer.write_point(
             "weather",
-            fields=fields,
+            fields=reading.model_dump(exclude={"sensor", "timestamp"}, exclude_none=True),
             tags={"device_id": device_id},
-            timestamp=weather_data.timestamp,
+            timestamp=reading.timestamp,
         )
     except Exception:
         logger.exception("Error storing weather data")
         return
 
     try:
-        await queue.publish(f"weather:{device_id}", weather_data.model_dump_json())
+        await queue.publish(f"weather:{device_id}", reading.model_dump_json())
     except Exception:
         logger.exception("Error publishing weather data to queue")
 
     logger.info(
         f"Stored weather data for sensor {device_id}: "
-        f"T={weather_data.temperature}°C"
-        f", H={weather_data.humidity}%"
-        f", P={weather_data.pressure}hPa"
-        + (f", RSSI={weather_data.rssi}dBm" if weather_data.rssi else "")
+        f"T={reading.temperature}°C"
+        f", H={reading.humidity}%"
+        f", P={reading.pressure}hPa"
+        + (f", RSSI={reading.rssi}dBm" if reading.rssi else "")
     )
 
 

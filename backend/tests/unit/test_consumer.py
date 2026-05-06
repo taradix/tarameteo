@@ -103,7 +103,7 @@ async def test_weather_handler_publishes_to_sensor_channel(memory_writer, memory
         message = await q.receive()
 
     data = json.loads(message)
-    assert_that(data, has_entries(temperature=22.5, humidity=60.0, pressure=1013.25))
+    assert_that(data, has_entries(sensor=name, temperature=22.5, humidity=60.0, pressure=1013.25))
 
 
 async def test_weather_handler_publishes_to_correct_channel(memory_writer, memory_queue, unique):

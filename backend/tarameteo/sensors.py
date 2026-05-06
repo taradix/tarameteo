@@ -1,5 +1,6 @@
 """Sensor service reading weather points from the time series store."""
 
+import logging
 from collections.abc import Iterable
 from datetime import (
     UTC,
@@ -8,7 +9,7 @@ from datetime import (
 )
 
 from attrs import define
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from tarameteo.ts import (
     TSPoint,
@@ -23,18 +24,32 @@ SENSOR_TAG = "device_id"
 STATS_WINDOW = timedelta(days=90)
 LATEST_LOOKBACK = "30d"
 
+_MIN_TIMESTAMP = datetime(2020, 1, 1, tzinfo=UTC)
+
+logger = logging.getLogger(__name__)
+
 
 class WeatherReading(BaseModel):
     """A single weather measurement."""
 
     sensor: str = Field(..., description="Sensor name")
-    timestamp: datetime = Field(..., description="Timestamp of reading")
+    timestamp: datetime | int = Field(..., description="Timestamp of reading")
     temperature: float = Field(..., description="Temperature in Celsius")
     humidity: float = Field(..., description="Humidity percentage")
     pressure: float = Field(..., description="Pressure in hPa")
     altitude: float | None = Field(None, description="Altitude in meters")
     rssi: int | None = Field(None, description="WiFi RSSI in dBm")
     retry_count: int | None = Field(None, description="Number of retry attempts")
+
+    @field_validator("timestamp", mode="before")
+    @classmethod
+    def coerce_timestamp(cls, v: object) -> datetime:
+        if isinstance(v, int):
+            v = datetime.fromtimestamp(v, tz=UTC)
+        if isinstance(v, datetime) and v < _MIN_TIMESTAMP:
+            logger.warning("Firmware sent invalid timestamp %s (NTP sync likely failed); using server time", v)
+            return datetime.now(UTC)
+        return v  # type: ignore[return-value]
 
 
 class SensorStatistics(BaseModel):
