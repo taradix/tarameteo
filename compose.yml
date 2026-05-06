@@ -1,5 +1,5 @@
 x-build-args: &python-build-args
-  PYTHON_VERSION: ${PYTHON_VERSION:-3.13.10}
+  PYTHON_VERSION: ${PYTHON_VERSION:-3.14.2}
 name: tarameteo
 
 include:

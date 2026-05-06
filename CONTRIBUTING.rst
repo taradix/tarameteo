@@ -108,18 +108,6 @@ Setting up
 .. _Clone: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo#step-2-create-a-local-clone-of-your-fork
 
 
-Troubleshooting
----------------
-
--   .. code-block:: text
-
-        Solving environment: failed
-
-        ResolvePackageNotFound:
-          - python=3.13
-
-    The cache is probably corrupt - run ``conda clean -a``.
-
 Starting to code
 ----------------
 
