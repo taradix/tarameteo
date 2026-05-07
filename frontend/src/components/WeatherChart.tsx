@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Chart as ChartJS,
@@ -38,13 +38,14 @@ export function WeatherChart({ title, unit, field, sensors, readings, start, end
   const { t } = useTranslation();
   const chartRef = useRef<ChartJS<"line">>(null);
 
-  // Stable refs so the zoom callback never captures stale values.
   const startRef = useRef(start);
   const endRef = useRef(end);
   const onRangeExtendRef = useRef(onRangeExtend);
-  startRef.current = start;
-  endRef.current = end;
-  onRangeExtendRef.current = onRangeExtend;
+  useLayoutEffect(() => {
+    startRef.current = start;
+    endRef.current = end;
+    onRangeExtendRef.current = onRangeExtend;
+  });
 
   const handleZoomPanComplete = useCallback(({ chart }: { chart: ChartJS }) => {
     const { min, max } = chart.scales.x;
