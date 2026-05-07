@@ -1,4 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   selected: string[];
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function SensorPicker({ selected, available, onChange }: Props) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
   const [focused, setFocused] = useState(false);
@@ -29,7 +31,7 @@ export function SensorPicker({ selected, available, onChange }: Props) {
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-      <h2 className="mb-3 text-lg font-semibold">Sensors</h2>
+      <h2 className="mb-3 text-lg font-semibold">{t("sensors.title")}</h2>
 
       <div className="flex gap-2">
         <input
@@ -40,7 +42,7 @@ export function SensorPicker({ selected, available, onChange }: Props) {
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Add sensor by name…"
+          placeholder={t("sensors.placeholder")}
           className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
           list="sensor-suggestions"
         />
@@ -53,12 +55,12 @@ export function SensorPicker({ selected, available, onChange }: Props) {
           disabled={!input.trim()}
           className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
         >
-          Add
+          {t("sensors.add")}
         </button>
       </div>
 
       {selected.length === 0 ? (
-        <p className="mt-3 text-sm text-zinc-500">No sensors selected.</p>
+        <p className="mt-3 text-sm text-zinc-500">{t("sensors.none")}</p>
       ) : (
         <ul className="mt-3 flex flex-wrap gap-2">
           {selected.map((name) => (
@@ -70,7 +72,7 @@ export function SensorPicker({ selected, available, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => remove(name)}
-                aria-label={`Remove ${name}`}
+                aria-label={t("sensors.remove", { name })}
                 className="text-zinc-500 hover:text-red-600"
               >
                 ×

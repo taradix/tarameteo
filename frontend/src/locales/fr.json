@@ -1,0 +1,49 @@
+{
+  "app": {
+    "title": "TaraMeteo"
+  },
+  "language": {
+    "toggle": "Changer de langue"
+  },
+  "dashboard": {
+    "title": "Tableau de bord météo",
+    "timezone": "Fuseau horaire : {{timezone}}",
+    "noSensors": "Ajoutez un capteur pour voir les graphiques."
+  },
+  "chart": {
+    "temperature": "Température",
+    "humidity": "Humidité",
+    "pressure": "Pression",
+    "wifi": "Signal WiFi",
+    "noData": "Aucune donnée dans cette plage."
+  },
+  "dateRange": {
+    "title": "Plage de dates",
+    "live": "En direct",
+    "yesterday": "Hier",
+    "last7d": "7 derniers jours",
+    "last30d": "30 derniers jours",
+    "custom": "Personnalisé",
+    "start": "Début",
+    "end": "Fin",
+    "endHint": "vide = en direct"
+  },
+  "sensors": {
+    "title": "Capteurs",
+    "placeholder": "Ajouter un capteur par nom…",
+    "add": "Ajouter",
+    "none": "Aucun capteur sélectionné.",
+    "remove": "Retirer {{name}}"
+  },
+  "statistics": {
+    "title": "Statistiques — {{name}}",
+    "totalReadings": "Total des lectures",
+    "last24h": "Dernières 24h",
+    "avgTemperature": "Temp. moyenne",
+    "avgHumidity": "Humidité moyenne",
+    "avgPressure": "Pression moyenne",
+    "avgRssi": "RSSI moyen",
+    "firstReading": "Première lecture",
+    "lastReading": "Dernière lecture"
+  }
+}

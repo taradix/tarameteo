@@ -1,0 +1,27 @@
+.language-toggle {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid #d0d0d0;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  color: #1a1a1a;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.language-toggle:hover {
+  background-color: #f0f0f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .language-toggle {
+    border-color: #3a3a3a;
+    background-color: #2a2a2a;
+    color: #ffffff;
+  }
+
+  .language-toggle:hover {
+    background-color: #3a3a3a;
+  }
+}

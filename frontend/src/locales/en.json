@@ -1,0 +1,49 @@
+{
+  "app": {
+    "title": "TaraMeteo"
+  },
+  "language": {
+    "toggle": "Toggle language"
+  },
+  "dashboard": {
+    "title": "Weather dashboard",
+    "timezone": "Timezone: {{timezone}}",
+    "noSensors": "Add a sensor to see charts."
+  },
+  "chart": {
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "pressure": "Pressure",
+    "wifi": "WiFi signal",
+    "noData": "No data in range."
+  },
+  "dateRange": {
+    "title": "Date range",
+    "live": "Live",
+    "yesterday": "Yesterday",
+    "last7d": "Last 7 days",
+    "last30d": "Last 30 days",
+    "custom": "Custom",
+    "start": "Start",
+    "end": "End",
+    "endHint": "empty = live"
+  },
+  "sensors": {
+    "title": "Sensors",
+    "placeholder": "Add sensor by name…",
+    "add": "Add",
+    "none": "No sensors selected.",
+    "remove": "Remove {{name}}"
+  },
+  "statistics": {
+    "title": "Statistics — {{name}}",
+    "totalReadings": "Total readings",
+    "last24h": "Last 24h",
+    "avgTemperature": "Avg temperature",
+    "avgHumidity": "Avg humidity",
+    "avgPressure": "Avg pressure",
+    "avgRssi": "Avg RSSI",
+    "firstReading": "First reading",
+    "lastReading": "Last reading"
+  }
+}

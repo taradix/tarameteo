@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { format, parseISO } from "date-fns";
 
 interface Props {
@@ -8,18 +9,23 @@ interface Props {
   onChange: (params: { preset?: string | null; start?: Date | null; end?: Date | null }) => void;
 }
 
-const PRESETS = [
-  { key: "live",      label: "Live"         },
-  { key: "yesterday", label: "Yesterday"    },
-  { key: "7d",        label: "Last 7 days"  },
-  { key: "30d",       label: "Last 30 days" },
-] as const;
+const PRESET_KEYS = ["live", "yesterday", "7d", "30d"] as const;
+type PresetKey = (typeof PRESET_KEYS)[number];
 
 const LOCAL_FORMAT = "yyyy-MM-dd'T'HH:mm";
 
 export function RangePicker({ preset, start, end, onChange }: Props) {
+  const { t } = useTranslation();
   const [customExpanded, setCustomExpanded] = useState(false);
-  const isKnownPreset = PRESETS.some((p) => p.key === preset);
+
+  const PRESETS: { key: PresetKey; label: string }[] = [
+    { key: "live",      label: t("dateRange.live")      },
+    { key: "yesterday", label: t("dateRange.yesterday") },
+    { key: "7d",        label: t("dateRange.last7d")    },
+    { key: "30d",       label: t("dateRange.last30d")   },
+  ];
+
+  const isKnownPreset = PRESET_KEYS.some((k) => k === preset);
   const isCustom = !isKnownPreset;
   const showCustom = isCustom || customExpanded;
 
@@ -32,7 +38,7 @@ export function RangePicker({ preset, start, end, onChange }: Props) {
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-      <h2 className="mb-3 text-lg font-semibold">Date range</h2>
+      <h2 className="mb-3 text-lg font-semibold">{t("dateRange.title")}</h2>
       <div className="flex flex-wrap gap-2">
         {PRESETS.map(({ key, label }) => (
           <button
@@ -49,14 +55,14 @@ export function RangePicker({ preset, start, end, onChange }: Props) {
           onClick={() => { if (!isCustom) onChange({ preset: "custom", start, end }); setCustomExpanded((v) => !v); }}
           className={btnClass(showCustom)}
         >
-          Custom
+          {t("dateRange.custom")}
         </button>
       </div>
 
       {showCustom && (
         <div className="mt-3 flex flex-wrap gap-3">
           <label className="flex flex-col text-sm">
-            <span className="mb-1">Start</span>
+            <span className="mb-1">{t("dateRange.start")}</span>
             <input
               type="datetime-local"
               value={format(start, LOCAL_FORMAT)}
@@ -65,7 +71,7 @@ export function RangePicker({ preset, start, end, onChange }: Props) {
             />
           </label>
           <label className="flex flex-col text-sm">
-            <span className="mb-1">End <span className="text-zinc-400">(empty = live)</span></span>
+            <span className="mb-1">{t("dateRange.end")} <span className="text-zinc-400">({t("dateRange.endHint")})</span></span>
             <input
               type="datetime-local"
               value={end ? format(end, LOCAL_FORMAT) : ""}

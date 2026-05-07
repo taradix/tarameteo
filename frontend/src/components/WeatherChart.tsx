@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Chart as ChartJS,
   TimeScale,
@@ -34,6 +35,7 @@ interface Props {
 type Point = { x: number; y: number };
 
 export function WeatherChart({ title, unit, field, sensors, readings, start, end, onRangeExtend }: Props) {
+  const { t } = useTranslation();
   const chartRef = useRef<ChartJS<"line">>(null);
 
   // Stable refs so the zoom callback never captures stale values.
@@ -132,7 +134,7 @@ export function WeatherChart({ title, unit, field, sensors, readings, start, end
       {hasData ? (
         <Line ref={chartRef} data={data} options={options} />
       ) : (
-        <p className="text-sm text-zinc-500">No data in range.</p>
+        <p className="text-sm text-zinc-500">{t("chart.noData")}</p>
       )}
     </div>
   );

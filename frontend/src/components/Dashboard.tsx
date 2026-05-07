@@ -1,20 +1,23 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useDashboardState } from "../hooks/useDashboardState";
 import { useSensorInfo, useSensorList, useWeather } from "../hooks/useSensors";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
 import { SensorStatistics } from "./SensorStatistics";
 import { WeatherChart } from "./WeatherChart";
-
-const CHARTS: { field: "temperature" | "humidity" | "pressure" | "rssi"; title: string; unit: string }[] = [
-  { field: "temperature", title: "Temperature", unit: "°C" },
-  { field: "humidity", title: "Humidity", unit: "%" },
-  { field: "pressure", title: "Pressure", unit: "hPa" },
-  { field: "rssi", title: "WiFi signal", unit: "dBm" },
-];
+import LanguageToggle from "./LanguageToggle";
 
 export function Dashboard() {
+  const { t } = useTranslation();
   const [{ sensors, preset, start, end }, setParams] = useDashboardState();
+
+  const CHARTS: { field: "temperature" | "humidity" | "pressure" | "rssi"; title: string; unit: string }[] = [
+    { field: "temperature", title: t("chart.temperature"), unit: "°C" },
+    { field: "humidity", title: t("chart.humidity"), unit: "%" },
+    { field: "pressure", title: t("chart.pressure"), unit: "hPa" },
+    { field: "rssi", title: t("chart.wifi"), unit: "dBm" },
+  ];
 
   const sensorList = useSensorList();
   const firstSensor = sensors[0] ?? null;
@@ -27,11 +30,14 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-4">
-      <header>
-        <h1 className="text-2xl font-bold">Weather dashboard</h1>
-        <p className="text-sm text-zinc-500">
-          Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
-        </p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">{t("dashboard.title")}</h1>
+          <p className="text-sm text-zinc-500">
+            {t("dashboard.timezone", { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
+          </p>
+        </div>
+        <LanguageToggle />
       </header>
 
       <SensorPicker
@@ -56,7 +62,7 @@ export function Dashboard() {
       )}
 
       {sensors.length === 0 ? (
-        <p className="text-sm text-zinc-500">Add a sensor to see charts.</p>
+        <p className="text-sm text-zinc-500">{t("dashboard.noSensors")}</p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {CHARTS.map((c) => (
