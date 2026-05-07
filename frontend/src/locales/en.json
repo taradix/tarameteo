@@ -34,16 +34,5 @@
     "add": "Add",
     "none": "No sensors selected.",
     "remove": "Remove {{name}}"
-  },
-  "statistics": {
-    "title": "Statistics — {{name}}",
-    "totalReadings": "Total readings",
-    "last24h": "Last 24h",
-    "avgTemperature": "Avg temperature",
-    "avgHumidity": "Avg humidity",
-    "avgPressure": "Avg pressure",
-    "avgRssi": "Avg RSSI",
-    "firstReading": "First reading",
-    "lastReading": "Last reading"
   }
 }

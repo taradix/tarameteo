@@ -1,4 +1,4 @@
-import type { SensorInfo, SensorsList, WeatherReading } from "./types";
+import type { SensorsList, WeatherReading } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -27,12 +27,9 @@ export class ApiError extends Error {
 
 export const api = {
   listSensors: () => get<SensorsList>("/api/sensors"),
-  getSensor: (name: string) => get<SensorInfo>(`/api/sensors/${encodeURIComponent(name)}`),
   getWeather: (name: string, start: string, end?: string, limit?: number) =>
     get<WeatherReading[]>(
       `/api/sensors/${encodeURIComponent(name)}/weather`,
       { start, end, limit },
     ),
-  getLatest: (name: string) =>
-    get<WeatherReading>(`/api/sensors/${encodeURIComponent(name)}/weather/latest`),
 };

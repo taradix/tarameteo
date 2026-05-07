@@ -13,15 +13,6 @@ export function useSensorList() {
   });
 }
 
-export function useSensorInfo(name: string | null) {
-  return useQuery({
-    queryKey: ["sensor", name],
-    queryFn: () => api.getSensor(name!),
-    enabled: !!name,
-    refetchInterval: REFETCH_MS,
-  });
-}
-
 // end=null means live mode: initial REST fetch + SSE for incremental updates.
 export function useWeather(names: string[], start: string, end: Date | null) {
   const queries = useQueries({

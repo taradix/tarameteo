@@ -34,16 +34,5 @@
     "add": "Ajouter",
     "none": "Aucun capteur sélectionné.",
     "remove": "Retirer {{name}}"
-  },
-  "statistics": {
-    "title": "Statistiques — {{name}}",
-    "totalReadings": "Total des lectures",
-    "last24h": "Dernières 24h",
-    "avgTemperature": "Temp. moyenne",
-    "avgHumidity": "Humidité moyenne",
-    "avgPressure": "Pression moyenne",
-    "avgRssi": "RSSI moyen",
-    "firstReading": "Première lecture",
-    "lastReading": "Dernière lecture"
   }
 }

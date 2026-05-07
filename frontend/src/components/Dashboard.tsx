@@ -1,10 +1,9 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useDashboardState } from "../hooks/useDashboardState";
-import { useSensorInfo, useSensorList, useWeather } from "../hooks/useSensors";
+import { useSensorList, useWeather } from "../hooks/useSensors";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
-import { SensorStatistics } from "./SensorStatistics";
 import { WeatherChart } from "./WeatherChart";
 import LanguageToggle from "./LanguageToggle";
 
@@ -20,8 +19,6 @@ export function Dashboard() {
   ];
 
   const sensorList = useSensorList();
-  const firstSensor = sensors[0] ?? null;
-  const sensorInfo = useSensorInfo(firstSensor);
   const weather = useWeather(sensors, start.toISOString(), end);
 
   const handleRangeExtend = useCallback((newStart: Date, newEnd: Date | null) => {
@@ -52,8 +49,6 @@ export function Dashboard() {
         end={end}
         onChange={(changes) => setParams(changes)}
       />
-
-      {sensorInfo.data && <SensorStatistics info={sensorInfo.data} />}
 
       {weather.error && (
         <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
