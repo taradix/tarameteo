@@ -19,7 +19,7 @@
   },
   "dateRange": {
     "title": "Date range",
-    "live": "Live",
+    "today": "Today",
     "yesterday": "Yesterday",
     "last7d": "Last 7 days",
     "last30d": "Last 30 days",

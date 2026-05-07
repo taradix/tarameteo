@@ -19,7 +19,7 @@
   },
   "dateRange": {
     "title": "Plage de dates",
-    "live": "En direct",
+    "today": "Aujourd'hui",
     "yesterday": "Hier",
     "last7d": "7 derniers jours",
     "last30d": "30 derniers jours",

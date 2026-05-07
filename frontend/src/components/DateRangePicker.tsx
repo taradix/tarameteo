@@ -9,7 +9,7 @@ interface Props {
   onChange: (params: { preset?: string | null; start?: Date | null; end?: Date | null }) => void;
 }
 
-const PRESET_KEYS = ["live", "yesterday", "7d", "30d"] as const;
+const PRESET_KEYS = ["today", "yesterday", "7d", "30d"] as const;
 type PresetKey = (typeof PRESET_KEYS)[number];
 
 const LOCAL_FORMAT = "yyyy-MM-dd'T'HH:mm";
@@ -19,7 +19,7 @@ export function RangePicker({ preset, start, end, onChange }: Props) {
   const [customExpanded, setCustomExpanded] = useState(false);
 
   const PRESETS: { key: PresetKey; label: string }[] = [
-    { key: "live",      label: t("dateRange.live")      },
+    { key: "today",     label: t("dateRange.today")     },
     { key: "yesterday", label: t("dateRange.yesterday") },
     { key: "7d",        label: t("dateRange.last7d")    },
     { key: "30d",       label: t("dateRange.last30d")   },

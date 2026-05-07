@@ -8,8 +8,8 @@ function computeRange(
   customEnd: Date | null,
 ): { start: Date; end: Date | null } {
   switch (preset) {
-    case "live":      return { start: startOfToday(),              end: null             };
-    case "yesterday": return { start: startOfYesterday(),           end: startOfToday()   };
+    case "today":     return { start: startOfToday(),              end: null             };
+    case "yesterday": return { start: startOfYesterday(),          end: startOfToday()   };
     case "7d":        return { start: subDays(startOfToday(), 7),  end: null             };
     case "30d":       return { start: subDays(startOfToday(), 30), end: null             };
     default:          return { start: customStart ?? startOfToday(), end: customEnd ?? null };
@@ -19,7 +19,7 @@ function computeRange(
 export function useDashboardState() {
   const [params, setParams] = useQueryStates({
     sensors: parseAsArrayOf(parseAsString).withDefault([]),
-    preset: parseAsString.withDefault("live"),
+    preset: parseAsString.withDefault("today"),
     start: parseAsIsoDateTime,
     end: parseAsIsoDateTime,
   });
