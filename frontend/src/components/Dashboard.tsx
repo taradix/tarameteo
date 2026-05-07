@@ -1,6 +1,7 @@
-import { useDashboardState, DEFAULT_END } from "../hooks/useDashboardState";
+import { useCallback } from "react";
+import { useDashboardState } from "../hooks/useDashboardState";
 import { useSensorInfo, useSensorList, useWeather } from "../hooks/useSensors";
-import { DateRangePicker } from "./DateRangePicker";
+import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
 import { SensorStatistics } from "./SensorStatistics";
 import { WeatherChart } from "./WeatherChart";
@@ -13,13 +14,16 @@ const CHARTS: { field: "temperature" | "humidity" | "pressure" | "rssi"; title: 
 ];
 
 export function Dashboard() {
-  const [{ sensors, start, end }, setState] = useDashboardState();
+  const [{ sensors, preset, start, end }, setParams] = useDashboardState();
 
   const sensorList = useSensorList();
   const firstSensor = sensors[0] ?? null;
   const sensorInfo = useSensorInfo(firstSensor);
-  const liveEnd = end === DEFAULT_END ? null : end;
-  const weather = useWeather(sensors, start.toISOString(), liveEnd);
+  const weather = useWeather(sensors, start.toISOString(), end);
+
+  const handleRangeExtend = useCallback((newStart: Date, newEnd: Date | null) => {
+    setParams({ preset: "custom", start: newStart, end: newEnd });
+  }, [setParams]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-4">
@@ -33,13 +37,14 @@ export function Dashboard() {
       <SensorPicker
         selected={sensors}
         available={sensorList.data?.sensors ?? []}
-        onChange={(next) => setState({ sensors: next })}
+        onChange={(next) => setParams({ sensors: next })}
       />
 
-      <DateRangePicker
+      <RangePicker
+        preset={preset}
         start={start}
         end={end}
-        onChange={(range) => setState(range)}
+        onChange={(changes) => setParams(changes)}
       />
 
       {sensorInfo.data && <SensorStatistics info={sensorInfo.data} />}
@@ -63,7 +68,8 @@ export function Dashboard() {
               sensors={sensors}
               readings={weather.data}
               start={start}
-              end={liveEnd}
+              end={end}
+              onRangeExtend={handleRangeExtend}
             />
           ))}
         </div>

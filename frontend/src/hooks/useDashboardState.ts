@@ -1,14 +1,33 @@
+import { useMemo } from "react";
 import { useQueryStates, parseAsArrayOf, parseAsString, parseAsIsoDateTime } from "nuqs";
-import { subDays } from "date-fns";
+import { startOfToday, startOfYesterday, subDays } from "date-fns";
 
-export const DEFAULT_SENSORS: string[] = [];
-export const DEFAULT_START = subDays(new Date(), 7);
-export const DEFAULT_END = new Date();
+function computeRange(
+  preset: string,
+  customStart: Date | null,
+  customEnd: Date | null,
+): { start: Date; end: Date | null } {
+  switch (preset) {
+    case "live":      return { start: startOfToday(),              end: null             };
+    case "yesterday": return { start: startOfYesterday(),           end: startOfToday()   };
+    case "7d":        return { start: subDays(startOfToday(), 7),  end: null             };
+    case "30d":       return { start: subDays(startOfToday(), 30), end: null             };
+    default:          return { start: customStart ?? startOfToday(), end: customEnd ?? null };
+  }
+}
 
 export function useDashboardState() {
-  return useQueryStates({
-    sensors: parseAsArrayOf(parseAsString).withDefault(DEFAULT_SENSORS),
-    start: parseAsIsoDateTime.withDefault(DEFAULT_START),
-    end: parseAsIsoDateTime.withDefault(DEFAULT_END),
+  const [params, setParams] = useQueryStates({
+    sensors: parseAsArrayOf(parseAsString).withDefault([]),
+    preset: parseAsString.withDefault("live"),
+    start: parseAsIsoDateTime,
+    end: parseAsIsoDateTime,
   });
+
+  const { start, end } = useMemo(
+    () => computeRange(params.preset, params.start, params.end),
+    [params.preset, params.start, params.end],
+  );
+
+  return [{ sensors: params.sensors, preset: params.preset, start, end }, setParams] as const;
 }
