@@ -1053,7 +1053,7 @@ requires-dist = [
     { name = "pytest-unique", marker = "extra == 'test'", specifier = ">=0.1.8,<1.0.0" },
     { name = "pytest-xdocker", marker = "extra == 'test'", specifier = ">=0.2.8,<1.0.0" },
     { name = "ruff", marker = "extra == 'check'", specifier = ">=0.15.0,<1.0.0" },
-    { name = "taraqueue", extras = ["redis"], specifier = ">=0.3.0" },
+    { name = "taraqueue", extras = ["redis"], specifier = ">=0.4.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
     { name = "watchdog", specifier = ">=6.0.0,<7.0.0" },
     { name = "yarl", specifier = ">=1.22.0,<2.0.0" },
@@ -1062,14 +1062,14 @@ provides-extras = ["test", "check"]
 
 [[package]]
 name = "taraqueue"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "yarl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f0/2a/6a05e730609173b2810761521d39d92f501207038b9f67b603de37207672/taraqueue-0.3.0.tar.gz", hash = "sha256:b42ca9d91c831f9a7d36948a1c41a6fdf881bfcc00b24bacef742f5ba14f254f", size = 78094, upload-time = "2026-05-04T18:23:18.04Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/db/5053f9b4a2bdf9c03c46a896c9aa65e943165c1e875f4ac48b500bcdf5e1/taraqueue-0.4.0.tar.gz", hash = "sha256:22716a64ef0dd485e1bbc3ec57718e8a2fcdf1f117eb2505470589a6ef472c48", size = 78166, upload-time = "2026-05-07T15:54:31.282Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/9f/ad740bc2f012e7c39df5c8ab34e8d6e61b322a15454712973dd585e5c6ee/taraqueue-0.3.0-py3-none-any.whl", hash = "sha256:b8b1af7977206f57e5937e9ff48d02a47a2f05c0ace46b28313a7d6db7d0e270", size = 8482, upload-time = "2026-05-04T18:23:16.775Z" },
+    { url = "https://files.pythonhosted.org/packages/af/3a/c55bbc0f9249c4e4c43d3c22ec339b8f6e53d25e97f24f163ddd6e341cf0/taraqueue-0.4.0-py3-none-any.whl", hash = "sha256:c3cfa263cb5ea02b369a22cae3dfe9db237786ea83277e790ee9594a31c481e2", size = 8474, upload-time = "2026-05-07T15:54:30.357Z" },
 ]
 
 [package.optional-dependencies]
