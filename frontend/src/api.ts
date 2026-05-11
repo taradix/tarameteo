@@ -1,4 +1,4 @@
-import type { SensorsList, WeatherReading } from "./types";
+import type { AggregateReading, SensorsList, WeatherReading } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -30,6 +30,11 @@ export const api = {
   getWeather: (name: string, start: string, end?: string, limit?: number) =>
     get<WeatherReading[]>(
       `/api/sensors/${encodeURIComponent(name)}/weather`,
+      { start, end, limit },
+    ),
+  getWeatherAggregate: (name: string, start: string, end?: string, limit?: number) =>
+    get<AggregateReading[]>(
+      `/api/sensors/${encodeURIComponent(name)}/weather/aggregate`,
       { start, end, limit },
     ),
 };

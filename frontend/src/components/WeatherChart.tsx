@@ -6,27 +6,33 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  Filler,
   Tooltip,
   Legend,
   Decimation,
   type ChartOptions,
   type ChartData,
+  type ChartDataset,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import "chartjs-adapter-date-fns";
 import zoomPlugin from "chartjs-plugin-zoom";
 import { parseISO } from "date-fns";
-import { colorFor } from "../colors";
-import type { WeatherField, WeatherReading } from "../types";
+import { bandColorFor, colorFor } from "../colors";
+import type { AggregateReading, SensorEntry, WeatherField, WeatherReading } from "../types";
 
-ChartJS.register(TimeScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Decimation, zoomPlugin);
+ChartJS.register(
+  TimeScale, LinearScale, PointElement, LineElement, Filler,
+  Tooltip, Legend, Decimation, zoomPlugin,
+);
 
 interface Props {
   title: string;
   unit: string;
   field: WeatherField;
-  sensors: string[];
+  sensors: SensorEntry[];
   readings: WeatherReading[];
+  aggregates: AggregateReading[];
   start: Date;
   end: Date | null;
   onRangeExtend?: (start: Date, end: Date | null) => void;
@@ -34,7 +40,19 @@ interface Props {
 
 type Point = { x: number; y: number };
 
-export function WeatherChart({ title, unit, field, sensors, readings, start, end, onRangeExtend }: Props) {
+function aggValues(
+  r: AggregateReading,
+  field: WeatherField,
+): { min: number | null; avg: number | null; max: number | null } {
+  const key = field as "temperature" | "humidity" | "pressure";
+  return {
+    min: r[`${key}_min`] ?? null,
+    avg: r[`${key}_avg`] ?? null,
+    max: r[`${key}_max`] ?? null,
+  };
+}
+
+export function WeatherChart({ title, unit, field, sensors, readings, aggregates, start, end, onRangeExtend }: Props) {
   const { t } = useTranslation();
   const chartRef = useRef<ChartJS<"line">>(null);
 
@@ -53,7 +71,6 @@ export function WeatherChart({ title, unit, field, sensors, readings, start, end
     const dataMax = endRef.current?.getTime() ?? Date.now();
 
     const newStart = min < dataMin ? new Date(min) : startRef.current;
-    // Don't extend end in live mode (end === null); the stream covers "now".
     const newEnd = endRef.current !== null && max > dataMax ? new Date(max) : endRef.current;
 
     if (newStart !== startRef.current || newEnd !== endRef.current) {
@@ -61,23 +78,77 @@ export function WeatherChart({ title, unit, field, sensors, readings, start, end
     }
   }, []);
 
-  const data = useMemo<ChartData<"line", Point[]>>(
-    () => ({
-      datasets: sensors.map((name) => ({
-        label: name,
-        data: readings
-          .filter((r) => r.sensor === name && r[field] != null)
-          .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: r[field] as number }))
-          .sort((a, b) => a.x - b.x),
-        borderColor: colorFor(name),
-        backgroundColor: colorFor(name),
-        pointRadius: 0,
-        tension: 0,
-        parsing: false,
-      })),
-    }),
-    [readings, sensors, field],
-  );
+  const data = useMemo<ChartData<"line", Point[]>>(() => {
+    const datasets: ChartDataset<"line", Point[]>[] = [];
+
+    for (const sensor of sensors) {
+      const color = colorFor(sensor.name);
+
+      if (sensor.kind === "timeseries") {
+        datasets.push({
+          label: sensor.name,
+          data: readings
+            .filter((r) => r.sensor === sensor.name && r[field] != null)
+            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: r[field] as number }))
+            .sort((a, b) => a.x - b.x),
+          borderColor: color,
+          backgroundColor: color,
+          pointRadius: 0,
+          tension: 0,
+          parsing: false,
+        });
+      } else {
+        const aggData = aggregates
+          .filter((r) => r.sensor === sensor.name)
+          .sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
+
+        // Max line — fills down to the immediately following min dataset.
+        datasets.push({
+          label: "",
+          data: aggData
+            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: aggValues(r, field).max }))
+            .filter((p): p is Point => p.y !== null),
+          borderColor: bandColorFor(sensor.name),
+          backgroundColor: bandColorFor(sensor.name),
+          fill: "+1",
+          pointRadius: 0,
+          tension: 0,
+          parsing: false,
+        });
+
+        // Min line — bottom boundary of the band.
+        datasets.push({
+          label: "",
+          data: aggData
+            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: aggValues(r, field).min }))
+            .filter((p): p is Point => p.y !== null),
+          borderColor: bandColorFor(sensor.name),
+          backgroundColor: "transparent",
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+          parsing: false,
+        });
+
+        // Avg line — shown in legend as the sensor label.
+        datasets.push({
+          label: sensor.name,
+          data: aggData
+            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: aggValues(r, field).avg }))
+            .filter((p): p is Point => p.y !== null),
+          borderColor: color,
+          backgroundColor: color,
+          borderDash: [4, 4],
+          fill: false,
+          pointRadius: 3,
+          tension: 0,
+          parsing: false,
+        });
+      }
+    }
+
+    return { datasets };
+  }, [readings, aggregates, sensors, field]);
 
   const options = useMemo<ChartOptions<"line">>(
     () => ({
@@ -102,7 +173,12 @@ export function WeatherChart({ title, unit, field, sensors, readings, start, end
         },
       },
       plugins: {
-        legend: { position: "bottom" },
+        legend: {
+          position: "bottom",
+          labels: {
+            filter: (item) => item.text !== "",
+          },
+        },
         decimation: {
           enabled: true,
           algorithm: "lttb",
@@ -127,7 +203,7 @@ export function WeatherChart({ title, unit, field, sensors, readings, start, end
     [unit, start, end, handleZoomPanComplete],
   );
 
-  const hasData = readings.length > 0;
+  const hasData = readings.length > 0 || aggregates.length > 0;
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">

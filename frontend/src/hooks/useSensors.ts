@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { api } from "../api";
-import type { WeatherReading } from "../types";
+import type { AggregateReading, SensorEntry, WeatherReading } from "../types";
 
 const REFETCH_MS = 30_000;
 
@@ -14,11 +14,14 @@ export function useSensorList() {
 }
 
 // end=null means live mode: initial REST fetch + SSE for incremental updates.
-export function useWeather(names: string[], start: string, end: Date | null) {
-  const queries = useQueries({
-    queries: names.map((name) => ({
-      queryKey: end ? ["weather", name, start, end.toISOString()] : ["weather", name, start],
-      queryFn: () => api.getWeather(name, start, (end ?? new Date()).toISOString()),
+export function useWeather(sensors: SensorEntry[], start: string, end: Date | null) {
+  const tsSensors = sensors.filter((s) => s.kind === "timeseries");
+  const aggSensors = sensors.filter((s) => s.kind === "aggregate");
+
+  const tsQueries = useQueries({
+    queries: tsSensors.map((s) => ({
+      queryKey: end ? ["weather", s.name, start, end.toISOString()] : ["weather", s.name, start],
+      queryFn: () => api.getWeather(s.name, start, (end ?? new Date()).toISOString()),
       refetchInterval: end ? REFETCH_MS : false,
     })),
     combine: (results) => ({
@@ -29,18 +32,40 @@ export function useWeather(names: string[], start: string, end: Date | null) {
     }),
   });
 
+  const aggQueries = useQueries({
+    queries: aggSensors.map((s) => ({
+      queryKey: end
+        ? ["weather_aggregate", s.name, start, end.toISOString()]
+        : ["weather_aggregate", s.name, start],
+      queryFn: () => api.getWeatherAggregate(s.name, start, (end ?? new Date()).toISOString()),
+      refetchInterval: REFETCH_MS,
+    })),
+    combine: (results) => ({
+      data: results.flatMap<AggregateReading>((r) => r.data ?? []),
+      isLoading: results.some((r) => r.isLoading),
+      isFetching: results.some((r) => r.isFetching),
+      error: results.find((r) => r.error)?.error ?? null,
+    }),
+  });
+
   const [liveReadings, setLiveReadings] = useState<WeatherReading[]>([]);
+  const [liveAggregates, setLiveAggregates] = useState<AggregateReading[]>([]);
 
   useEffect(() => {
-    if (end !== null || names.length === 0) {
+    if (end !== null || sensors.length === 0) {
       return;
     }
 
-    const sources = names.map((name) => {
-      const es = new EventSource(`/api/sensors/${encodeURIComponent(name)}/weather/stream`);
+    const sources = sensors.map((s) => {
+      const es = new EventSource(`/api/sensors/${encodeURIComponent(s.name)}/weather/stream`);
       es.onmessage = (e: MessageEvent) => {
-        const reading = JSON.parse(e.data as string) as WeatherReading;
-        setLiveReadings((prev) => [...prev, reading]);
+        if (s.kind === "timeseries") {
+          const reading = JSON.parse(e.data as string) as WeatherReading;
+          setLiveReadings((prev) => [...prev, reading]);
+        } else {
+          const reading = JSON.parse(e.data as string) as AggregateReading;
+          setLiveAggregates((prev) => [...prev, reading]);
+        }
       };
       return es;
     });
@@ -48,13 +73,15 @@ export function useWeather(names: string[], start: string, end: Date | null) {
     return () => {
       sources.forEach((es) => es.close());
       setLiveReadings([]);
+      setLiveAggregates([]);
     };
-  }, [names, end]);
+  }, [sensors, end]);
 
   return {
-    data: [...queries.data, ...liveReadings],
-    isLoading: queries.isLoading,
-    isFetching: queries.isFetching,
-    error: queries.error,
+    readings: [...tsQueries.data, ...liveReadings],
+    aggregates: [...aggQueries.data, ...liveAggregates],
+    isLoading: tsQueries.isLoading || aggQueries.isLoading,
+    isFetching: tsQueries.isFetching || aggQueries.isFetching,
+    error: tsQueries.error ?? aggQueries.error,
   };
 }

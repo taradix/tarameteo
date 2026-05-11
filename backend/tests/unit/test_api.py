@@ -34,6 +34,15 @@ def make_weather(temperature=20.0, humidity=50.0, pressure=1000.0, **extra):
     }
 
 
+def make_aggregate(temperature_min=1.0, temperature_avg=5.0, temperature_max=10.0, **extra):
+    return {
+        "temperature_min": temperature_min,
+        "temperature_avg": temperature_avg,
+        "temperature_max": temperature_max,
+        **extra,
+    }
+
+
 def test_healthz_get(api_app):
     """Getting the /healthz should return an "ok" status."""
     result = api_app.get("/healthz")
@@ -89,7 +98,30 @@ def test_sensors_list(api_app, memory_writer, unique):
     response = api_app.get("/api/sensors")
 
     assert_that(response.status_code, equal_to(200))
-    assert_that(response.json()["sensors"], contains_inanyorder(name_a, name_b))
+    assert_that(response.json()["sensors"], contains_inanyorder(
+        has_entries(name=name_a, kind="timeseries"),
+        has_entries(name=name_b, kind="timeseries"),
+    ))
+
+
+def test_sensors_list_includes_aggregate(api_app, memory_writer, unique):
+    ts_name, agg_name = unique("text"), unique("text")
+    now = datetime.now(UTC)
+
+    memory_writer.write_point(
+        "weather", make_weather(), tags={"device_id": ts_name}, timestamp=now,
+    )
+    memory_writer.write_point(
+        "weather_aggregate", make_aggregate(), tags={"device_id": agg_name}, timestamp=now,
+    )
+
+    response = api_app.get("/api/sensors")
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json()["sensors"], contains_inanyorder(
+        has_entries(name=ts_name, kind="timeseries"),
+        has_entries(name=agg_name, kind="aggregate"),
+    ))
 
 
 def test_sensor_get(api_app, memory_writer, unique):
@@ -181,6 +213,31 @@ def test_sensor_weather_range(api_app, memory_writer, unique):
     assert_that(response.status_code, equal_to(200))
     assert_that(response.json(), contains_exactly(
         has_entries(sensor=name, temperature=1.0),
+    ))
+
+
+def test_sensor_weather_aggregate(api_app, memory_writer, unique):
+    name = unique("text")
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = datetime(2026, 1, 3, tzinfo=UTC)
+
+    memory_writer.write_point(
+        "weather_aggregate", make_aggregate(temperature_min=1.0, temperature_avg=5.0, temperature_max=10.0),
+        tags={"device_id": name}, timestamp=start + timedelta(hours=12),
+    )
+    memory_writer.write_point(
+        "weather_aggregate", make_aggregate(temperature_min=2.0, temperature_avg=6.0, temperature_max=11.0),
+        tags={"device_id": name}, timestamp=end + timedelta(hours=12),
+    )
+
+    response = api_app.get(
+        f"/api/sensors/{name}/weather/aggregate",
+        params={"start": start.isoformat(), "end": end.isoformat()},
+    )
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json(), contains_exactly(
+        has_entries(sensor=name, temperature_min=1.0, temperature_avg=5.0, temperature_max=10.0),
     ))
 
 

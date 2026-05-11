@@ -1,6 +1,15 @@
 // Hand-written mirror of the backend's Pydantic response models.
-// Replace with `npm run generate:types` output once the backend's
-// openapi.json is kept up to date.
+
+export type SensorKind = "timeseries" | "aggregate";
+
+export interface SensorEntry {
+  name: string;
+  kind: SensorKind;
+}
+
+export interface SensorsList {
+  sensors: SensorEntry[];
+}
 
 export interface WeatherReading {
   sensor: string;
@@ -13,8 +22,18 @@ export interface WeatherReading {
   retry_count: number | null;
 }
 
-export interface SensorsList {
-  sensors: string[];
+export interface AggregateReading {
+  sensor: string;
+  timestamp: string;
+  temperature_min: number | null;
+  temperature_avg: number | null;
+  temperature_max: number | null;
+  humidity_min: number | null;
+  humidity_avg: number | null;
+  humidity_max: number | null;
+  pressure_min: number | null;
+  pressure_avg: number | null;
+  pressure_max: number | null;
 }
 
 export type WeatherField = "temperature" | "humidity" | "pressure" | "altitude" | "rssi";

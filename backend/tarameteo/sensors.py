@@ -7,6 +7,7 @@ from datetime import (
     datetime,
     timedelta,
 )
+from typing import Literal
 
 from attrs import define
 from pydantic import BaseModel, Field, field_validator
@@ -17,7 +18,10 @@ from tarameteo.ts import (
 )
 
 MEASUREMENT = "weather"
+AGGREGATE_MEASUREMENT = "weather_aggregate"
 SENSOR_TAG = "device_id"
+
+SensorKind = Literal["timeseries", "aggregate"]
 
 # Upper bound on history we scan when computing stats or listing sensors.
 # Influx retention (default 7d) usually keeps this well-bounded in practice.
@@ -27,6 +31,11 @@ LATEST_LOOKBACK = "30d"
 _MIN_TIMESTAMP = datetime(2020, 1, 1, tzinfo=UTC)
 
 logger = logging.getLogger(__name__)
+
+
+class SensorEntry(BaseModel):
+    name: str
+    kind: SensorKind
 
 
 class WeatherReading(BaseModel):
@@ -50,6 +59,22 @@ class WeatherReading(BaseModel):
             logger.warning("Firmware sent invalid timestamp %s (NTP sync likely failed); using server time", v)
             return datetime.now(UTC)
         return v  # type: ignore[return-value]
+
+
+class AggregateReading(BaseModel):
+    """A period aggregate (min/avg/max) weather measurement."""
+
+    sensor: str
+    timestamp: datetime
+    temperature_min: float | None = None
+    temperature_avg: float | None = None
+    temperature_max: float | None = None
+    humidity_min: float | None = None
+    humidity_avg: float | None = None
+    humidity_max: float | None = None
+    pressure_min: float | None = None
+    pressure_avg: float | None = None
+    pressure_max: float | None = None
 
 
 class SensorStatistics(BaseModel):
@@ -78,13 +103,21 @@ class SensorService:
 
     ts_reader: TSReader
 
-    def list_sensors(self) -> list[str]:
+    def list_sensors(self) -> list[SensorEntry]:
         start = datetime.now(UTC) - STATS_WINDOW
-        return self.ts_reader.list_tag_values(
-            measurement=MEASUREMENT,
-            tag_key=SENSOR_TAG,
-            start=start,
-        )
+        timeseries = [
+            SensorEntry(name=name, kind="timeseries")
+            for name in self.ts_reader.list_tag_values(
+                measurement=MEASUREMENT, tag_key=SENSOR_TAG, start=start,
+            )
+        ]
+        aggregates = [
+            SensorEntry(name=name, kind="aggregate")
+            for name in self.ts_reader.list_tag_values(
+                measurement=AGGREGATE_MEASUREMENT, tag_key=SENSOR_TAG, start=start,
+            )
+        ]
+        return timeseries + aggregates
 
     def get_weather(
         self,
@@ -148,8 +181,43 @@ class SensorService:
             average_rssi=round(rssi_avg) if rssi_avg is not None else None,
         )
 
+    def get_weather_aggregate(
+        self,
+        name: str,
+        *,
+        start: datetime,
+        end: datetime | None = None,
+        limit: int | None = None,
+    ) -> list[AggregateReading]:
+        points = self.ts_reader.query_points(
+            measurement=AGGREGATE_MEASUREMENT,
+            start=start,
+            stop=end,
+            tags={SENSOR_TAG: name},
+        )
+        if limit is not None:
+            points = points[:limit]
+        return [self._to_aggregate_reading(name, p) for p in points]
+
     def get_sensor(self, name: str) -> SensorInfo:
         return SensorInfo(name=name, statistics=self.get_statistics(name))
+
+    @staticmethod
+    def _to_aggregate_reading(sensor: str, point: TSPoint) -> AggregateReading:
+        f = point.fields
+        return AggregateReading(
+            sensor=sensor,
+            timestamp=point.timestamp,
+            temperature_min=_opt_float(f.get("temperature_min")),
+            temperature_avg=_opt_float(f.get("temperature_avg")),
+            temperature_max=_opt_float(f.get("temperature_max")),
+            humidity_min=_opt_float(f.get("humidity_min")),
+            humidity_avg=_opt_float(f.get("humidity_avg")),
+            humidity_max=_opt_float(f.get("humidity_max")),
+            pressure_min=_opt_float(f.get("pressure_min")),
+            pressure_avg=_opt_float(f.get("pressure_avg")),
+            pressure_max=_opt_float(f.get("pressure_max")),
+        )
 
     @staticmethod
     def _to_reading(sensor: str, point: TSPoint) -> WeatherReading:

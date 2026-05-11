@@ -1,7 +1,8 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useDashboardState } from "../hooks/useDashboardState";
 import { useSensorList, useWeather } from "../hooks/useSensors";
+import type { SensorEntry } from "../types";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
 import { WeatherChart } from "./WeatherChart";
@@ -19,7 +20,15 @@ export function Dashboard() {
   ];
 
   const sensorList = useSensorList();
-  const weather = useWeather(sensors, start.toISOString(), end);
+
+  const selectedEntries = useMemo<SensorEntry[]>(
+    () => sensors.map(
+      (name) => sensorList.data?.sensors.find((s) => s.name === name) ?? { name, kind: "timeseries" },
+    ),
+    [sensors, sensorList.data?.sensors],
+  );
+
+  const weather = useWeather(selectedEntries, start.toISOString(), end);
 
   const handleRangeExtend = useCallback((newStart: Date, newEnd: Date | null) => {
     setParams({ preset: "custom", start: newStart, end: newEnd });
@@ -39,7 +48,7 @@ export function Dashboard() {
 
       <SensorPicker
         selected={sensors}
-        available={sensorList.data?.sensors ?? []}
+        available={sensorList.data?.sensors.map((s) => s.name) ?? []}
         onChange={(next) => setParams({ sensors: next })}
       />
 
@@ -66,8 +75,9 @@ export function Dashboard() {
               title={c.title}
               unit={c.unit}
               field={c.field}
-              sensors={sensors}
-              readings={weather.data}
+              sensors={selectedEntries}
+              readings={weather.readings}
+              aggregates={weather.aggregates}
               start={start}
               end={end}
               onRangeExtend={handleRangeExtend}

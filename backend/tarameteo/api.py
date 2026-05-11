@@ -23,6 +23,8 @@ from tarameteo.ca_client import (
     get_ca_client,
 )
 from tarameteo.sensors import (
+    AggregateReading,
+    SensorEntry,
     SensorInfo,
     SensorService,
     WeatherReading,
@@ -85,24 +87,13 @@ def post_cert(
 
 
 @app.get("/api/sensors")
-def get_sensors(service: SensorServiceDep) -> dict[str, list[str]]:
+def get_sensors(service: SensorServiceDep) -> dict[str, list[SensorEntry]]:
     return {"sensors": service.list_sensors()}
 
 
 @app.get("/api/sensors/{name}")
 def get_sensor(name: str, service: SensorServiceDep) -> SensorInfo:
     return service.get_sensor(name)
-
-
-@app.get("/api/sensors/{name}/weather/latest")
-def get_sensor_weather_latest(
-    name: str,
-    service: SensorServiceDep,
-) -> WeatherReading:
-    reading = service.get_latest(name)
-    if reading is None:
-        raise HTTPException(status_code=404, detail=f"No readings for sensor {name!r}")
-    return reading
 
 
 @app.get("/api/sensors/{name}/weather")
@@ -114,6 +105,28 @@ def get_sensor_weather(
     limit: Annotated[int | None, Query(ge=1, le=10000)] = None,
 ) -> list[WeatherReading]:
     return service.get_weather(name, start=start, end=end, limit=limit)
+
+
+@app.get("/api/sensors/{name}/weather/aggregate")
+def get_sensor_weather_aggregate(
+    name: str,
+    service: SensorServiceDep,
+    start: Annotated[datetime, Query(description="ISO timestamp (inclusive)")],
+    end: Annotated[datetime | None, Query(description="ISO timestamp (exclusive)")] = None,
+    limit: Annotated[int | None, Query(ge=1, le=10000)] = None,
+) -> list[AggregateReading]:
+    return service.get_weather_aggregate(name, start=start, end=end, limit=limit)
+
+
+@app.get("/api/sensors/{name}/weather/latest")
+def get_sensor_weather_latest(
+    name: str,
+    service: SensorServiceDep,
+) -> WeatherReading:
+    reading = service.get_latest(name)
+    if reading is None:
+        raise HTTPException(status_code=404, detail=f"No readings for sensor {name!r}")
+    return reading
 
 
 @app.get("/api/sensors/{name}/weather/stream")
