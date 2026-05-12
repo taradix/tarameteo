@@ -14,7 +14,7 @@
     "temperature": "Température",
     "humidity": "Humidité",
     "pressure": "Pression",
-    "wifi": "Signal WiFi",
+    "precipitation": "Précipitations",
     "noData": "Aucune donnée dans cette plage."
   },
   "dateRange": {

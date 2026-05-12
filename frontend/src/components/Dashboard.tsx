@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useDashboardState } from "../hooks/useDashboardState";
 import { useSensorList, useWeather } from "../hooks/useSensors";
-import type { SensorEntry } from "../types";
+import type { SensorEntry, WeatherField } from "../types";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
 import { WeatherChart } from "./WeatherChart";
@@ -12,11 +12,11 @@ export function Dashboard() {
   const { t } = useTranslation();
   const [{ sensors, preset, start, end }, setParams] = useDashboardState();
 
-  const CHARTS: { field: "temperature" | "humidity" | "pressure" | "rssi"; title: string; unit: string }[] = [
-    { field: "temperature", title: t("chart.temperature"), unit: "°C" },
-    { field: "humidity", title: t("chart.humidity"), unit: "%" },
-    { field: "pressure", title: t("chart.pressure"), unit: "hPa" },
-    { field: "rssi", title: t("chart.wifi"), unit: "dBm" },
+  const CHARTS: { fields: WeatherField[]; title: string; unit: string }[] = [
+    { fields: ["temperature"], title: t("chart.temperature"), unit: "°C" },
+    { fields: ["humidity"], title: t("chart.humidity"), unit: "%" },
+    { fields: ["pressure"], title: t("chart.pressure"), unit: "hPa" },
+    { fields: ["rain", "snow"], title: t("chart.precipitation"), unit: "mm" },
   ];
 
   const sensorList = useSensorList();
@@ -71,10 +71,10 @@ export function Dashboard() {
         <div className="grid gap-4 lg:grid-cols-2">
           {CHARTS.map((c) => (
             <WeatherChart
-              key={c.field}
+              key={c.fields.join(",")}
               title={c.title}
               unit={c.unit}
-              field={c.field}
+              fields={c.fields}
               sensors={selectedEntries}
               readings={weather.readings}
               aggregates={weather.aggregates}

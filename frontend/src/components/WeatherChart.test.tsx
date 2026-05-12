@@ -9,7 +9,7 @@ describe("WeatherChart", () => {
       <WeatherChart
         title="Temperature"
         unit="°C"
-        field="temperature"
+        fields={["temperature"]}
         sensors={[{ name: "s1", kind: "timeseries" }]}
         readings={[]}
         aggregates={[]}

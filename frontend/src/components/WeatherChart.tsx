@@ -26,10 +26,13 @@ ChartJS.register(
   Tooltip, Legend, Decimation, zoomPlugin,
 );
 
+// These fields have min/avg/max structure in AggregateReading; all others are single values.
+const BAND_FIELDS = new Set<WeatherField>(["temperature", "humidity", "pressure"]);
+
 interface Props {
   title: string;
   unit: string;
-  field: WeatherField;
+  fields: WeatherField[];
   sensors: SensorEntry[];
   readings: WeatherReading[];
   aggregates: AggregateReading[];
@@ -40,19 +43,25 @@ interface Props {
 
 type Point = { x: number; y: number };
 
-function aggValues(
+function bandValues(
   r: AggregateReading,
   field: WeatherField,
 ): { min: number | null; avg: number | null; max: number | null } {
   const key = field as "temperature" | "humidity" | "pressure";
-  return {
-    min: r[`${key}_min`] ?? null,
-    avg: r[`${key}_avg`] ?? null,
-    max: r[`${key}_max`] ?? null,
-  };
+  return { min: r[`${key}_min`] ?? null, avg: r[`${key}_avg`] ?? null, max: r[`${key}_max`] ?? null };
 }
 
-export function WeatherChart({ title, unit, field, sensors, readings, aggregates, start, end, onRangeExtend }: Props) {
+function singleAggValue(r: AggregateReading, field: WeatherField): number | null {
+  const map: Partial<Record<WeatherField, number | null>> = { rain: r.rain, snow: r.snow };
+  return map[field] ?? null;
+}
+
+// Capitalise the field name for use in multi-field dataset labels.
+function fieldLabel(field: WeatherField): string {
+  return field.charAt(0).toUpperCase() + field.slice(1);
+}
+
+export function WeatherChart({ title, unit, fields, sensors, readings, aggregates, start, end, onRangeExtend }: Props) {
   const { t } = useTranslation();
   const chartRef = useRef<ChartJS<"line">>(null);
 
@@ -80,75 +89,95 @@ export function WeatherChart({ title, unit, field, sensors, readings, aggregates
 
   const data = useMemo<ChartData<"line", Point[]>>(() => {
     const datasets: ChartDataset<"line", Point[]>[] = [];
+    const multiField = fields.length > 1;
 
     for (const sensor of sensors) {
-      const color = colorFor(sensor.name);
+      for (const field of fields) {
+        // When showing multiple fields, differentiate by sensor+field; otherwise by sensor alone.
+        const colorKey = multiField ? `${sensor.name}-${field}` : sensor.name;
+        const color = colorFor(colorKey);
+        const label = multiField ? `${sensor.name} — ${fieldLabel(field)}` : sensor.name;
 
-      if (sensor.kind === "timeseries") {
-        datasets.push({
-          label: sensor.name,
-          data: readings
-            .filter((r) => r.sensor === sensor.name && r[field] != null)
-            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: r[field] as number }))
-            .sort((a, b) => a.x - b.x),
-          borderColor: color,
-          backgroundColor: color,
-          pointRadius: 0,
-          tension: 0,
-          parsing: false,
-        });
-      } else {
-        const aggData = aggregates
-          .filter((r) => r.sensor === sensor.name)
-          .sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
+        if (sensor.kind === "timeseries") {
+          datasets.push({
+            label,
+            data: readings
+              .filter((r) => r.sensor === sensor.name && r[field] != null)
+              .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: r[field] as number }))
+              .sort((a, b) => a.x - b.x),
+            borderColor: color,
+            backgroundColor: color,
+            pointRadius: 0,
+            tension: 0,
+            parsing: false,
+          });
+        } else {
+          const aggData = aggregates
+            .filter((r) => r.sensor === sensor.name)
+            .sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
 
-        // Max line — fills down to the immediately following min dataset.
-        datasets.push({
-          label: "",
-          data: aggData
-            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: aggValues(r, field).max }))
-            .filter((p): p is Point => p.y !== null),
-          borderColor: bandColorFor(sensor.name),
-          backgroundColor: bandColorFor(sensor.name),
-          fill: "+1",
-          pointRadius: 0,
-          tension: 0,
-          parsing: false,
-        });
-
-        // Min line — bottom boundary of the band.
-        datasets.push({
-          label: "",
-          data: aggData
-            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: aggValues(r, field).min }))
-            .filter((p): p is Point => p.y !== null),
-          borderColor: bandColorFor(sensor.name),
-          backgroundColor: "transparent",
-          fill: false,
-          pointRadius: 0,
-          tension: 0,
-          parsing: false,
-        });
-
-        // Avg line — shown in legend as the sensor label.
-        datasets.push({
-          label: sensor.name,
-          data: aggData
-            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: aggValues(r, field).avg }))
-            .filter((p): p is Point => p.y !== null),
-          borderColor: color,
-          backgroundColor: color,
-          borderDash: [4, 4],
-          fill: false,
-          pointRadius: 3,
-          tension: 0,
-          parsing: false,
-        });
+          if (BAND_FIELDS.has(field)) {
+            // Max boundary — fills down to the immediately following min dataset.
+            datasets.push({
+              label: "",
+              data: aggData
+                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: bandValues(r, field).max }))
+                .filter((p): p is Point => p.y !== null),
+              borderColor: bandColorFor(colorKey),
+              backgroundColor: bandColorFor(colorKey),
+              fill: "+1",
+              pointRadius: 0,
+              tension: 0,
+              parsing: false,
+            });
+            // Min boundary.
+            datasets.push({
+              label: "",
+              data: aggData
+                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: bandValues(r, field).min }))
+                .filter((p): p is Point => p.y !== null),
+              borderColor: bandColorFor(colorKey),
+              backgroundColor: "transparent",
+              fill: false,
+              pointRadius: 0,
+              tension: 0,
+              parsing: false,
+            });
+            // Avg line — the one shown in the legend.
+            datasets.push({
+              label,
+              data: aggData
+                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: bandValues(r, field).avg }))
+                .filter((p): p is Point => p.y !== null),
+              borderColor: color,
+              backgroundColor: color,
+              borderDash: [4, 4],
+              fill: false,
+              pointRadius: 3,
+              tension: 0,
+              parsing: false,
+            });
+          } else {
+            // Single aggregate value (rain, snow, …).
+            datasets.push({
+              label,
+              data: aggData
+                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: singleAggValue(r, field) }))
+                .filter((p): p is Point => p.y !== null),
+              borderColor: color,
+              backgroundColor: color,
+              fill: false,
+              pointRadius: 3,
+              tension: 0,
+              parsing: false,
+            });
+          }
+        }
       }
     }
 
     return { datasets };
-  }, [readings, aggregates, sensors, field]);
+  }, [readings, aggregates, sensors, fields]);
 
   const options = useMemo<ChartOptions<"line">>(
     () => ({
@@ -176,6 +205,7 @@ export function WeatherChart({ title, unit, field, sensors, readings, aggregates
         legend: {
           position: "bottom",
           labels: {
+            // Hide the unlabelled band-boundary datasets.
             filter: (item) => item.text !== "",
           },
         },

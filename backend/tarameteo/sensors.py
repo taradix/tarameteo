@@ -47,6 +47,8 @@ class WeatherReading(BaseModel):
     humidity: float = Field(..., description="Humidity percentage")
     pressure: float = Field(..., description="Pressure in hPa")
     altitude: float | None = Field(None, description="Altitude in meters")
+    rain: float | None = Field(None, description="Rainfall in mm")
+    snow: float | None = Field(None, description="Snowfall in mm")
     rssi: int | None = Field(None, description="WiFi RSSI in dBm")
     retry_count: int | None = Field(None, description="Number of retry attempts")
 
@@ -75,6 +77,8 @@ class AggregateReading(BaseModel):
     pressure_min: float | None = None
     pressure_avg: float | None = None
     pressure_max: float | None = None
+    rain: float | None = None
+    snow: float | None = None
 
 
 class SensorStatistics(BaseModel):
@@ -217,6 +221,8 @@ class SensorService:
             pressure_min=_opt_float(f.get("pressure_min")),
             pressure_avg=_opt_float(f.get("pressure_avg")),
             pressure_max=_opt_float(f.get("pressure_max")),
+            rain=_opt_float(f.get("rain")),
+            snow=_opt_float(f.get("snow")),
         )
 
     @staticmethod
@@ -229,6 +235,8 @@ class SensorService:
             humidity=float(f["humidity"]),
             pressure=float(f["pressure"]),
             altitude=_opt_float(f.get("altitude")),
+            rain=_opt_float(f.get("rain")),
+            snow=_opt_float(f.get("snow")),
             rssi=_opt_int(f.get("rssi")),
             retry_count=_opt_int(f.get("retry_count")),
         )

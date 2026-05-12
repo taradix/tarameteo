@@ -18,6 +18,8 @@ export interface WeatherReading {
   humidity: number;
   pressure: number;
   altitude: number | null;
+  rain: number | null;
+  snow: number | null;
   rssi: number | null;
   retry_count: number | null;
 }
@@ -34,6 +36,8 @@ export interface AggregateReading {
   pressure_min: number | null;
   pressure_avg: number | null;
   pressure_max: number | null;
+  rain: number | null;
+  snow: number | null;
 }
 
-export type WeatherField = "temperature" | "humidity" | "pressure" | "altitude" | "rssi";
+export type WeatherField = "temperature" | "humidity" | "pressure" | "altitude" | "rain" | "snow" | "rssi";
