@@ -41,6 +41,7 @@ FIXTURE_HTML = """
         ("", None),
         ("T", 0.0),
         (" 5,5 ", 5.5),
+        ("I", None),
     ],
 )
 def test_parse_float(value, expected):

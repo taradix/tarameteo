@@ -60,7 +60,11 @@ def _parse_float(value: str) -> float | None:
         return None
     if stripped == "T":
         return 0.0
-    return float(stripped.replace(",", "."))
+    try:
+        return float(stripped.replace(",", "."))
+    except ValueError:
+        logger.warning("Unexpected MELCCFP cell value %r; treating as missing", stripped)
+        return None
 
 
 def parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
