@@ -17,6 +17,8 @@ struct WeatherData {
     int rssi;
     unsigned long timestamp;
     int retryCount;
+    float latitude;
+    float longitude;
 };
 
 class MqttClient {

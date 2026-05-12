@@ -238,7 +238,9 @@ void loop() {
       sensor.getAltitude(),
       wifiManager.getRSSI(),
       timeManager.getCurrentTimestamp(),
-      0 // retryCount will be updated by MQTT client
+      0, // retryCount will be updated by MQTT client
+      certManager.getLatitude(),
+      certManager.getLongitude()
   };
 
   // Print sensor readings

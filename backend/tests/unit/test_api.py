@@ -131,13 +131,13 @@ def test_sensor_get(api_app, memory_writer, unique):
     memory_writer.write_point(
         "weather",
         make_weather(temperature=20.0, humidity=50.0, pressure=1000.0, rssi=-70),
-        tags={"device_id": name},
+        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
         timestamp=now - timedelta(hours=1),
     )
     memory_writer.write_point(
         "weather",
         make_weather(temperature=22.0, humidity=60.0, pressure=1020.0, rssi=-74),
-        tags={"device_id": name},
+        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
         timestamp=now - timedelta(minutes=5),
     )
 
@@ -164,13 +164,13 @@ def test_sensor_weather_latest(api_app, memory_writer, unique):
     memory_writer.write_point(
         "weather",
         make_weather(temperature=19.0),
-        tags={"device_id": name},
+        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
         timestamp=now - timedelta(minutes=10),
     )
     memory_writer.write_point(
         "weather",
         make_weather(temperature=23.5),
-        tags={"device_id": name},
+        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
         timestamp=now - timedelta(minutes=1),
     )
 
@@ -198,11 +198,13 @@ def test_sensor_weather_range(api_app, memory_writer, unique):
 
     memory_writer.write_point(
         "weather", make_weather(temperature=1.0),
-        tags={"device_id": name}, timestamp=start + timedelta(hours=1),
+        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
+        timestamp=start + timedelta(hours=1),
     )
     memory_writer.write_point(
         "weather", make_weather(temperature=2.0),
-        tags={"device_id": name}, timestamp=end + timedelta(hours=1),
+        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
+        timestamp=end + timedelta(hours=1),
     )
 
     response = api_app.get(

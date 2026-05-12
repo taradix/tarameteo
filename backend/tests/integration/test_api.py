@@ -50,7 +50,7 @@ def weather_points(influxdb_writer, unique):
                 "rssi": -70 - i,
                 "retry_count": i,
             },
-            tags={"device_id": sensor},
+            tags={"device_id": sensor, "latitude": "45.504000", "longitude": "-73.617000"},
             timestamp=now - timedelta(minutes=(5 - i)),
         )
         for i in range(5)
@@ -63,7 +63,7 @@ def weather_points(influxdb_writer, unique):
 async def test_api_sensors_list(api_client, weather_points):
     sensor, _ = weather_points
     response = await api_client.get("/api/sensors")
-    assert_that(response.json(), has_entries(sensors=has_item(sensor)))
+    assert_that(response.json(), has_entries(sensors=has_item(has_entries(name=sensor))))
 
 
 @pytest.mark.asyncio
@@ -73,6 +73,8 @@ async def test_api_sensor_get(api_client, weather_points):
     body = response.json()
     assert_that(body, has_entries(
         name=sensor,
+        latitude=45.504,
+        longitude=-73.617,
         statistics=has_entries(
             total_readings=greater_than_or_equal_to(len(points)),
             last_24h_readings=greater_than_or_equal_to(len(points)),

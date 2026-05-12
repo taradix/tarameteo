@@ -47,11 +47,15 @@ public:
     unsigned long getExpirationTime() const { return _expiresAt; }
     int getCertificateVersion() const { return _certVersion; }
     bool isProvisioningActive() const { return _provisioningActive; }
+    float getLatitude() const { return _latitude; }
+    float getLongitude() const { return _longitude; }
 
 private:
     char _serialNumber[65];  // Hex string of serial
     char _lastError[128];
     char _cn[MAX_CN_LENGTH];
+    float _latitude;
+    float _longitude;
     unsigned long _expiresAt;
     int _certVersion;
     bool _provisioningActive;

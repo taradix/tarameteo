@@ -17,11 +17,11 @@ from tarameteo.mqtt import (
     MQTTConsumer,
     MQTTMessage,
 )
+from tarameteo.sensors import WeatherReading
 from tarameteo.ts import (
     InfluxWriter,
     TSWriter,
 )
-from tarameteo.sensors import WeatherReading
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,12 @@ async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queu
     try:
         ts_writer.write_point(
             "weather",
-            fields=reading.model_dump(exclude={"sensor", "timestamp"}, exclude_none=True),
-            tags={"device_id": device_id},
+            fields=reading.model_dump(exclude={"sensor", "timestamp", "latitude", "longitude"}, exclude_none=True),
+            tags={
+                "device_id": device_id,
+                "latitude": f"{reading.latitude:.6f}",
+                "longitude": f"{reading.longitude:.6f}",
+            },
             timestamp=reading.timestamp,
         )
     except Exception:

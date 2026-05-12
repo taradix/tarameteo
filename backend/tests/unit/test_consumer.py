@@ -21,6 +21,8 @@ def make_message(topic="weather/jdd-carre/event", **payload):
         "temperature": 22.5,
         "humidity": 60.0,
         "pressure": 1013.25,
+        "latitude": 45.504,
+        "longitude": -73.617,
     }
     return MQTTMessage(topic=topic, data={**defaults, **payload}, qos=0, retain=False)
 
@@ -31,7 +33,7 @@ async def test_weather_handler_stores_reading(memory_store, memory_writer, memor
     assert_that(memory_store.points, contains_exactly(
         has_properties(
             measurement="weather",
-            tags={"device_id": "jdd-carre"},
+            tags=has_entries(device_id="jdd-carre"),
         ),
     ))
 
@@ -51,10 +53,24 @@ async def test_weather_handler_stores_all_fields(memory_store, memory_writer, me
     assert_that(point.fields["rssi"], -70)
 
 
-async def test_weather_handler_excludes_timestamp_from_fields(memory_store, memory_writer, memory_queue):
+async def test_weather_handler_excludes_metadata_from_fields(memory_store, memory_writer, memory_queue):
     await weather_handler(make_message(), ts_writer=memory_writer, queue=memory_queue)
 
-    assert "timestamp" not in memory_store.points[0].fields
+    fields = memory_store.points[0].fields
+    assert "timestamp" not in fields
+    assert "latitude" not in fields
+    assert "longitude" not in fields
+
+
+async def test_weather_handler_stores_lat_lon_as_tags(memory_store, memory_writer, memory_queue):
+    await weather_handler(
+        make_message(latitude=45.504, longitude=-73.617),
+        ts_writer=memory_writer,
+        queue=memory_queue,
+    )
+
+    tags = memory_store.points[0].tags
+    assert_that(tags, has_entries(latitude="45.504000", longitude="-73.617000"))
 
 
 async def test_weather_handler_uses_firmware_timestamp(memory_store, memory_writer, memory_queue):

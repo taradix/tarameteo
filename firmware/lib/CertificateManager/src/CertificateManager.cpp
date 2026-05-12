@@ -18,7 +18,7 @@ static const int SECONDS_PER_DAY = 24 * 60 * 60;
 CertificateManager::CertificateManager(Preferences &prefs, IWiFi *wifi, IArduino *arduino)
     : _prefs(prefs), _wifi(wifi), _arduino(arduino), _expiresAt(0), _certVersion(0), _provisioningActive(false),
       _provisioningStartTime(0), _provisioningServer(nullptr), _wifiManager(nullptr), _clientCert(nullptr),
-      _clientKey(nullptr), _caCert(nullptr) {
+      _clientKey(nullptr), _caCert(nullptr), _latitude(0.0f), _longitude(0.0f) {
   _lastError[0] = '\0';
   _cn[0] = '\0';
 }
@@ -109,8 +109,11 @@ bool CertificateManager::loadFromNVS() {
   _prefs.getString("cert_cn", _cn, MAX_CN_LENGTH);
   _expiresAt = _prefs.getULong("cert_expires", 0);
   _certVersion = _prefs.getInt("cert_version", 0);
+  _latitude = _prefs.getFloat("latitude", 0.0f);
+  _longitude = _prefs.getFloat("longitude", 0.0f);
 
-  _arduino->logf("CertificateManager: Loaded cert CN=%s, expires=%lu, version=%d", _cn, _expiresAt, _certVersion);
+  _arduino->logf("CertificateManager: Loaded cert CN=%s, expires=%lu, version=%d, lat=%.6f, lon=%.6f",
+                 _cn, _expiresAt, _certVersion, _latitude, _longitude);
 
   return true;
 }
@@ -135,6 +138,8 @@ bool CertificateManager::saveToNVS(const char *certPem, const char *keyPem, cons
   _prefs.putString("cert_cn", _cn);
   _prefs.putULong("cert_expires", _expiresAt);
   _prefs.putInt("cert_version", _certVersion);
+  _prefs.putFloat("latitude", _latitude);
+  _prefs.putFloat("longitude", _longitude);
 
   _arduino->log("CertificateManager: Certificates saved successfully");
   return true;
@@ -395,6 +400,8 @@ bool CertificateManager::clearCertificates() {
   _cn[0] = '\0';
   _expiresAt = 0;
   _certVersion = 0;
+  _latitude = 0.0f;
+  _longitude = 0.0f;
 
   return true;
 }
@@ -540,6 +547,13 @@ void CertificateManager::handleRootRequest() {
             <label><strong>WiFi Password:</strong></label>
             <input type="password" name="wifi_password" placeholder="your-wifi-password" style="width: 100%; padding: 10px; margin: 10px 0; font-size: 14px;">
 
+            <h2>Location</h2>
+            <label><strong>Latitude:</strong></label>
+            <input type="number" name="latitude" required step="0.000001" min="-90" max="90" placeholder="45.504" style="width: 100%; padding: 10px; margin: 10px 0; font-size: 14px;">
+
+            <label><strong>Longitude:</strong></label>
+            <input type="number" name="longitude" required step="0.000001" min="-180" max="180" placeholder="-73.617" style="width: 100%; padding: 10px; margin: 10px 0; font-size: 14px;">
+
             <h2>mTLS Certificates</h2>
             <label><strong>Client Certificate (PEM):</strong></label>
             <textarea name="cert" required placeholder="-----BEGIN CERTIFICATE-----
@@ -569,11 +583,31 @@ void CertificateManager::handleRootRequest() {
 void CertificateManager::handleProvisionRequest() {
   _arduino->log("CertificateManager: Received provisioning request");
 
-  // Check if we have the required certificate fields
+  // Check if we have the required fields
   if (!_provisioningServer->hasArg("cert") || !_provisioningServer->hasArg("key")) {
     sendResponse(400, "Missing required fields: cert and key");
     return;
   }
+
+  if (!_provisioningServer->hasArg("latitude") || !_provisioningServer->hasArg("longitude")) {
+    sendResponse(400, "Missing required fields: latitude and longitude");
+    return;
+  }
+
+  float latitude = atof(_provisioningServer->arg("latitude"));
+  float longitude = atof(_provisioningServer->arg("longitude"));
+
+  if (latitude < -90.0f || latitude > 90.0f) {
+    sendResponse(400, "Invalid latitude: must be between -90 and 90");
+    return;
+  }
+  if (longitude < -180.0f || longitude > 180.0f) {
+    sendResponse(400, "Invalid longitude: must be between -180 and 180");
+    return;
+  }
+
+  _latitude = latitude;
+  _longitude = longitude;
 
   const char *cert = _provisioningServer->arg("cert");
   const char *key = _provisioningServer->arg("key");

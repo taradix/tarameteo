@@ -61,6 +61,18 @@ public:
         return it->second;
     }
 
+    size_t putFloat(const char* key, float value) {
+        if (_readOnly) return 0;
+        _floats[std::string(key)] = value;
+        return sizeof(float);
+    }
+
+    float getFloat(const char* key, float defaultValue) {
+        auto it = _floats.find(std::string(key));
+        if (it == _floats.end()) return defaultValue;
+        return it->second;
+    }
+
     bool isKey(const char* key) {
         return _storage.find(std::string(key)) != _storage.end();
     }
@@ -69,6 +81,7 @@ public:
         _storage.clear();
         _ulongs.clear();
         _ints.clear();
+        _floats.clear();
         return true;
     }
 
@@ -83,6 +96,7 @@ private:
     std::map<std::string, std::string> _storage;
     std::map<std::string, unsigned long> _ulongs;
     std::map<std::string, int> _ints;
+    std::map<std::string, float> _floats;
 };
 
 #endif // UNIT_TEST

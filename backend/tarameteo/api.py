@@ -93,7 +93,10 @@ def get_sensors(service: SensorServiceDep) -> dict[str, list[SensorEntry]]:
 
 @app.get("/api/sensors/{name}")
 def get_sensor(name: str, service: SensorServiceDep) -> SensorInfo:
-    return service.get_sensor(name)
+    try:
+        return service.get_sensor(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/sensors/{name}/weather")

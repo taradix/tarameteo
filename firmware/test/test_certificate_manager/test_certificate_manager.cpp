@@ -327,12 +327,12 @@ void test_certificate_manager_provision_request_with_valid_certs(void) {
   certMgr.begin();
   certMgr.startProvisioningMode(&mockServer);
 
-  // Simulate provisioning request
   mockServer.setArg("cert", VALID_CERT_PEM);
   mockServer.setArg("key", VALID_KEY_PEM);
+  mockServer.setArg("latitude", "45.504");
+  mockServer.setArg("longitude", "-73.617");
   mockServer.triggerHandler("/provision");
 
-  // Should have sent a success response (but won't restart in test)
   TEST_ASSERT_EQUAL(200, mockServer.lastResponseCode);
   TEST_ASSERT_TRUE(certMgr.isProvisioned());
 }
@@ -343,12 +343,64 @@ void test_certificate_manager_provision_request_missing_fields(void) {
   certMgr.begin();
   certMgr.startProvisioningMode(&mockServer);
 
-  // Simulate provisioning request with missing cert
+  // Missing cert
   mockServer.setArg("key", VALID_KEY_PEM);
   mockServer.triggerHandler("/provision");
 
   TEST_ASSERT_EQUAL(400, mockServer.lastResponseCode);
   TEST_ASSERT_FALSE(certMgr.isProvisioned());
+}
+
+void test_certificate_manager_provision_request_missing_location(void) {
+  MockWebServer mockServer;
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  certMgr.begin();
+  certMgr.startProvisioningMode(&mockServer);
+
+  // Missing latitude and longitude
+  mockServer.setArg("cert", VALID_CERT_PEM);
+  mockServer.setArg("key", VALID_KEY_PEM);
+  mockServer.triggerHandler("/provision");
+
+  TEST_ASSERT_EQUAL(400, mockServer.lastResponseCode);
+  TEST_ASSERT_FALSE(certMgr.isProvisioned());
+}
+
+void test_certificate_manager_provision_stores_location(void) {
+  MockWebServer mockServer;
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  certMgr.begin();
+  certMgr.startProvisioningMode(&mockServer);
+
+  mockServer.setArg("cert", VALID_CERT_PEM);
+  mockServer.setArg("key", VALID_KEY_PEM);
+  mockServer.setArg("latitude", "45.504");
+  mockServer.setArg("longitude", "-73.617");
+  mockServer.triggerHandler("/provision");
+
+  TEST_ASSERT_EQUAL(200, mockServer.lastResponseCode);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLatitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLongitude());
+}
+
+void test_certificate_manager_location_persists_across_instances(void) {
+  {
+    MockWebServer mockServer;
+    CertificateManager certMgr1(testPrefs, &mockWiFi, &mockArduino);
+    certMgr1.begin();
+    certMgr1.startProvisioningMode(&mockServer);
+    mockServer.setArg("cert", VALID_CERT_PEM);
+    mockServer.setArg("key", VALID_KEY_PEM);
+    mockServer.setArg("latitude", "45.504");
+    mockServer.setArg("longitude", "-73.617");
+    mockServer.triggerHandler("/provision");
+  }
+
+  CertificateManager certMgr2(testPrefs, &mockWiFi, &mockArduino);
+  certMgr2.begin();
+
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLatitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLongitude());
 }
 
 // ========================================
@@ -425,6 +477,9 @@ int main(int argc, char **argv) {
   RUN_TEST(test_certificate_manager_provisioning_loop);
   RUN_TEST(test_certificate_manager_provision_request_with_valid_certs);
   RUN_TEST(test_certificate_manager_provision_request_missing_fields);
+  RUN_TEST(test_certificate_manager_provision_request_missing_location);
+  RUN_TEST(test_certificate_manager_provision_stores_location);
+  RUN_TEST(test_certificate_manager_location_persists_across_instances);
 
   // CN extraction tests
   RUN_TEST(test_certificate_manager_extract_cn_from_certificate);
@@ -459,6 +514,9 @@ void loop() {
   RUN_TEST(test_certificate_manager_provisioning_loop);
   RUN_TEST(test_certificate_manager_provision_request_with_valid_certs);
   RUN_TEST(test_certificate_manager_provision_request_missing_fields);
+  RUN_TEST(test_certificate_manager_provision_request_missing_location);
+  RUN_TEST(test_certificate_manager_provision_stores_location);
+  RUN_TEST(test_certificate_manager_location_persists_across_instances);
   RUN_TEST(test_certificate_manager_extract_cn_from_certificate);
   RUN_TEST(test_certificate_manager_persistence_across_instances);
   UNITY_END();

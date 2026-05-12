@@ -46,6 +46,8 @@ class WeatherReading(BaseModel):
     temperature: float = Field(..., description="Temperature in Celsius")
     humidity: float = Field(..., description="Humidity percentage")
     pressure: float = Field(..., description="Pressure in hPa")
+    latitude: float = Field(..., description="Sensor latitude")
+    longitude: float = Field(..., description="Sensor longitude")
     altitude: float | None = Field(None, description="Altitude in meters")
     rain: float | None = Field(None, description="Rainfall in mm")
     snow: float | None = Field(None, description="Snowfall in mm")
@@ -98,6 +100,8 @@ class SensorInfo(BaseModel):
     """Full sensor record returned by GET /api/sensors/{name}."""
 
     name: str
+    latitude: float
+    longitude: float
     statistics: SensorStatistics
 
 
@@ -204,7 +208,15 @@ class SensorService:
         return [self._to_aggregate_reading(name, p) for p in points]
 
     def get_sensor(self, name: str) -> SensorInfo:
-        return SensorInfo(name=name, statistics=self.get_statistics(name))
+        latest = self.get_latest(name)
+        if latest is None:
+            raise ValueError(f"No readings for sensor {name!r}")
+        return SensorInfo(
+            name=name,
+            latitude=latest.latitude,
+            longitude=latest.longitude,
+            statistics=self.get_statistics(name),
+        )
 
     @staticmethod
     def _to_aggregate_reading(sensor: str, point: TSPoint) -> AggregateReading:
@@ -234,6 +246,8 @@ class SensorService:
             temperature=float(f["temperature"]),
             humidity=float(f["humidity"]),
             pressure=float(f["pressure"]),
+            latitude=float(point.tags["latitude"]),
+            longitude=float(point.tags["longitude"]),
             altitude=_opt_float(f.get("altitude")),
             rain=_opt_float(f.get("rain")),
             snow=_opt_float(f.get("snow")),
