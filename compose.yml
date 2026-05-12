@@ -133,7 +133,7 @@ services:
     restart: always
 
   influxdb:
-    image: influxdb:2.8
+    image: influxdb:2.9
     volumes:
       - influxdb-data:/var/lib/influxdb2
       - influxdb-config:/etc/influxdb2
