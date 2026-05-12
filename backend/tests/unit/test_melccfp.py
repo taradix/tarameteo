@@ -5,25 +5,32 @@ import pytest
 from tarameteo.melccfp import MelccfpReading, _parse_float, parse_page
 
 # Minimal HTML that mirrors the MELCCFP page table structure.
-FIXTURE_HTML = """
+def _row(day, tmax, tavg, tmin, rain, snow_cm):
+    """Build a table row matching the real MELCCFP class structure."""
+    def bt(v):
+        return f'<td class="bordure_t">{v}</td>'
+    def spacer(v=""):
+        return f'<td class="bordure_TD">{v}</td>'
+    return (
+        f'<tr><td class="bordure_TGD centrer style2">{day}</td>'
+        f'{bt(tmax)}{spacer()}{bt(tavg)}{spacer()}{bt(tmin)}{spacer()}'
+        f'<td class="bordure_TD gris"></td>'
+        f'{bt(rain)}{spacer()}{bt(snow_cm)}{spacer()}'
+        f'<td class="bordure_t">0,0</td>'  # Total (ignored)
+        f'</tr>'
+    )
+
+FIXTURE_HTML = f"""
 <html><body>
 <table>
+  <tr><th>Jour</th><th>Température</th><th>Précipitation</th></tr>
   <tr>
-    <th>Jour</th><th>Tmax &#xB0;C</th><th>Tmoy &#xB0;C</th><th>Tmin &#xB0;C</th>
-    <th>Pluie mm</th><th>Neige cm</th><th>Total mm</th><th>Neige sol cm</th>
+    <th>Max.(°C)</th><th>Moy.(°C)</th><th>Min.(°C)</th>
+    <th>Pluie(mm)</th><th>Neige(cm)</th><th>Total(mm)</th>
   </tr>
-  <tr>
-    <td>1</td><td>9,0</td><td>5,5</td><td>2,0</td>
-    <td>0,0</td><td>-</td><td>0,0</td><td>-</td>
-  </tr>
-  <tr>
-    <td>2</td><td>-1,3</td><td>-3,2</td><td>-5,1</td>
-    <td>T</td><td>1,5</td><td>1,5</td><td>2</td>
-  </tr>
-  <tr>
-    <td>3</td><td>-</td><td>-</td><td>-</td>
-    <td>-</td><td>-</td><td>-</td><td>-</td>
-  </tr>
+  {_row(1, "9,0", "5,5", "2,0", "0,0", "-")}
+  {_row(2, "-1,3", "-3,2", "-5,1", "T", "1,5")}
+  {_row(3, "-", "-", "-", "-", "-")}
 </table>
 </body></html>
 """
@@ -41,7 +48,6 @@ FIXTURE_HTML = """
         ("", None),
         ("T", 0.0),
         (" 5,5 ", 5.5),
-        ("I", None),
     ],
 )
 def test_parse_float(value, expected):

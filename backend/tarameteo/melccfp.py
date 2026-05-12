@@ -60,11 +60,7 @@ def _parse_float(value: str) -> float | None:
         return None
     if stripped == "T":
         return 0.0
-    try:
-        return float(stripped.replace(",", "."))
-    except ValueError:
-        logger.warning("Unexpected MELCCFP cell value %r; treating as missing", stripped)
-        return None
+    return float(stripped.replace(",", "."))
 
 
 def parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
@@ -91,7 +87,7 @@ def parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
 
     for row in table.find_all("tr"):
         cells = row.find_all(["td", "th"])
-        if len(cells) < 6:
+        if not cells:
             continue
 
         day_text = cells[0].get_text(strip=True)
@@ -107,11 +103,16 @@ def parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
         if row_date > today:
             continue
 
-        tmax = _parse_float(cells[1].get_text())
-        tavg = _parse_float(cells[2].get_text())
-        tmin = _parse_float(cells[3].get_text())
-        rain = _parse_float(cells[4].get_text())
-        snow_cm = _parse_float(cells[5].get_text())
+        # Data cells use class 'bordure_t'; 'bordure_TD' cells are spacers/flags.
+        data = [c for c in cells if "bordure_t" in c.get("class", [])]
+        if len(data) < 5:
+            continue
+
+        tmax = _parse_float(data[0].get_text())        # Tmax °C
+        tavg = _parse_float(data[1].get_text())        # Tmoy °C
+        tmin = _parse_float(data[2].get_text())        # Tmin °C
+        rain = _parse_float(data[3].get_text())        # Pluie mm
+        snow_cm = _parse_float(data[4].get_text())     # Neige cm
         snow = None if snow_cm is None else round(snow_cm * 10, 1)
 
         if all(v is None for v in (tmax, tavg, tmin, rain, snow)):
