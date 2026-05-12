@@ -3,11 +3,13 @@ import { useTranslation } from "react-i18next";
 
 interface Props {
   selected: string[];
+  hidden: string[];
   available: string[];
   onChange: (sensors: string[]) => void;
+  onHiddenChange: (hidden: string[]) => void;
 }
 
-export function SensorPicker({ selected, available, onChange }: Props) {
+export function SensorPicker({ selected, hidden, available, onChange, onHiddenChange }: Props) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
@@ -21,7 +23,13 @@ export function SensorPicker({ selected, available, onChange }: Props) {
     inputRef.current?.blur();
   };
 
-  const remove = (name: string) => onChange(selected.filter((s) => s !== name));
+  const remove = (name: string) => {
+    onChange(selected.filter((s) => s !== name));
+    onHiddenChange(hidden.filter((h) => h !== name));
+  };
+
+  const toggle = (name: string) =>
+    onHiddenChange(hidden.includes(name) ? hidden.filter((h) => h !== name) : [...hidden, name]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") add();
@@ -63,22 +71,30 @@ export function SensorPicker({ selected, available, onChange }: Props) {
         <p className="mt-3 text-sm text-zinc-500">{t("sensors.none")}</p>
       ) : (
         <ul className="mt-3 flex flex-wrap gap-2">
-          {selected.map((name) => (
-            <li
-              key={name}
-              className="flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1 text-sm dark:bg-zinc-800"
-            >
-              <span>{name}</span>
-              <button
-                type="button"
-                onClick={() => remove(name)}
-                aria-label={t("sensors.remove", { name })}
-                className="text-zinc-500 hover:text-red-600"
-              >
-                ×
-              </button>
-            </li>
-          ))}
+          {selected.map((name) => {
+            const isActive = !hidden.includes(name);
+            return (
+              <li key={name} className="flex items-center rounded-full text-sm overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggle(name)}
+                  aria-label={t("sensors.toggle", { name })}
+                  aria-pressed={isActive}
+                  className={`pl-3 pr-2 py-1 ${isActive ? "bg-blue-600 text-white" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"}`}
+                >
+                  {name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove(name)}
+                  aria-label={t("sensors.remove", { name })}
+                  className={`px-2 py-1 ${isActive ? "bg-blue-600 text-blue-200 hover:text-white" : "bg-zinc-100 text-zinc-400 hover:text-red-600 dark:bg-zinc-800 dark:text-zinc-500"}`}
+                >
+                  ×
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

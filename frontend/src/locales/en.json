@@ -33,6 +33,7 @@
     "placeholder": "Add sensor by name…",
     "add": "Add",
     "none": "No sensors selected.",
-    "remove": "Remove {{name}}"
+    "remove": "Remove {{name}}",
+    "toggle": "Toggle {{name}}"
   }
 }

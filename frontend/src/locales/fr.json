@@ -33,6 +33,7 @@
     "placeholder": "Ajouter un capteur par nom…",
     "add": "Ajouter",
     "none": "Aucun capteur sélectionné.",
-    "remove": "Retirer {{name}}"
+    "remove": "Retirer {{name}}",
+    "toggle": "Basculer {{name}}"
   }
 }

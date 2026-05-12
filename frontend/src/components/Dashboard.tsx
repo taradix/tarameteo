@@ -10,7 +10,7 @@ import LanguageToggle from "./LanguageToggle";
 
 export function Dashboard() {
   const { t } = useTranslation();
-  const [{ sensors, preset, start, end }, setParams] = useDashboardState();
+  const [{ sensors, hidden, preset, start, end }, setParams] = useDashboardState();
 
   const CHARTS: { fields: WeatherField[]; title: string; unit: string }[] = [
     { fields: ["temperature"], title: t("chart.temperature"), unit: "°C" },
@@ -26,6 +26,11 @@ export function Dashboard() {
       (name) => sensorList.data?.sensors.find((s) => s.name === name) ?? { name, kind: "timeseries" },
     ),
     [sensors, sensorList.data?.sensors],
+  );
+
+  const visibleEntries = useMemo<SensorEntry[]>(
+    () => selectedEntries.filter((s) => !hidden.includes(s.name)),
+    [selectedEntries, hidden],
   );
 
   const weather = useWeather(selectedEntries, start.toISOString(), end);
@@ -48,8 +53,10 @@ export function Dashboard() {
 
       <SensorPicker
         selected={sensors}
+        hidden={hidden}
         available={sensorList.data?.sensors.map((s) => s.name) ?? []}
         onChange={(next) => setParams({ sensors: next })}
+        onHiddenChange={(next) => setParams({ hidden: next })}
       />
 
       <RangePicker
@@ -75,7 +82,7 @@ export function Dashboard() {
               title={c.title}
               unit={c.unit}
               fields={c.fields}
-              sensors={selectedEntries}
+              sensors={visibleEntries}
               readings={weather.readings}
               aggregates={weather.aggregates}
               start={start}

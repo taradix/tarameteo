@@ -19,6 +19,7 @@ function computeRange(
 export function useDashboardState() {
   const [params, setParams] = useQueryStates({
     sensors: parseAsArrayOf(parseAsString).withDefault([]),
+    hidden: parseAsArrayOf(parseAsString).withDefault([]),
     preset: parseAsString.withDefault("today"),
     start: parseAsIsoDateTime,
     end: parseAsIsoDateTime,
@@ -29,5 +30,5 @@ export function useDashboardState() {
     [params.preset, params.start, params.end],
   );
 
-  return [{ sensors: params.sensors, preset: params.preset, start, end }, setParams] as const;
+  return [{ sensors: params.sensors, hidden: params.hidden, preset: params.preset, start, end }, setParams] as const;
 }
