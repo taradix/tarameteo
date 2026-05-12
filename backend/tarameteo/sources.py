@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 
 REGISTRY_GROUP = "tarameteo_source"
 
+
+def _select_sources(registry: dict, names: list[str]) -> list:
+    all_sources = registry.get(REGISTRY_GROUP, {})
+    if not names:
+        return list(all_sources.values())
+    unknown = [n for n in names if n not in all_sources]
+    if unknown:
+        raise SystemExit(f"Unknown source(s): {', '.join(unknown)}. Available: {', '.join(all_sources)}")
+    return [all_sources[n] for n in names]
+
 # Fetch once per day at 15:05 UTC (= 10:05 EST, 11:05 EDT).
 FETCH_UTC_HOUR = 15
 
@@ -34,7 +44,7 @@ def _next_fetch_time() -> datetime:
     return target
 
 
-async def _run_sync(ts_writer: InfluxWriter, queue: Queue) -> None:
+async def _run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str]) -> None:
     loop = asyncio.get_running_loop()
     running = True
 
@@ -46,7 +56,7 @@ async def _run_sync(ts_writer: InfluxWriter, queue: Queue) -> None:
         loop.add_signal_handler(sig, _stop)
 
     registry = registry_load(REGISTRY_GROUP)
-    source_modules = list(registry.get(REGISTRY_GROUP, {}).values())
+    source_modules = _select_sources(registry, names)
     logger.info(
         "Sources runner started with %d source(s). Press Ctrl+C to stop.",
         len(source_modules),
@@ -82,9 +92,10 @@ async def _run_backfill(
     from_month: int,
     to_year: int,
     to_month: int,
+    names: list[str],
 ) -> None:
     registry = registry_load(REGISTRY_GROUP)
-    source_modules = list(registry.get(REGISTRY_GROUP, {}).values())
+    source_modules = _select_sources(registry, names)
 
     async with httpx.AsyncClient(timeout=30) as client:
         for module in source_modules:
@@ -102,7 +113,13 @@ async def async_main(argv=None) -> None:
     parser.add_argument("--log-level", action=LoggerLevelAction)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("sync", help="Run the periodic sync loop")
+    sync_parser = subparsers.add_parser("sync", help="Run the periodic sync loop")
+    sync_parser.add_argument(
+        "sources",
+        nargs="*",
+        metavar="SOURCE",
+        help="Sources to sync (default: all)",
+    )
 
     backfill_parser = subparsers.add_parser(
         "backfill", help="Backfill historical data for all sources"
@@ -121,6 +138,12 @@ async def async_main(argv=None) -> None:
         default=None,
         help="Last month to backfill (inclusive, default: current month)",
     )
+    backfill_parser.add_argument(
+        "sources",
+        nargs="*",
+        metavar="SOURCE",
+        help="Sources to backfill (default: all)",
+    )
 
     args = parser.parse_args(argv)
     setup_logger(args.log_level, args.log_file)
@@ -129,7 +152,7 @@ async def async_main(argv=None) -> None:
 
     if args.command == "sync":
         queue = Queue.from_url(os.environ["QUEUE_URL"])
-        await _run_sync(ts_writer, queue)
+        await _run_sync(ts_writer, queue, args.sources)
     else:
         from_year, from_month = (int(x) for x in args.from_date.split("-"))
         if args.to_date:
@@ -137,7 +160,7 @@ async def async_main(argv=None) -> None:
         else:
             now = datetime.now(UTC)
             to_year, to_month = now.year, now.month
-        await _run_backfill(ts_writer, from_year, from_month, to_year, to_month)
+        await _run_backfill(ts_writer, from_year, from_month, to_year, to_month, args.sources)
 
 
 def main(argv=None) -> None:
