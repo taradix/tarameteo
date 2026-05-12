@@ -178,16 +178,21 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
             });
           } else {
             // Single aggregate value (rain, snow, …).
+            // Use sensor color (not per-field) so precipitation matches other charts;
+            // distinguish fields by line style (rain=solid, snow=dashed).
+            const aggColor = colorFor(sensor.name);
+            const aggLabel = fields.indexOf(field) === 0 ? sensor.name : "";
             datasets.push({
-              label,
+              label: aggLabel,
               data: aggData.flatMap((r) => {
                 const v = singleAggValue(r, field);
                 if (v === null) return [];
                 const [start, end] = aggSpan(r);
                 return [{ x: start, y: v }, { x: end, y: v }];
               }),
-              borderColor: color,
-              backgroundColor: color,
+              borderColor: aggColor,
+              backgroundColor: aggColor,
+              ...(field === "snow" ? { borderDash: [4, 4] } : {}),
               fill: false,
               pointRadius: 0,
               tension: 0,
