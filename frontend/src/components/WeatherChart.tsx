@@ -44,8 +44,13 @@ interface Props {
 type Point = { x: number; y: number };
 
 function aggSpan(r: AggregateReading): [number, number] {
-  const dayStart = startOfDay(parseISO(r.timestamp));
-  return [dayStart.getTime(), addDays(dayStart, 1).getTime()];
+  const ts = parseISO(r.timestamp);
+  const dayStart = startOfDay(ts);
+  const dayEnd = addDays(dayStart, 1);
+  // For a day still in progress, stop at the observation timestamp rather than
+  // extending to midnight — that would imply a prediction, not recorded data.
+  const end = dayEnd.getTime() > Date.now() ? ts.getTime() : dayEnd.getTime();
+  return [dayStart.getTime(), end];
 }
 
 function bandValues(
