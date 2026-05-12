@@ -17,7 +17,7 @@ import {
 import { Line } from "react-chartjs-2";
 import "chartjs-adapter-date-fns";
 import zoomPlugin from "chartjs-plugin-zoom";
-import { parseISO } from "date-fns";
+import { addDays, parseISO, startOfDay } from "date-fns";
 import { bandColorFor, colorFor } from "../colors";
 import type { AggregateReading, SensorEntry, WeatherField, WeatherReading } from "../types";
 
@@ -42,6 +42,11 @@ interface Props {
 }
 
 type Point = { x: number; y: number };
+
+function aggSpan(r: AggregateReading): [number, number] {
+  const dayStart = startOfDay(parseISO(r.timestamp));
+  return [dayStart.getTime(), addDays(dayStart, 1).getTime()];
+}
 
 function bandValues(
   r: AggregateReading,
@@ -120,9 +125,12 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
             // Max boundary — fills down to the immediately following min dataset.
             datasets.push({
               label: "",
-              data: aggData
-                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: bandValues(r, field).max }))
-                .filter((p): p is Point => p.y !== null),
+              data: aggData.flatMap((r) => {
+                const v = bandValues(r, field).max;
+                if (v === null) return [];
+                const [start, end] = aggSpan(r);
+                return [{ x: start, y: v }, { x: end, y: v }];
+              }),
               borderColor: bandColorFor(colorKey),
               backgroundColor: bandColorFor(colorKey),
               fill: "+1",
@@ -133,9 +141,12 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
             // Min boundary.
             datasets.push({
               label: "",
-              data: aggData
-                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: bandValues(r, field).min }))
-                .filter((p): p is Point => p.y !== null),
+              data: aggData.flatMap((r) => {
+                const v = bandValues(r, field).min;
+                if (v === null) return [];
+                const [start, end] = aggSpan(r);
+                return [{ x: start, y: v }, { x: end, y: v }];
+              }),
               borderColor: bandColorFor(colorKey),
               backgroundColor: "transparent",
               fill: false,
@@ -146,14 +157,17 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
             // Avg line — the one shown in the legend.
             datasets.push({
               label,
-              data: aggData
-                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: bandValues(r, field).avg }))
-                .filter((p): p is Point => p.y !== null),
+              data: aggData.flatMap((r) => {
+                const v = bandValues(r, field).avg;
+                if (v === null) return [];
+                const [start, end] = aggSpan(r);
+                return [{ x: start, y: v }, { x: end, y: v }];
+              }),
               borderColor: color,
               backgroundColor: color,
               borderDash: [4, 4],
               fill: false,
-              pointRadius: 3,
+              pointRadius: 0,
               tension: 0,
               parsing: false,
             });
@@ -161,13 +175,16 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
             // Single aggregate value (rain, snow, …).
             datasets.push({
               label,
-              data: aggData
-                .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: singleAggValue(r, field) }))
-                .filter((p): p is Point => p.y !== null),
+              data: aggData.flatMap((r) => {
+                const v = singleAggValue(r, field);
+                if (v === null) return [];
+                const [start, end] = aggSpan(r);
+                return [{ x: start, y: v }, { x: end, y: v }];
+              }),
               borderColor: color,
               backgroundColor: color,
               fill: false,
-              pointRadius: 3,
+              pointRadius: 0,
               tension: 0,
               parsing: false,
             });
