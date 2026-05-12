@@ -35,6 +35,10 @@ services:
       default:
         ipv4_address: ${IPV4_NETWORK:-172.22.1}.241
 
+  sources:
+    volumes:
+      - ./backend/tarameteo:/app/tarameteo
+
   mosquitto-init:
     command:
       - sh
