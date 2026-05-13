@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.weather.gc.ca/collections/climate-hourly/items"
 
-# Max hours in a month (31 days × 24 hours).
+# Max hours in a month (31 days * 24 hours).
 _MONTH_LIMIT = 744
 
 

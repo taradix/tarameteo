@@ -970,15 +970,6 @@ wheels = [
 ]
 
 [[package]]
-name = "redis"
-version = "7.4.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7b/7f/3759b1d0d72b7c92f0d70ffd9dc962b7b7b5ee74e135f9d7d8ab06b8a318/redis-7.4.0.tar.gz", hash = "sha256:64a6ea7bf567ad43c964d2c30d82853f8df927c5c9017766c55a1d1ed95d18ad", size = 4943913, upload-time = "2026-03-24T09:14:37.53Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/3a/95deec7db1eb53979973ebd156f3369a72732208d1391cd2e5d127062a32/redis-7.4.0-py3-none-any.whl", hash = "sha256:a9c74a5c893a5ef8455a5adb793a31bb70feb821c86eccb62eebef5a19c429ec", size = 409772, upload-time = "2026-03-24T09:14:35.968Z" },
-]
-
-[[package]]
 name = "ruff"
 version = "0.15.12"
 source = { registry = "https://pypi.org/simple" }
@@ -1049,7 +1040,7 @@ dependencies = [
     { name = "more-itertools" },
     { name = "paho-mqtt" },
     { name = "pydantic" },
-    { name = "taraqueue", extra = ["redis"] },
+    { name = "taraqueue" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "watchdog" },
     { name = "yarl" },
@@ -1087,7 +1078,7 @@ requires-dist = [
     { name = "pytest-unique", marker = "extra == 'test'", specifier = ">=0.1.8,<1.0.0" },
     { name = "pytest-xdocker", marker = "extra == 'test'", specifier = ">=0.2.8,<1.0.0" },
     { name = "ruff", marker = "extra == 'check'", specifier = ">=0.15.0,<1.0.0" },
-    { name = "taraqueue", extras = ["redis"], specifier = ">=0.4.0" },
+    { name = "taraqueue", specifier = ">=0.5.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
     { name = "watchdog", specifier = ">=6.0.0,<7.0.0" },
     { name = "yarl", specifier = ">=1.22.0,<2.0.0" },
@@ -1096,19 +1087,14 @@ provides-extras = ["test", "check"]
 
 [[package]]
 name = "taraqueue"
-version = "0.4.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "yarl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a3/db/5053f9b4a2bdf9c03c46a896c9aa65e943165c1e875f4ac48b500bcdf5e1/taraqueue-0.4.0.tar.gz", hash = "sha256:22716a64ef0dd485e1bbc3ec57718e8a2fcdf1f117eb2505470589a6ef472c48", size = 78166, upload-time = "2026-05-07T15:54:31.282Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/05/50/09ff775fabd5dfceee2237c02246362d699a8e2b8bfbd3d04bdb4573ab3b/taraqueue-0.5.0.tar.gz", hash = "sha256:f29e8d68ed63654ed9c1a061136a04d81bdf84b9afeb34b65435a0fd1fd2fea3", size = 79781, upload-time = "2026-05-13T18:23:31.199Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/3a/c55bbc0f9249c4e4c43d3c22ec339b8f6e53d25e97f24f163ddd6e341cf0/taraqueue-0.4.0-py3-none-any.whl", hash = "sha256:c3cfa263cb5ea02b369a22cae3dfe9db237786ea83277e790ee9594a31c481e2", size = 8474, upload-time = "2026-05-07T15:54:30.357Z" },
-]
-
-[package.optional-dependencies]
-redis = [
-    { name = "redis" },
+    { url = "https://files.pythonhosted.org/packages/a5/d4/d227a2f444f37987f8807ae8eaeaa5a51be60a83253830f27179d21a3080/taraqueue-0.5.0-py3-none-any.whl", hash = "sha256:e0811f41cd594f278dc28f290909fca8479bb76ccbbf5da0a136052fc0d4f547", size = 8648, upload-time = "2026-05-13T18:23:29.776Z" },
 ]
 
 [[package]]

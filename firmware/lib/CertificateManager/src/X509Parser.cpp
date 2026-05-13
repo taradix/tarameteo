@@ -257,8 +257,8 @@ bool X509Parser::extractExpiration(const char* certPem, unsigned long* expiresAt
         return false;
     }
 
-    // For testing: set to 10 years from epoch (not current time to be deterministic)
-    *expiresAt = 946684800UL + (3650UL * 86400UL); // Jan 1, 2000 + 10 years
+    // For testing: set to a future date (May 2033)
+    *expiresAt = 2000000000UL;
     return true;
 }
 

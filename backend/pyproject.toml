@@ -21,8 +21,8 @@ dependencies = [
     "uvicorn[standard]>=0.34.0,<1.0.0",
     "paho-mqtt>=2.1.0,<3.0.0",
     "watchdog>=6.0.0,<7.0.0",
+    "taraqueue>=0.5.0",
     "yarl>=1.22.0,<2.0.0",
-    "taraqueue[redis]>=0.4.0",
 ]
 
 [project.optional-dependencies]

@@ -4,6 +4,7 @@ import pytest
 
 from tarameteo.melccfp import MelccfpReading, _parse_float, parse_page
 
+
 # Minimal HTML that mirrors the MELCCFP page table structure.
 def _row(day, tmax, tavg, tmin, rain, snow_cm):
     """Build a table row matching the real MELCCFP class structure."""

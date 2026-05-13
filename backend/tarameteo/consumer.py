@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import os
 import signal
 from argparse import ArgumentParser
 
@@ -72,6 +71,36 @@ async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queu
     )
 
 
+async def run(ts_writer: TSWriter, queue: Queue, client_id: str = "weather-consumer", topic: str = "weather/+/event") -> None:
+    """Run the MQTT consumer as a long-lived coroutine.
+
+    Intended to be launched as an :mod:`asyncio` background task from the
+    FastAPI lifespan.  Exits cleanly on :exc:`asyncio.CancelledError`.
+    """
+    loop = asyncio.get_running_loop()
+
+    async def _async_handler(message: MQTTMessage) -> None:
+        await weather_handler(message, ts_writer=ts_writer, queue=queue)
+
+    def _sync_handler(message: MQTTMessage) -> None:
+        asyncio.run_coroutine_threadsafe(_async_handler(message), loop)
+
+    consumer = MQTTConsumer.from_env(
+        client_id=client_id,
+        topic=topic,
+        on_message=_sync_handler,
+    )
+    consumer.connect()
+    logger.info("MQTT consumer started.")
+    try:
+        while consumer.running:
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        logger.info("MQTT consumer stopping.")
+    finally:
+        consumer.disconnect()
+
+
 async def async_main(argv=None) -> None:
     parser = ArgumentParser()
     parser.add_argument(
@@ -97,34 +126,14 @@ async def async_main(argv=None) -> None:
     setup_logger(args.log_level, args.log_file)
 
     ts_writer = InfluxWriter.from_env()
-    queue = Queue.from_url(os.environ["QUEUE_URL"])
+    queue = Queue.from_url("memory://")
     loop = asyncio.get_running_loop()
 
-    async def _async_handler(message: MQTTMessage) -> None:
-        await weather_handler(message, ts_writer=ts_writer, queue=queue)
-
-    def _sync_handler(message: MQTTMessage) -> None:
-        asyncio.run_coroutine_threadsafe(_async_handler(message), loop)
-
-    consumer = MQTTConsumer.from_env(
-        client_id=args.client_id,
-        topic=args.topic_filter,
-        on_message=_sync_handler,
-    )
-    consumer.connect()
-
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, consumer.disconnect)
+        loop.add_signal_handler(sig, loop.stop)
 
     logger.info("MQTT consumer started. Press Ctrl+C to stop.")
-
-    try:
-        while consumer.running:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
-    finally:
-        consumer.disconnect()
+    await run(ts_writer, queue, client_id=args.client_id, topic=args.topic_filter)
 
 
 def main(argv=None) -> None:

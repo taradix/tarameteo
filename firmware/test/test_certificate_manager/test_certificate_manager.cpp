@@ -206,20 +206,14 @@ void test_certificate_manager_detect_expiration_warning(void) {
 void test_certificate_manager_validate_fails_when_current_time_unavailable(void) {
   CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
   certMgr.begin();
-
-  testPrefs.begin("tarameteo_certs", false);
-  testPrefs.putString("cli_cert", VALID_CERT_PEM);
-  testPrefs.putString("cli_key", VALID_KEY_PEM);
-  testPrefs.putULong("cert_expires", 2000000000UL);
-  testPrefs.end();
+  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
 
   mockArduino.setCurrentEpochSeconds(0);
 
-  CertificateManager certMgr2(testPrefs, &mockWiFi, &mockArduino);
-  bool result = certMgr2.begin();
+  bool result = certMgr.validateCertificates();
 
   TEST_ASSERT_FALSE(result);
-  TEST_ASSERT_TRUE(strstr(certMgr2.getLastError(), "Current time unavailable") != NULL);
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Current time unavailable") != NULL);
 }
 
 // ========================================

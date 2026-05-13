@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 
+import pytest
 from hamcrest import (
     assert_that,
     contains_exactly,
@@ -10,6 +11,7 @@ from hamcrest import (
     has_entries,
     has_properties,
 )
+from taraqueue import QueueEmpty
 
 from tarameteo.consumer import weather_handler
 from tarameteo.mqtt import MQTTMessage
@@ -109,13 +111,12 @@ async def test_weather_handler_falls_back_to_server_time_on_ntp_failure(memory_s
 
 async def test_weather_handler_publishes_to_sensor_channel(memory_writer, memory_queue, unique):
     name = unique("text")
-    await weather_handler(
-        make_message(topic=f"weather/{name}/event", temperature=22.5, humidity=60.0, pressure=1013.25),
-        ts_writer=memory_writer,
-        queue=memory_queue,
-    )
-
     async with memory_queue.connect(f"weather:{name}") as q:
+        await weather_handler(
+            make_message(topic=f"weather/{name}/event", temperature=22.5, humidity=60.0, pressure=1013.25),
+            ts_writer=memory_writer,
+            queue=q,
+        )
         message = await q.receive()
 
     data = json.loads(message)
@@ -124,20 +125,20 @@ async def test_weather_handler_publishes_to_sensor_channel(memory_writer, memory
 
 async def test_weather_handler_publishes_to_correct_channel(memory_writer, memory_queue, unique):
     name = unique("text")
-    await weather_handler(
-        make_message(topic=f"weather/{name}/event"),
-        ts_writer=memory_writer,
-        queue=memory_queue,
-    )
-
     async with memory_queue.connect(f"weather:{name}") as q:
+        await weather_handler(
+            make_message(topic=f"weather/{name}/event"),
+            ts_writer=memory_writer,
+            queue=q,
+        )
         message = await q.receive()
 
     assert json.loads(message)["temperature"] == 22.5
 
 
 async def test_weather_handler_does_not_publish_on_invalid_topic(memory_writer, memory_queue):
-    keys_before = set(memory_queue.queues.keys())
-    await weather_handler(make_message(topic="bad/topic"), ts_writer=memory_writer, queue=memory_queue)
-
-    assert set(memory_queue.queues.keys()) == keys_before
+    # Subscribe to the channel that would be written if publishing occurred.
+    async with memory_queue.connect("weather:jdd-carre") as q:
+        await weather_handler(make_message(topic="bad/topic"), ts_writer=memory_writer, queue=q)
+        with pytest.raises(QueueEmpty):
+            await q.receive()

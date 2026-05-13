@@ -1,7 +1,9 @@
 """API service."""
 
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from typing import Annotated
 
@@ -31,14 +33,45 @@ from tarameteo.sensors import (
 )
 from tarameteo.ts import (
     InfluxReader,
+    InfluxWriter,
     TSReader,
 )
 
 logger = logging.getLogger("uvicorn")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start background tasks (MQTT consumer and external sources) on startup."""
+    tasks = []
+
+    if os.environ.get("MQTT_BROKER_HOST"):
+        from tarameteo.consumer import run as run_consumer
+        ts_writer = InfluxWriter.from_env()
+        tasks.append(asyncio.create_task(run_consumer(ts_writer, Queue.from_url("memory://")), name="mqtt-consumer"))
+    else:
+        logger.warning("MQTT_BROKER_HOST not set; MQTT consumer will not start")
+
+    if os.environ.get("INFLUX_URL"):
+        from tarameteo.sources import run_sync
+        tasks.append(asyncio.create_task(run_sync(InfluxWriter.from_env(), Queue.from_url("memory://")), name="sources-sync"))
+    else:
+        logger.warning("INFLUX_URL not set; external sources sync will not start")
+
+    try:
+        yield
+    finally:
+        for task in tasks:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
 app = FastAPI(
     title="TaraMeteo API",
     docs_url="/api/swagger",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 origins = [
@@ -72,7 +105,7 @@ SensorServiceDep = Annotated[SensorService, Depends(get_sensor_service)]
 
 
 def get_queue() -> Queue:
-    return Queue.from_url(os.environ["QUEUE_URL"])
+    return Queue.from_url("memory://")
 
 
 QueueDep = Annotated[Queue, Depends(get_queue)]

@@ -1,5 +1,6 @@
 """Unit tests for the api module."""
 
+import asyncio
 import json
 from datetime import (
     UTC,
@@ -255,7 +256,6 @@ async def test_stream_sensor_weather(memory_queue, unique):
         "rssi": None,
         "retry_count": None,
     })
-    await memory_queue.publish(f"weather:{name}", payload)
 
     # is_disconnected returns False once (allow one event through) then True
     mock_request = AsyncMock()
@@ -263,6 +263,13 @@ async def test_stream_sensor_weather(memory_queue, unique):
 
     response = await stream_sensor_weather(name=name, request=mock_request, queue=memory_queue)
 
+    async def publish_after_subscribe():
+        # Yield to let the SSE generator subscribe and begin awaiting a message.
+        await asyncio.sleep(0)
+        await memory_queue.publish(f"weather:{name}", payload)
+
+    task = asyncio.create_task(publish_after_subscribe())
     events = [chunk async for chunk in response.body_iterator]
+    await task
 
     assert_that(events, contains_exactly(f"data: {payload}\n\n"))

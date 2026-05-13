@@ -2,9 +2,9 @@
 
 import asyncio
 import logging
-import os
 import signal
 from argparse import ArgumentParser
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -39,21 +39,16 @@ def _next_fetch_time() -> datetime:
     return datetime.now(UTC) + SYNC_INTERVAL
 
 
-async def _run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str]) -> None:
-    loop = asyncio.get_running_loop()
-    running = True
+async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | None = None) -> None:
+    """Run the periodic sources sync loop as a long-lived coroutine.
 
-    def _stop() -> None:
-        nonlocal running
-        running = False
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, _stop)
-
+    Intended to be launched as an :mod:`asyncio` background task from the
+    FastAPI lifespan.  Exits cleanly on :exc:`asyncio.CancelledError`.
+    """
     registry = registry_load(REGISTRY_GROUP)
-    source_modules = _select_sources(registry, names)
+    source_modules = _select_sources(registry, names or [])
     logger.info(
-        "Sources runner started with %d source(s). Press Ctrl+C to stop.",
+        "Sources runner started with %d source(s).",
         len(source_modules),
     )
 
@@ -64,16 +59,15 @@ async def _run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str]) -> 
             except Exception:
                 logger.exception("Error in initial fetch for source %s", module.__name__)
 
-        while running:
+        while True:
             next_run = _next_fetch_time()
             wait_seconds = (next_run - datetime.now(UTC)).total_seconds()
             logger.info("Next fetch at %s (in %.0fs)", next_run.isoformat(), wait_seconds)
             try:
                 await asyncio.sleep(wait_seconds)
             except asyncio.CancelledError:
-                break
-            if not running:
-                break
+                logger.info("Sources runner stopping.")
+                return
             for module in source_modules:
                 try:
                     await module.run_once(client, ts_writer, queue)
@@ -146,8 +140,17 @@ async def async_main(argv=None) -> None:
     ts_writer = InfluxWriter.from_env()
 
     if args.command == "sync":
-        queue = Queue.from_url(os.environ["QUEUE_URL"])
-        await _run_sync(ts_writer, queue, args.sources)
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(run_sync(ts_writer, Queue.from_url("memory://"), args.sources))
+
+        def _stop() -> None:
+            task.cancel()
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, _stop)
+
+        with suppress(asyncio.CancelledError):
+            await task
     else:
         from_year, from_month = (int(x) for x in args.from_date.split("-"))
         if args.to_date:

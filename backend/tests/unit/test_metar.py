@@ -1,6 +1,5 @@
 """Unit tests for the METAR fetcher."""
 
-import math
 
 import pytest
 

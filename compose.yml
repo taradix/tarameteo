@@ -16,8 +16,10 @@ services:
         condition: service_healthy
       influxdb:
         condition: service_healthy
-      redis:
+      mosquitto:
         condition: service_started
+    volumes:
+      - ca-trust:/ca:ro
     environment:
       CA_URL: http://tarameteo-ca/v1/certs
       CA_TOKEN: ${CA_TOKEN}
@@ -25,7 +27,11 @@ services:
       INFLUX_TOKEN: ${INFLUX_TOKEN}
       INFLUX_ORG: ${INFLUX_ORG:-tarameteo}
       INFLUX_BUCKET: ${INFLUX_BUCKET:-weather}
-      QUEUE_URL: redis://:${REDIS_PASSWORD}@tarameteo-redis:6379
+      MQTT_BROKER_HOST: tarameteo-mosquitto
+      MQTT_BROKER_PORT: 8884
+      MQTT_CA_PATH: /ca/ca.pem
+      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
     networks:
       default:
         aliases:
@@ -87,38 +93,6 @@ services:
       CA_TRUST_DIR: /trust
     command: /publish.sh
     restart: no
-
-  consumer:
-    build:
-      context: backend
-      args:
-        <<: *python-build-args
-    depends_on:
-      influxdb:
-        condition: service_healthy
-      mosquitto:
-        condition: service_started
-      redis:
-        condition: service_started
-    volumes:
-      - ca-trust:/ca:ro
-    environment:
-      MQTT_BROKER_HOST: tarameteo-mosquitto
-      MQTT_BROKER_PORT: 8884
-      MQTT_CA_PATH: /ca/ca.pem
-      MQTT_USERNAME: ${MQTT_USERNAME:-admin}
-      MQTT_PASSWORD: ${MQTT_PASSWORD}
-      INFLUX_URL: http://tarameteo-influxdb:8086
-      INFLUX_TOKEN: ${INFLUX_TOKEN}
-      INFLUX_ORG: ${INFLUX_ORG:-tarameteo}
-      INFLUX_BUCKET: ${INFLUX_BUCKET:-weather}
-      QUEUE_URL: redis://:${REDIS_PASSWORD}@tarameteo-redis:6379
-    networks:
-      default:
-        aliases:
-          - tarameteo-consumer
-    command: tarameteo-consumer
-    restart: always
 
   frontend:
     build:
@@ -271,36 +245,6 @@ services:
           - tarameteo-nginx
     restart: always
 
-  sources:
-    build:
-      context: backend
-      args:
-        <<: *python-build-args
-    depends_on:
-      influxdb:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    environment:
-      INFLUX_URL: http://tarameteo-influxdb:8086
-      INFLUX_TOKEN: ${INFLUX_TOKEN}
-      INFLUX_ORG: ${INFLUX_ORG:-tarameteo}
-      INFLUX_BUCKET: ${INFLUX_BUCKET:-weather}
-      QUEUE_URL: redis://:${REDIS_PASSWORD}@tarameteo-redis:6379
-    command: tarameteo-sources sync
-    restart: always
-
-  redis:
-    image: redis:8.6.3-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis-data:/data
-    networks:
-      default:
-        aliases:
-          - tarameteo-redis
-    restart: always
-
 networks:
   default:
     driver: bridge
@@ -316,4 +260,3 @@ volumes:
   influxdb-config:
   mosquitto-data:
   mosquitto-tls:
-  redis-data:
