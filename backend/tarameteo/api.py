@@ -24,6 +24,7 @@ from tarameteo.ca_client import (
     IssueCertificateResponse,
     get_ca_client,
 )
+from tarameteo.consumer import run as run_consumer
 from tarameteo.sensors import (
     AggregateReading,
     SensorEntry,
@@ -31,6 +32,7 @@ from tarameteo.sensors import (
     SensorService,
     WeatherReading,
 )
+from tarameteo.sources import run_sync
 from tarameteo.ts import (
     InfluxReader,
     InfluxWriter,
@@ -44,19 +46,27 @@ logger = logging.getLogger("uvicorn")
 async def lifespan(app: FastAPI):
     """Start background tasks (MQTT consumer and external sources) on startup."""
     tasks = []
-
-    if os.environ.get("MQTT_BROKER_HOST"):
-        from tarameteo.consumer import run as run_consumer
-        ts_writer = InfluxWriter.from_env()
-        tasks.append(asyncio.create_task(run_consumer(ts_writer, Queue.from_url("memory://")), name="mqtt-consumer"))
-    else:
-        logger.warning("MQTT_BROKER_HOST not set; MQTT consumer will not start")
+    app.state.queue = Queue.from_url("memory://")
+    app.state.ts_reader = None
+    app.state.ts_writer = None
 
     if os.environ.get("INFLUX_URL"):
-        from tarameteo.sources import run_sync
-        tasks.append(asyncio.create_task(run_sync(InfluxWriter.from_env(), Queue.from_url("memory://")), name="sources-sync"))
-    else:
-        logger.warning("INFLUX_URL not set; external sources sync will not start")
+        app.state.ts_reader = InfluxReader.from_env()
+        app.state.ts_writer = InfluxWriter.from_env()
+
+        tasks.append(
+            asyncio.create_task(
+                run_sync(app.state.ts_writer, app.state.queue),
+                name="sources-sync",
+            ),
+        )
+
+        tasks.append(
+            asyncio.create_task(
+                run_consumer(app.state.ts_writer, app.state.queue),
+                name="mqtt-consumer",
+            ),
+        )
 
     try:
         yield
@@ -90,8 +100,8 @@ app.add_middleware(
 )
 
 
-def get_ts_reader() -> TSReader:
-    return InfluxReader.from_env()
+def get_ts_reader(request: Request) -> TSReader:
+    return request.app.state.ts_reader
 
 
 TSReaderDep = Annotated[TSReader, Depends(get_ts_reader)]
@@ -104,8 +114,8 @@ def get_sensor_service(ts_reader: TSReaderDep) -> SensorService:
 SensorServiceDep = Annotated[SensorService, Depends(get_sensor_service)]
 
 
-def get_queue() -> Queue:
-    return Queue.from_url("memory://")
+def get_queue(request: Request) -> Queue:
+    return request.app.state.queue
 
 
 QueueDep = Annotated[Queue, Depends(get_queue)]
