@@ -91,6 +91,8 @@ private:
     void sendResponse(int code, const char* message);
 
     // Utilities
+    void clearClientCredentials();
+    void clearCACertificate();
     void setError(const char* error);
     const char* getLastMACOctet();
 };

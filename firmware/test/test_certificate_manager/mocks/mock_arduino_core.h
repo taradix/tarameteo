@@ -10,10 +10,14 @@
 
 class MockArduino : public IArduino {
 public:
-    MockArduino() : _millis(0), restartCalled(false) {}
+    MockArduino() : _millis(0), _epochSeconds(1700000000UL), restartCalled(false) {}
 
     unsigned long millis() override {
         return _millis;
+    }
+
+    unsigned long currentEpochSeconds() override {
+        return _epochSeconds;
     }
 
     void delay(unsigned long ms) override {
@@ -44,6 +48,10 @@ public:
         _millis = ms;
     }
 
+    void setCurrentEpochSeconds(unsigned long epochSeconds) {
+        _epochSeconds = epochSeconds;
+    }
+
     void advanceTime(unsigned long ms) {
         _millis += ms;
     }
@@ -63,11 +71,13 @@ public:
 
     void reset() {
         _millis = 0;
+        _epochSeconds = 1700000000UL;
         restartCalled = false;
         logMessages.clear();
     }
 
     unsigned long _millis;
+    unsigned long _epochSeconds;
     bool restartCalled;
     std::vector<std::string> logMessages;
 };

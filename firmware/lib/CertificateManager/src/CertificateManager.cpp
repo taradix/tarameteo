@@ -25,12 +25,8 @@ CertificateManager::CertificateManager(Preferences &prefs, IWiFi *wifi, IArduino
 
 CertificateManager::~CertificateManager() {
   stopProvisioningMode();
-  if (_clientCert)
-    free(_clientCert);
-  if (_clientKey)
-    free(_clientKey);
-  if (_caCert)
-    free(_caCert);
+  clearClientCredentials();
+  clearCACertificate();
 }
 
 bool CertificateManager::begin() {
@@ -76,32 +72,39 @@ bool CertificateManager::loadFromNVS() {
     return false;
   }
 
-  _clientCert = (char *)malloc(MAX_CERT_SIZE);
-  _clientKey = (char *)malloc(MAX_KEY_SIZE);
+  if (!_clientCert) {
+    _clientCert = (char *)malloc(MAX_CERT_SIZE);
+  }
+  if (!_clientKey) {
+    _clientKey = (char *)malloc(MAX_KEY_SIZE);
+  }
   if (!_clientCert || !_clientKey) {
+    clearClientCredentials();
     setError("Failed to allocate memory for certificates");
     return false;
   }
 
   size_t certLen = _prefs.getString("cli_cert", _clientCert, MAX_CERT_SIZE);
   if (certLen == 0) {
+    clearClientCredentials();
     setError("Failed to read client certificate from NVS");
     return false;
   }
 
   size_t keyLen = _prefs.getString("cli_key", _clientKey, MAX_KEY_SIZE);
   if (keyLen == 0) {
+    clearClientCredentials();
     setError("Failed to read client key from NVS");
     return false;
   }
 
   if (_prefs.isKey("ca_cert")) {
+    clearCACertificate();
     _caCert = (char *)malloc(MAX_CERT_SIZE);
     if (_caCert) {
       size_t caLen = _prefs.getString("ca_cert", _caCert, MAX_CERT_SIZE);
       if (caLen == 0) {
-        free(_caCert);
-        _caCert = nullptr;
+        clearCACertificate();
       }
     }
   }
@@ -155,8 +158,8 @@ bool CertificateManager::loadCertificates(IWiFiClient &client) {
     client.setCACert(_caCert);
     _arduino->log("CertificateManager: CA certificate loaded");
   } else {
-    client.setInsecure();
-    _arduino->log("CertificateManager: WARNING - No CA cert, skipping server certificate verification");
+    setError("CA certificate is required for TLS server verification");
+    return false;
   }
 
   client.setCertificate(_clientCert);
@@ -190,8 +193,13 @@ bool CertificateManager::validateCertificates() {
   if (!extractExpirationFromCert(_clientCert)) {
     _arduino->log("CertificateManager: WARNING - Failed to extract expiration date");
   } else {
+    unsigned long now = _arduino->currentEpochSeconds();
+    if (now < SECONDS_PER_DAY) {
+      setError("Current time unavailable for certificate validation");
+      return false;
+    }
+
     // Check if certificate is expired or expiring soon
-    unsigned long now = _arduino->millis() / 1000; // Current time in seconds (approximation)
     if (_expiresAt > 0 && _expiresAt < now) {
       setError("Certificate has expired");
       return false;
@@ -260,15 +268,18 @@ bool CertificateManager::extractExpirationFromCert(const char *certPem) {
 
   if (!result) {
     _arduino->log("CertificateManager: WARNING - Failed to extract expiration date");
-    // Set a default (10 years from now) as fallback
-    _expiresAt = (_arduino->millis() / 1000) + (3650UL * 86400UL);
+    _expiresAt = 0;
     return false;
   }
 
   // Log expiration date for debugging
-  unsigned long now = _arduino->millis() / 1000;
-  long daysUntilExpiry = (_expiresAt - now) / 86400;
-  _arduino->logf("CertificateManager: Certificate expires in %ld days", daysUntilExpiry);
+  unsigned long now = _arduino->currentEpochSeconds();
+  if (now >= SECONDS_PER_DAY) {
+    long daysUntilExpiry = (_expiresAt - now) / SECONDS_PER_DAY;
+    _arduino->logf("CertificateManager: Certificate expires in %ld days", daysUntilExpiry);
+  } else {
+    _arduino->logf("CertificateManager: Certificate expiration epoch=%lu", _expiresAt);
+  }
 
   return true;
 }
@@ -683,4 +694,16 @@ void CertificateManager::setError(const char *error) {
   strncpy(_lastError, error, sizeof(_lastError) - 1);
   _lastError[sizeof(_lastError) - 1] = '\0';
   _arduino->logf("CertificateManager: ERROR - %s", _lastError);
+}
+
+void CertificateManager::clearClientCredentials() {
+  free(_clientCert);
+  free(_clientKey);
+  _clientCert = nullptr;
+  _clientKey = nullptr;
+}
+
+void CertificateManager::clearCACertificate() {
+  free(_caCert);
+  _caCert = nullptr;
 }

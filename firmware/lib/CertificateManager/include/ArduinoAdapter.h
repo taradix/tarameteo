@@ -3,6 +3,7 @@
 
 #include "IArduino.h"
 #include <Arduino.h>
+#include <time.h>
 #include <stdarg.h>
 
 // Adapter that wraps real Arduino functions
@@ -10,6 +11,10 @@ class ArduinoAdapter : public IArduino {
 public:
     unsigned long millis() override {
         return ::millis();
+    }
+
+    unsigned long currentEpochSeconds() override {
+        return static_cast<unsigned long>(time(nullptr));
     }
 
     void delay(unsigned long ms) override {

@@ -186,8 +186,8 @@ void test_certificate_manager_detect_expiration_warning(void) {
   CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
   certMgr.begin();
 
-  // Set time to simulate certificate expiring in 15 days
-  mockArduino.setMillis(1700000000UL * 1000);
+  // Set epoch time to simulate certificate expiring in 15 days
+  mockArduino.setCurrentEpochSeconds(1700000000UL);
 
   // Pre-populate with cert expiring soon
   testPrefs.begin("tarameteo_certs", false);
@@ -201,6 +201,25 @@ void test_certificate_manager_detect_expiration_warning(void) {
   certMgr2.validateCertificates();
 
   TEST_ASSERT_TRUE(mockArduino.hasLogContaining("expires in"));
+}
+
+void test_certificate_manager_validate_fails_when_current_time_unavailable(void) {
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  certMgr.begin();
+
+  testPrefs.begin("tarameteo_certs", false);
+  testPrefs.putString("cli_cert", VALID_CERT_PEM);
+  testPrefs.putString("cli_key", VALID_KEY_PEM);
+  testPrefs.putULong("cert_expires", 2000000000UL);
+  testPrefs.end();
+
+  mockArduino.setCurrentEpochSeconds(0);
+
+  CertificateManager certMgr2(testPrefs, &mockWiFi, &mockArduino);
+  bool result = certMgr2.begin();
+
+  TEST_ASSERT_FALSE(result);
+  TEST_ASSERT_TRUE(strstr(certMgr2.getLastError(), "Current time unavailable") != NULL);
 }
 
 // ========================================
@@ -221,7 +240,7 @@ void test_certificate_manager_load_certificates_to_client(void) {
   TEST_ASSERT_TRUE(mockClient.caCertSet);
 }
 
-void test_certificate_manager_load_without_ca_cert(void) {
+void test_certificate_manager_load_fails_without_ca_cert(void) {
   MockWiFiClient mockClient;
   CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
   certMgr.begin();
@@ -229,11 +248,11 @@ void test_certificate_manager_load_without_ca_cert(void) {
 
   bool result = certMgr.loadCertificates(mockClient);
 
-  TEST_ASSERT_TRUE(result);
-  TEST_ASSERT_TRUE(mockClient.certificateSet);
-  TEST_ASSERT_TRUE(mockClient.privateKeySet);
+  TEST_ASSERT_FALSE(result);
+  TEST_ASSERT_FALSE(mockClient.certificateSet);
+  TEST_ASSERT_FALSE(mockClient.privateKeySet);
   TEST_ASSERT_FALSE(mockClient.caCertSet);
-  TEST_ASSERT_TRUE(mockArduino.hasLogContaining("WARNING - No CA cert"));
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "CA certificate is required") != NULL);
 }
 
 void test_certificate_manager_load_fails_without_provisioning(void) {
@@ -461,10 +480,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test_certificate_manager_validate_after_store);
   RUN_TEST(test_certificate_manager_validate_fails_without_certificates);
   RUN_TEST(test_certificate_manager_detect_expiration_warning);
+  RUN_TEST(test_certificate_manager_validate_fails_when_current_time_unavailable);
 
   // Certificate loading tests
   RUN_TEST(test_certificate_manager_load_certificates_to_client);
-  RUN_TEST(test_certificate_manager_load_without_ca_cert);
+  RUN_TEST(test_certificate_manager_load_fails_without_ca_cert);
   RUN_TEST(test_certificate_manager_load_fails_without_provisioning);
 
   // Certificate clearing tests
@@ -504,8 +524,9 @@ void loop() {
   RUN_TEST(test_certificate_manager_validate_after_store);
   RUN_TEST(test_certificate_manager_validate_fails_without_certificates);
   RUN_TEST(test_certificate_manager_detect_expiration_warning);
+  RUN_TEST(test_certificate_manager_validate_fails_when_current_time_unavailable);
   RUN_TEST(test_certificate_manager_load_certificates_to_client);
-  RUN_TEST(test_certificate_manager_load_without_ca_cert);
+  RUN_TEST(test_certificate_manager_load_fails_without_ca_cert);
   RUN_TEST(test_certificate_manager_load_fails_without_provisioning);
   RUN_TEST(test_certificate_manager_clear_removes_all_data);
   RUN_TEST(test_certificate_manager_clear_clears_nvs);

@@ -6,7 +6,7 @@
 
 class MockWiFiClient : public IWiFiClient {
 public:
-    MockWiFiClient() : caCertSet(false), insecureSet(false), certificateSet(false), privateKeySet(false) {
+    MockWiFiClient() : caCertSet(false), certificateSet(false), privateKeySet(false) {
         caCert[0] = '\0';
         certificate[0] = '\0';
         privateKey[0] = '\0';
@@ -18,10 +18,6 @@ public:
             caCert[sizeof(caCert) - 1] = '\0';
             caCertSet = true;
         }
-    }
-
-    void setInsecure() override {
-        insecureSet = true;
     }
 
     void setCertificate(const char* client_ca) override {
@@ -42,7 +38,6 @@ public:
 
     // Test helpers
     bool caCertSet;
-    bool insecureSet;
     bool certificateSet;
     bool privateKeySet;
     char caCert[2048];
@@ -51,7 +46,6 @@ public:
 
     void reset() {
         caCertSet = false;
-        insecureSet = false;
         certificateSet = false;
         privateKeySet = false;
         caCert[0] = '\0';

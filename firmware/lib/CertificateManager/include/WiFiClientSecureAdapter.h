@@ -13,10 +13,6 @@ public:
         _client.setCACert(rootCA);
     }
 
-    void setInsecure() override {
-        _client.setInsecure();
-    }
-
     void setCertificate(const char* client_ca) override {
         _client.setCertificate(client_ca);
     }
