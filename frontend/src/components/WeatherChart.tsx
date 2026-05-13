@@ -209,6 +209,7 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
   const options = useMemo<ChartOptions<"line">>(
     () => ({
       responsive: true,
+      maintainAspectRatio: false,
       animation: false,
       scales: {
         x: {
@@ -266,7 +267,9 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
     <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
       {hasData ? (
-        <Line ref={chartRef} data={data} options={options} />
+        <div className="h-64">
+          <Line ref={chartRef} data={data} options={options} />
+        </div>
       ) : (
         <p className="text-sm text-zinc-500">{t("chart.noData")}</p>
       )}
