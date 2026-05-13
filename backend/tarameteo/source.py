@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 class Source(ABC):
     """Base class for external weather data sources."""
 
+    RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+        httpx.HTTPError,
+        ValueError,
+        KeyError,
+    )
+
     @property
     def name(self) -> str:
         """Human-readable source name used in log messages."""
@@ -64,9 +70,9 @@ class Source(ABC):
                 )
                 try:
                     await self._backfill_month(client, sensor, year, month, ts_writer)
-                except Exception:
+                except self.RECOVERABLE_ERRORS:
                     logger.exception(
-                        "%s %s: error backfilling %d-%02d",
+                        "%s %s: recoverable error backfilling %d-%02d",
                         self.name, sensor.device_id, year, month,
                     )
                 month += 1

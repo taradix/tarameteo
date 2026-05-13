@@ -73,13 +73,26 @@ async def test_backfill_run_continues_after_error() -> None:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            raise RuntimeError("network error")
+            raise ValueError("recoverable parse error")
         await original(client, sensor, year, month, ts_writer)
 
     src._backfill_month = _fail_first  # type: ignore[method-assign]
     await src.backfill_run(None, None, 2025, 1, 2025, 3)
     # First month failed, months 2 and 3 succeeded
     assert src.calls == [("dev-1", 2025, 2), ("dev-1", 2025, 3)]
+
+
+async def test_backfill_run_raises_unexpected_error() -> None:
+    sensor = _Sensor("dev-1")
+    src = _MonthBackfillSource([sensor])
+
+    async def _always_fail(client, sensor, year, month, ts_writer):
+        raise RuntimeError("unexpected")
+
+    src._backfill_month = _always_fail  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="unexpected"):
+        await src.backfill_run(None, None, 2025, 1, 2025, 1)
 
 
 async def test_backfill_run_year_rollover() -> None:

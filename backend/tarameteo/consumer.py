@@ -4,7 +4,9 @@ import asyncio
 import logging
 import signal
 from argparse import ArgumentParser
+from contextlib import suppress
 
+from pydantic import ValidationError
 from taraqueue import Queue
 
 from tarameteo.logger import (
@@ -38,7 +40,7 @@ async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queu
 
     try:
         reading = WeatherReading(sensor=device_id, **message.data)
-    except Exception:
+    except (ValidationError, TypeError):
         logger.exception("Invalid weather data format")
         return
 
@@ -53,14 +55,11 @@ async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queu
             },
             timestamp=reading.timestamp,
         )
-    except Exception:
+    except ValueError:
         logger.exception("Error storing weather data")
         return
 
-    try:
-        await queue.publish(f"weather:{device_id}", reading.model_dump_json())
-    except Exception:
-        logger.exception("Error publishing weather data to queue")
+    await queue.publish(f"weather:{device_id}", reading.model_dump_json())
 
     logger.info(
         f"Stored weather data for sensor {device_id}: "
@@ -82,8 +81,15 @@ async def run(ts_writer: TSWriter, queue: Queue, client_id: str = "weather-consu
     async def _async_handler(message: MQTTMessage) -> None:
         await weather_handler(message, ts_writer=ts_writer, queue=queue)
 
+    def _log_handler_failure(future) -> None:
+        with suppress(asyncio.CancelledError):
+            exc = future.exception()
+        if exc is not None:
+            logger.error("Unhandled error in weather message handler", exc_info=exc)
+
     def _sync_handler(message: MQTTMessage) -> None:
-        asyncio.run_coroutine_threadsafe(_async_handler(message), loop)
+        future = asyncio.run_coroutine_threadsafe(_async_handler(message), loop)
+        future.add_done_callback(_log_handler_failure)
 
     consumer = MQTTConsumer.from_env(
         client_id=client_id,

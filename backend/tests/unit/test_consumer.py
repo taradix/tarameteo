@@ -142,3 +142,21 @@ async def test_weather_handler_does_not_publish_on_invalid_topic(memory_writer, 
         await weather_handler(make_message(topic="bad/topic"), ts_writer=memory_writer, queue=q)
         with pytest.raises(QueueEmpty):
             await q.receive()
+
+
+async def test_weather_handler_raises_unexpected_write_errors(memory_queue):
+    class BrokenWriter:
+        def write_point(self, *args, **kwargs):
+            raise RuntimeError("write failure")
+
+    with pytest.raises(RuntimeError, match="write failure"):
+        await weather_handler(make_message(), ts_writer=BrokenWriter(), queue=memory_queue)
+
+
+async def test_weather_handler_raises_publish_errors(memory_writer):
+    class BrokenQueue:
+        async def publish(self, channel, message):
+            raise RuntimeError("publish failure")
+
+    with pytest.raises(RuntimeError, match="publish failure"):
+        await weather_handler(make_message(), ts_writer=memory_writer, queue=BrokenQueue())

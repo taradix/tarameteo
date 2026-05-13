@@ -16,6 +16,7 @@ from tarameteo.logger import (
     setup_logger,
 )
 from tarameteo.registry import registry_load
+from tarameteo.source import Source
 from tarameteo.ts import InfluxWriter
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,30 @@ def _next_fetch_time() -> datetime:
     return datetime.now(UTC) + SYNC_INTERVAL
 
 
+async def _run_source_once(source: Source, client: httpx.AsyncClient, ts_writer: InfluxWriter, queue: Queue) -> None:
+    try:
+        await source.run_once(client, ts_writer, queue)
+    except source.RECOVERABLE_ERRORS:
+        logger.exception("Recoverable error while fetching source %s", source.name)
+
+
+async def _run_source_backfill(
+    source: Source,
+    client: httpx.AsyncClient,
+    ts_writer: InfluxWriter,
+    from_year: int,
+    from_month: int,
+    to_year: int,
+    to_month: int,
+) -> None:
+    try:
+        await source.backfill_run(
+            client, ts_writer, from_year, from_month, to_year, to_month,
+        )
+    except source.RECOVERABLE_ERRORS:
+        logger.exception("Recoverable error backfilling source %s", source.name)
+
+
 async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | None = None) -> None:
     """Run the periodic sources sync loop as a long-lived coroutine.
 
@@ -54,10 +79,7 @@ async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | Non
 
     async with httpx.AsyncClient(timeout=30) as client:
         for source in sources:
-            try:
-                await source.run_once(client, ts_writer, queue)
-            except Exception:
-                logger.exception("Error in initial fetch for source %s", source.name)
+            await _run_source_once(source, client, ts_writer, queue)
 
         while True:
             next_run = _next_fetch_time()
@@ -69,10 +91,7 @@ async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | Non
                 logger.info("Sources runner stopping.")
                 return
             for source in sources:
-                try:
-                    await source.run_once(client, ts_writer, queue)
-                except Exception:
-                    logger.exception("Error fetching source %s", source.name)
+                await _run_source_once(source, client, ts_writer, queue)
 
 
 async def _run_backfill(
@@ -88,12 +107,9 @@ async def _run_backfill(
 
     async with httpx.AsyncClient(timeout=30) as client:
         for source in sources:
-            try:
-                await source.backfill_run(
-                    client, ts_writer, from_year, from_month, to_year, to_month
-                )
-            except Exception:
-                logger.exception("Error backfilling source %s", source.name)
+            await _run_source_backfill(
+                source, client, ts_writer, from_year, from_month, to_year, to_month,
+            )
 
 
 async def async_main(argv=None) -> None:
