@@ -49,6 +49,13 @@ class MelccfpReading:
     snow: float | None
 
 
+@dataclass(frozen=True)
+class MelccfpMonthData:
+    readings: list[MelccfpReading]
+    latitude: float
+    longitude: float
+
+
 def _parse_float(value: str) -> float | None:
     """Parse a French-locale number from a MELCCFP page.
 
@@ -136,12 +143,60 @@ def parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
 
 async def fetch_month(
     client: httpx.AsyncClient, sensor: MelccfpSensor, year: int, month: int
-) -> list[MelccfpReading]:
+) -> MelccfpMonthData:
     """Fetch and parse one month of data for a MELCCFP sensor."""
     url = f"{BASE_URL}?cle={sensor.key}&date_selection={year:04d}-{month:02d}-01"
     response = await client.get(url)
     response.raise_for_status()
-    return parse_page(response.text, year, month)
+    latitude, longitude = _parse_sensor_coordinates(response.text, sensor.key)
+    return MelccfpMonthData(
+        readings=parse_page(response.text, year, month),
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
+def _parse_dms_coordinate(value: str) -> float:
+    cleaned = (
+        value.strip()
+        .replace("°", " ")
+        .replace("'", " ")
+        .replace('"', " ")
+    )
+    parts = [p for p in cleaned.split() if p]
+    if len(parts) < 3:
+        raise ValueError(f"Invalid DMS coordinate format: {value!r}")
+
+    degrees = float(parts[0])
+    minutes = float(parts[1])
+    seconds = float(parts[2])
+    sign = -1.0 if degrees < 0 else 1.0
+    return sign * (abs(degrees) + (minutes / 60.0) + (seconds / 3600.0))
+
+
+def _parse_sensor_coordinates(summary_html: str, station_key: str) -> tuple[float, float]:
+    if station_key not in summary_html:
+        raise ValueError(f"MELCCFP station {station_key!r} not found in summary response")
+
+    soup = BeautifulSoup(summary_html, "html.parser")
+    latitude_label = soup.find("strong", string=lambda s: bool(s and "Latitude" in s))
+    longitude_label = soup.find("strong", string=lambda s: bool(s and "Longitude" in s))
+    if latitude_label is None or longitude_label is None:
+        raise ValueError(f"MELCCFP coordinates missing for station {station_key!r}")
+
+    latitude_cell = latitude_label.find_parent("td")
+    longitude_cell = longitude_label.find_parent("td")
+    if latitude_cell is None or longitude_cell is None:
+        raise ValueError(f"MELCCFP coordinate cells missing for station {station_key!r}")
+
+    latitude_value_cell = latitude_cell.find_next_sibling("td")
+    longitude_value_cell = longitude_cell.find_next_sibling("td")
+    if latitude_value_cell is None or longitude_value_cell is None:
+        raise ValueError(f"MELCCFP coordinate values missing for station {station_key!r}")
+
+    latitude = _parse_dms_coordinate(latitude_value_cell.get_text(" ", strip=True))
+    longitude = _parse_dms_coordinate(longitude_value_cell.get_text(" ", strip=True))
+    return latitude, longitude
 
 
 def _reading_timestamp(reading: MelccfpReading) -> datetime:
@@ -161,7 +216,11 @@ def _to_aggregate(reading: MelccfpReading, device_id: str) -> AggregateReading:
 
 
 def write_readings(
-    readings: list[MelccfpReading], device_id: str, ts_writer: TSWriter
+    readings: list[MelccfpReading],
+    sensor: MelccfpSensor,
+    latitude: float,
+    longitude: float,
+    ts_writer: TSWriter,
 ) -> None:
     """Write MELCCFP readings to the aggregate InfluxDB measurement."""
     for r in readings:
@@ -181,7 +240,11 @@ def write_readings(
         ts_writer.write_point(
             AGGREGATE_MEASUREMENT,
             fields=fields,
-            tags={SENSOR_TAG: device_id},
+            tags={
+                SENSOR_TAG: sensor.device_id,
+                "latitude": f"{latitude:.6f}",
+                "longitude": f"{longitude:.6f}",
+            },
             timestamp=_reading_timestamp(r),
         )
 
@@ -201,14 +264,15 @@ async def run_once(
     """Fetch current month data for all MELCCFP sensors."""
     now = datetime.now(UTC)
     for sensor in SENSORS:
-        readings = await fetch_month(client, sensor, now.year, now.month)
+        month_data = await fetch_month(client, sensor, now.year, now.month)
+        readings = month_data.readings
         if not readings:
             logger.warning(
                 "No MELCCFP readings for %s %d-%02d",
                 sensor.device_id, now.year, now.month,
             )
             continue
-        write_readings(readings, sensor.device_id, ts_writer)
+        write_readings(readings, sensor, month_data.latitude, month_data.longitude, ts_writer)
         await publish_reading(readings[-1], sensor.device_id, queue)
         latest = readings[-1]
         logger.info(
@@ -235,9 +299,15 @@ async def backfill_run(
         while (year, month) <= (to_year, to_month):
             logger.info("MELCCFP %s: backfilling %d-%02d", sensor.device_id, year, month)
             try:
-                readings = await fetch_month(client, sensor, year, month)
-                write_readings(readings, sensor.device_id, ts_writer)
-                logger.info("  Wrote %d readings", len(readings))
+                month_data = await fetch_month(client, sensor, year, month)
+                write_readings(
+                    month_data.readings,
+                    sensor,
+                    month_data.latitude,
+                    month_data.longitude,
+                    ts_writer,
+                )
+                logger.info("  Wrote %d readings", len(month_data.readings))
             except Exception:
                 logger.exception(
                     "MELCCFP %s: error backfilling %d-%02d",

@@ -209,14 +209,40 @@ class SensorService:
 
     def get_sensor(self, name: str) -> SensorInfo:
         latest = self.get_latest(name)
-        if latest is None:
-            raise ValueError(f"No readings for sensor {name!r}")
-        return SensorInfo(
-            name=name,
-            latitude=latest.latitude,
-            longitude=latest.longitude,
-            statistics=self.get_statistics(name),
+        if latest is not None:
+            return SensorInfo(
+                name=name,
+                latitude=latest.latitude,
+                longitude=latest.longitude,
+                statistics=self.get_statistics(name),
+            )
+
+        aggregate_location = self._get_latest_aggregate_location(name)
+        if aggregate_location is not None:
+            latitude, longitude = aggregate_location
+            return SensorInfo(
+                name=name,
+                latitude=latitude,
+                longitude=longitude,
+                statistics=self.get_statistics(name),
+            )
+
+        raise ValueError(f"No readings for sensor {name!r}")
+
+    def _get_latest_aggregate_location(self, name: str) -> tuple[float, float] | None:
+        point = self.ts_reader.latest(
+            AGGREGATE_MEASUREMENT,
+            tags={SENSOR_TAG: name},
+            lookback=LATEST_LOOKBACK,
         )
+        if point is None:
+            return None
+
+        latitude = point.tags.get("latitude")
+        longitude = point.tags.get("longitude")
+        if latitude is None or longitude is None:
+            raise ValueError(f"Missing location metadata for sensor {name!r}")
+        return float(latitude), float(longitude)
 
     @staticmethod
     def _to_aggregate_reading(sensor: str, point: TSPoint) -> AggregateReading:

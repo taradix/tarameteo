@@ -2,7 +2,12 @@
 
 import pytest
 
-from tarameteo.melccfp import MelccfpReading, _parse_float, parse_page
+from tarameteo.melccfp import (
+    MelccfpReading,
+    _parse_float,
+    _parse_sensor_coordinates,
+    parse_page,
+)
 
 
 # Minimal HTML that mirrors the MELCCFP page table structure.
@@ -112,3 +117,27 @@ def test_parse_page_no_jour_header():
 def test_parse_page_returns_melccfp_readings():
     readings = parse_page(FIXTURE_HTML, year=2025, month=1)
     assert all(isinstance(r, MelccfpReading) for r in readings)
+
+
+def test_parse_sensor_coordinates_from_summary_page():
+    html = """
+    <table>
+      <tr>
+        <td><strong>Latitude :</strong></td>
+        <td>46° 6&#039; 4&#039;&#039;</td>
+      </tr>
+      <tr>
+        <td><strong>Longitude :</strong></td>
+        <td>-75° 38&#039; 53&#039;&#039;</td>
+      </tr>
+      <tr>
+        <td><strong>No. station :</strong></td>
+        <td>7030M51</td>
+      </tr>
+    </table>
+    """
+
+    latitude, longitude = _parse_sensor_coordinates(html, "7030M51")
+
+    assert latitude == pytest.approx(46.1011111111)
+    assert longitude == pytest.approx(-75.6480555556)

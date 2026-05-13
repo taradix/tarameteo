@@ -158,6 +158,57 @@ def test_sensor_get(api_app, memory_writer, unique):
     ))
 
 
+def test_sensor_get_aggregate_only(api_app, memory_writer, unique):
+    name = unique("text")
+    now = datetime.now(UTC)
+
+    memory_writer.write_point(
+        "weather_aggregate",
+        make_aggregate(temperature_min=1.0, temperature_avg=5.0, temperature_max=10.0),
+        tags={"device_id": name, "latitude": 46.101244, "longitude": -75.648066},
+        timestamp=now - timedelta(minutes=5),
+    )
+
+    response = api_app.get(f"/api/sensors/{name}")
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json(), has_entries(
+        name=name,
+        latitude=46.101244,
+        longitude=-75.648066,
+        statistics=has_entries(
+            total_readings=0,
+            last_24h_readings=0,
+            average_temperature=None,
+            average_humidity=None,
+            average_pressure=None,
+            average_rssi=None,
+        ),
+    ))
+
+
+def test_sensor_get_aggregate_only_missing_location(api_app, memory_writer, unique):
+    name = unique("text")
+    now = datetime.now(UTC)
+
+    memory_writer.write_point(
+        "weather_aggregate",
+        make_aggregate(temperature_min=1.0, temperature_avg=5.0, temperature_max=10.0),
+        tags={"device_id": name},
+        timestamp=now - timedelta(minutes=5),
+    )
+
+    response = api_app.get(f"/api/sensors/{name}")
+
+    assert_that(response.status_code, equal_to(404))
+
+
+def test_sensor_get_missing(api_app, unique):
+    response = api_app.get(f"/api/sensors/{unique('text')}")
+
+    assert_that(response.status_code, equal_to(404))
+
+
 def test_sensor_weather_latest(api_app, memory_writer, unique):
     name = unique("text")
     now = datetime.now(UTC)
