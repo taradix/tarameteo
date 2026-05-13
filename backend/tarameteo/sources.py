@@ -32,16 +32,11 @@ def _select_sources(registry: dict, names: list[str]) -> list:
         raise SystemExit(f"Unknown source(s): {', '.join(unknown)}. Available: {', '.join(all_sources)}")
     return [all_sources[n] for n in names]
 
-# Fetch once per day at 15:05 UTC (= 10:05 EST, 11:05 EDT).
-FETCH_UTC_HOUR = 15
+SYNC_INTERVAL = timedelta(hours=1)
 
 
 def _next_fetch_time() -> datetime:
-    now = datetime.now(UTC)
-    target = now.replace(hour=FETCH_UTC_HOUR, minute=5, second=0, microsecond=0)
-    if target <= now:
-        target += timedelta(days=1)
-    return target
+    return datetime.now(UTC) + SYNC_INTERVAL
 
 
 async def _run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str]) -> None:

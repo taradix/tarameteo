@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://aviationweather.gov/api/data/metar"
 
-# Fetch 25 hours to ensure full coverage between daily syncs.
-_SYNC_HOURS = 25
+# Fetch 2 hours to ensure full coverage between hourly syncs.
+_SYNC_HOURS = 2
 
 
 @dataclass(frozen=True)
