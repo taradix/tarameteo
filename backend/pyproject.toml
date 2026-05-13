@@ -41,9 +41,9 @@ check = [
 ]
 
 [project.entry-points."tarameteo_source"]
-melccfp = "tarameteo.melccfp"
-metar = "tarameteo.metar"
-msc = "tarameteo.msc"
+melccfp = "tarameteo.melccfp:source"
+metar = "tarameteo.metar:source"
+msc = "tarameteo.msc:source"
 
 [project.entry-points."pytest11"]
 tarameteo = "tarameteo.testing.fixtures"

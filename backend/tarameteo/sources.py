@@ -46,18 +46,18 @@ async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | Non
     FastAPI lifespan.  Exits cleanly on :exc:`asyncio.CancelledError`.
     """
     registry = registry_load(REGISTRY_GROUP)
-    source_modules = _select_sources(registry, names or [])
+    sources = _select_sources(registry, names or [])
     logger.info(
         "Sources runner started with %d source(s).",
-        len(source_modules),
+        len(sources),
     )
 
     async with httpx.AsyncClient(timeout=30) as client:
-        for module in source_modules:
+        for source in sources:
             try:
-                await module.run_once(client, ts_writer, queue)
+                await source.run_once(client, ts_writer, queue)
             except Exception:
-                logger.exception("Error in initial fetch for source %s", module.__name__)
+                logger.exception("Error in initial fetch for source %s", source.name)
 
         while True:
             next_run = _next_fetch_time()
@@ -68,11 +68,11 @@ async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | Non
             except asyncio.CancelledError:
                 logger.info("Sources runner stopping.")
                 return
-            for module in source_modules:
+            for source in sources:
                 try:
-                    await module.run_once(client, ts_writer, queue)
+                    await source.run_once(client, ts_writer, queue)
                 except Exception:
-                    logger.exception("Error fetching source %s", module.__name__)
+                    logger.exception("Error fetching source %s", source.name)
 
 
 async def _run_backfill(
@@ -84,16 +84,16 @@ async def _run_backfill(
     names: list[str],
 ) -> None:
     registry = registry_load(REGISTRY_GROUP)
-    source_modules = _select_sources(registry, names)
+    sources = _select_sources(registry, names)
 
     async with httpx.AsyncClient(timeout=30) as client:
-        for module in source_modules:
+        for source in sources:
             try:
-                await module.backfill_run(
+                await source.backfill_run(
                     client, ts_writer, from_year, from_month, to_year, to_month
                 )
             except Exception:
-                logger.exception("Error backfilling source %s", module.__name__)
+                logger.exception("Error backfilling source %s", source.name)
 
 
 async def async_main(argv=None) -> None:

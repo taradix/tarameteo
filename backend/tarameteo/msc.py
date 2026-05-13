@@ -12,6 +12,7 @@ from tarameteo.sensors import (
     SENSOR_TAG,
     WeatherReading,
 )
+from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ def _opt_float(value: object) -> float | None:
     return float(value)  # type: ignore[arg-type]
 
 
-def parse_features(features: list[dict], year: int, month: int) -> list[MscReading]:
+def _parse_features(features: list[dict], year: int, month: int) -> list[MscReading]:
     """Parse GeoMet climate-hourly API features into MscReadings.
 
     Returns one MscReading per hour that has all required fields present.
@@ -119,7 +120,7 @@ async def fetch_month(
     response = await client.get(BASE_URL, params=params)
     response.raise_for_status()
     data = response.json()
-    return parse_features(data.get("features", []), year, month)
+    return _parse_features(data.get("features", []), year, month)
 
 
 def write_readings(
@@ -159,64 +160,51 @@ def _to_weather_reading(reading: MscReading, device_id: str) -> WeatherReading:
     )
 
 
-async def publish_reading(
-    reading: MscReading, device_id: str, queue: Queue
-) -> None:
-    """Publish the most recent reading for a sensor to the SSE queue."""
-    await queue.publish(
-        f"weather:{device_id}",
-        _to_weather_reading(reading, device_id).model_dump_json(),
-    )
+class MscSource(Source):
+    """Source implementation for MSC hourly climate stations."""
 
+    @property
+    def _sensors(self) -> list[MscSensor]:
+        return SENSORS
 
-async def run_once(
-    client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
-) -> None:
-    """Fetch current month hourly data for all MSC sensors."""
-    now = datetime.now(UTC)
-    for sensor in SENSORS:
-        readings = await fetch_month(client, sensor, now.year, now.month)
-        if not readings:
-            logger.warning(
-                "No MSC readings for %s %d-%02d",
-                sensor.device_id, now.year, now.month,
-            )
-            continue
-        write_readings(readings, sensor.device_id, ts_writer)
-        await publish_reading(readings[-1], sensor.device_id, queue)
-        latest = readings[-1]
-        logger.info(
-            "MSC %s: stored %d readings for %d-%02d; "
-            "latest %s: T=%s H=%s P=%s rain=%s",
-            sensor.device_id, len(readings), now.year, now.month,
-            latest.utc_timestamp.isoformat(),
-            latest.temperature, latest.humidity, latest.pressure, latest.rain,
-        )
-
-
-async def backfill_run(
-    client: httpx.AsyncClient,
-    ts_writer: TSWriter,
-    from_year: int,
-    from_month: int,
-    to_year: int,
-    to_month: int,
-) -> None:
-    """Backfill historical hourly data for all MSC sensors over the given month range."""
-    for sensor in SENSORS:
-        year, month = from_year, from_month
-        while (year, month) <= (to_year, to_month):
-            logger.info("MSC %s: backfilling %d-%02d", sensor.device_id, year, month)
-            try:
-                readings = await fetch_month(client, sensor, year, month)
-                write_readings(readings, sensor.device_id, ts_writer)
-                logger.info("  Wrote %d readings", len(readings))
-            except Exception:
-                logger.exception(
-                    "MSC %s: error backfilling %d-%02d",
-                    sensor.device_id, year, month,
+    async def run_once(
+        self, client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
+    ) -> None:
+        """Fetch current month hourly data for all MSC sensors."""
+        now = datetime.now(UTC)
+        for sensor in SENSORS:
+            readings = await fetch_month(client, sensor, now.year, now.month)
+            if not readings:
+                logger.warning(
+                    "No MSC readings for %s %d-%02d",
+                    sensor.device_id, now.year, now.month,
                 )
-            month += 1
-            if month > 12:
-                month = 1
-                year += 1
+                continue
+            write_readings(readings, sensor.device_id, ts_writer)
+            await queue.publish(
+                f"weather:{sensor.device_id}",
+                _to_weather_reading(readings[-1], sensor.device_id).model_dump_json(),
+            )
+            latest = readings[-1]
+            logger.info(
+                "MSC %s: stored %d readings for %d-%02d; "
+                "latest %s: T=%s H=%s P=%s rain=%s",
+                sensor.device_id, len(readings), now.year, now.month,
+                latest.utc_timestamp.isoformat(),
+                latest.temperature, latest.humidity, latest.pressure, latest.rain,
+            )
+
+    async def _backfill_month(
+        self,
+        client: httpx.AsyncClient,
+        sensor: MscSensor,
+        year: int,
+        month: int,
+        ts_writer: TSWriter,
+    ) -> None:
+        readings = await fetch_month(client, sensor, year, month)
+        write_readings(readings, sensor.device_id, ts_writer)
+        logger.info("  Wrote %d readings", len(readings))
+
+
+source = MscSource()

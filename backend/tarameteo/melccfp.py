@@ -13,6 +13,7 @@ from tarameteo.sensors import (
     SENSOR_TAG,
     AggregateReading,
 )
+from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ def _parse_float(value: str) -> float | None:
     return float(stripped.replace(",", "."))
 
 
-def parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
+def _parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
     """Parse a MELCCFP monthly summary HTML page.
 
     Returns one MelccfpReading per day that has data.  Future dates and
@@ -141,21 +142,6 @@ def parse_page(html: str, year: int, month: int) -> list[MelccfpReading]:
     return readings
 
 
-async def fetch_month(
-    client: httpx.AsyncClient, sensor: MelccfpSensor, year: int, month: int
-) -> MelccfpMonthData:
-    """Fetch and parse one month of data for a MELCCFP sensor."""
-    url = f"{BASE_URL}?cle={sensor.key}&date_selection={year:04d}-{month:02d}-01"
-    response = await client.get(url)
-    response.raise_for_status()
-    latitude, longitude = _parse_sensor_coordinates(response.text, sensor.key)
-    return MelccfpMonthData(
-        readings=parse_page(response.text, year, month),
-        latitude=latitude,
-        longitude=longitude,
-    )
-
-
 def _parse_dms_coordinate(value: str) -> float:
     cleaned = (
         value.strip()
@@ -199,20 +185,23 @@ def _parse_sensor_coordinates(summary_html: str, station_key: str) -> tuple[floa
     return latitude, longitude
 
 
+async def fetch_month(
+    client: httpx.AsyncClient, sensor: MelccfpSensor, year: int, month: int
+) -> MelccfpMonthData:
+    """Fetch and parse one month of data for a MELCCFP sensor."""
+    url = f"{BASE_URL}?cle={sensor.key}&date_selection={year:04d}-{month:02d}-01"
+    response = await client.get(url)
+    response.raise_for_status()
+    latitude, longitude = _parse_sensor_coordinates(response.text, sensor.key)
+    return MelccfpMonthData(
+        readings=_parse_page(response.text, year, month),
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
 def _reading_timestamp(reading: MelccfpReading) -> datetime:
     return datetime(reading.year, reading.month, reading.day, 12, 0, 0, tzinfo=UTC)
-
-
-def _to_aggregate(reading: MelccfpReading, device_id: str) -> AggregateReading:
-    return AggregateReading(
-        sensor=device_id,
-        timestamp=_reading_timestamp(reading),
-        temperature_min=reading.temperature_min,
-        temperature_avg=reading.temperature_avg,
-        temperature_max=reading.temperature_max,
-        rain=reading.rain,
-        snow=reading.snow,
-    )
 
 
 def write_readings(
@@ -249,71 +238,71 @@ def write_readings(
         )
 
 
-async def publish_reading(
-    reading: MelccfpReading, device_id: str, queue: Queue
-) -> None:
-    """Publish the most recent reading for a sensor to the SSE queue."""
-    await queue.publish(
-        f"weather:{device_id}", _to_aggregate(reading, device_id).model_dump_json()
+def _to_aggregate(reading: MelccfpReading, device_id: str) -> AggregateReading:
+    return AggregateReading(
+        sensor=device_id,
+        timestamp=_reading_timestamp(reading),
+        temperature_min=reading.temperature_min,
+        temperature_avg=reading.temperature_avg,
+        temperature_max=reading.temperature_max,
+        rain=reading.rain,
+        snow=reading.snow,
     )
 
 
-async def run_once(
-    client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
-) -> None:
-    """Fetch current month data for all MELCCFP sensors."""
-    now = datetime.now(UTC)
-    for sensor in SENSORS:
-        month_data = await fetch_month(client, sensor, now.year, now.month)
-        readings = month_data.readings
-        if not readings:
-            logger.warning(
-                "No MELCCFP readings for %s %d-%02d",
-                sensor.device_id, now.year, now.month,
+class MelccfpSource(Source):
+    """Source implementation for MELCCFP weather stations."""
+
+    @property
+    def _sensors(self) -> list[MelccfpSensor]:
+        return SENSORS
+
+    async def run_once(
+        self, client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
+    ) -> None:
+        """Fetch current month data for all MELCCFP sensors."""
+        now = datetime.now(UTC)
+        for sensor in SENSORS:
+            month_data = await fetch_month(client, sensor, now.year, now.month)
+            readings = month_data.readings
+            if not readings:
+                logger.warning(
+                    "No MELCCFP readings for %s %d-%02d",
+                    sensor.device_id, now.year, now.month,
+                )
+                continue
+            write_readings(readings, sensor, month_data.latitude, month_data.longitude, ts_writer)
+            await queue.publish(
+                f"weather:{sensor.device_id}",
+                _to_aggregate(readings[-1], sensor.device_id).model_dump_json(),
             )
-            continue
-        write_readings(readings, sensor, month_data.latitude, month_data.longitude, ts_writer)
-        await publish_reading(readings[-1], sensor.device_id, queue)
-        latest = readings[-1]
-        logger.info(
-            "MELCCFP %s: stored %d readings for %d-%02d; "
-            "latest day %d: Tmax=%s Tavg=%s Tmin=%s rain=%s snow=%s",
-            sensor.device_id, len(readings), now.year, now.month,
-            latest.day,
-            latest.temperature_max, latest.temperature_avg, latest.temperature_min,
-            latest.rain, latest.snow,
+            latest = readings[-1]
+            logger.info(
+                "MELCCFP %s: stored %d readings for %d-%02d; "
+                "latest day %d: Tmax=%s Tavg=%s Tmin=%s rain=%s snow=%s",
+                sensor.device_id, len(readings), now.year, now.month,
+                latest.day,
+                latest.temperature_max, latest.temperature_avg, latest.temperature_min,
+                latest.rain, latest.snow,
+            )
+
+    async def _backfill_month(
+        self,
+        client: httpx.AsyncClient,
+        sensor: MelccfpSensor,
+        year: int,
+        month: int,
+        ts_writer: TSWriter,
+    ) -> None:
+        month_data = await fetch_month(client, sensor, year, month)
+        write_readings(
+            month_data.readings,
+            sensor,
+            month_data.latitude,
+            month_data.longitude,
+            ts_writer,
         )
+        logger.info("  Wrote %d readings", len(month_data.readings))
 
 
-async def backfill_run(
-    client: httpx.AsyncClient,
-    ts_writer: TSWriter,
-    from_year: int,
-    from_month: int,
-    to_year: int,
-    to_month: int,
-) -> None:
-    """Backfill historical data for all MELCCFP sensors over the given month range."""
-    for sensor in SENSORS:
-        year, month = from_year, from_month
-        while (year, month) <= (to_year, to_month):
-            logger.info("MELCCFP %s: backfilling %d-%02d", sensor.device_id, year, month)
-            try:
-                month_data = await fetch_month(client, sensor, year, month)
-                write_readings(
-                    month_data.readings,
-                    sensor,
-                    month_data.latitude,
-                    month_data.longitude,
-                    ts_writer,
-                )
-                logger.info("  Wrote %d readings", len(month_data.readings))
-            except Exception:
-                logger.exception(
-                    "MELCCFP %s: error backfilling %d-%02d",
-                    sensor.device_id, year, month,
-                )
-            month += 1
-            if month > 12:
-                month = 1
-                year += 1
+source = MelccfpSource()

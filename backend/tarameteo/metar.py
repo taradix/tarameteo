@@ -13,6 +13,7 @@ from tarameteo.sensors import (
     SENSOR_TAG,
     WeatherReading,
 )
+from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ def _dewpoint_to_humidity(temp: float, dewp: float) -> float:
     return round(100.0 * math.exp(a * dewp / (b + dewp)) / math.exp(a * temp / (b + temp)), 1)
 
 
-def parse_observations(observations: list[dict]) -> list[MetarReading]:
+def _parse_observations(observations: list[dict]) -> list[MetarReading]:
     """Parse AVW METAR JSON observations into MetarReadings.
 
     Skips observations with missing required fields or unknown station IDs.
@@ -106,7 +107,7 @@ async def fetch_recent(
     if response.status_code == 204:
         return []
     response.raise_for_status()
-    return parse_observations(response.json())
+    return _parse_observations(response.json())
 
 
 def write_readings(
@@ -144,50 +145,53 @@ def _to_weather_reading(reading: MetarReading, device_id: str) -> WeatherReading
     )
 
 
-async def publish_reading(
-    reading: MetarReading, device_id: str, queue: Queue
-) -> None:
-    """Publish the most recent reading for a sensor to the SSE queue."""
-    await queue.publish(
-        f"weather:{device_id}",
-        _to_weather_reading(reading, device_id).model_dump_json(),
-    )
+class MetarSource(Source):
+    """Source implementation for METAR observations."""
 
+    @property
+    def name(self) -> str:
+        return "MetarSource"
 
-async def run_once(
-    client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
-) -> None:
-    """Fetch recent METAR observations for all sensors."""
-    readings = await fetch_recent(client)
-    by_icao: dict[str, list[MetarReading]] = {}
-    for r in readings:
-        by_icao.setdefault(r.icao_id, []).append(r)
+    async def run_once(
+        self, client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
+    ) -> None:
+        """Fetch recent METAR observations for all sensors."""
+        readings = await fetch_recent(client)
+        by_icao: dict[str, list[MetarReading]] = {}
+        for r in readings:
+            by_icao.setdefault(r.icao_id, []).append(r)
 
-    for sensor in SENSORS:
-        station_readings = by_icao.get(sensor.icao_id, [])
-        if not station_readings:
-            logger.warning("No METAR readings for %s", sensor.device_id)
-            continue
-        write_readings(station_readings, sensor.device_id, ts_writer)
-        await publish_reading(station_readings[-1], sensor.device_id, queue)
-        latest = station_readings[-1]
-        logger.info(
-            "METAR %s: stored %d readings; latest %s: T=%s H=%s P=%s",
-            sensor.device_id, len(station_readings),
-            latest.timestamp.isoformat(),
-            latest.temperature, latest.humidity, latest.pressure,
+        for sensor in SENSORS:
+            station_readings = by_icao.get(sensor.icao_id, [])
+            if not station_readings:
+                logger.warning("No METAR readings for %s", sensor.device_id)
+                continue
+            write_readings(station_readings, sensor.device_id, ts_writer)
+            await queue.publish(
+                f"weather:{sensor.device_id}",
+                _to_weather_reading(station_readings[-1], sensor.device_id).model_dump_json(),
+            )
+            latest = station_readings[-1]
+            logger.info(
+                "METAR %s: stored %d readings; latest %s: T=%s H=%s P=%s",
+                sensor.device_id, len(station_readings),
+                latest.timestamp.isoformat(),
+                latest.temperature, latest.humidity, latest.pressure,
+            )
+
+    async def backfill_run(
+        self,
+        client: httpx.AsyncClient,
+        ts_writer: TSWriter,
+        from_year: int,
+        from_month: int,
+        to_year: int,
+        to_month: int,
+    ) -> None:
+        """METAR historical backfill is not supported by the AVW API."""
+        logger.warning(
+            "METAR backfill is not supported; the AVW API only provides recent observations."
         )
 
 
-async def backfill_run(
-    client: httpx.AsyncClient,
-    ts_writer: TSWriter,
-    from_year: int,
-    from_month: int,
-    to_year: int,
-    to_month: int,
-) -> None:
-    """METAR historical backfill is not supported by the AVW API."""
-    logger.warning(
-        "METAR backfill is not supported; the AVW API only provides recent observations."
-    )
+source = MetarSource()
