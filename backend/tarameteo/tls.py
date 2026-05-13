@@ -8,12 +8,9 @@ from pathlib import Path
 
 from attrs import define
 
-from tarameteo.crypto import (
-    key_matches_cert as _key_matches_cert,
-)
-from tarameteo.crypto import (
-    load_cert,
-)
+from tarameteo.crypto import key_matches_cert as _key_matches_cert
+from tarameteo.crypto import load_cert
+from tarameteo.fs import atomic_write
 
 
 @define(frozen=True)
@@ -63,8 +60,7 @@ class TLSCredentials:
 
     def save(self, key_pem: str, cert_pem: str, ca_pem: str | None = None) -> None:
         """Save the PEMs to files securely."""
-        self.key_path.touch(0o600)
-        self.key_path.write_text(key_pem)
+        atomic_write(self.key_path, key_pem, mode=0o600)
         self.cert_path.write_text(cert_pem)
         if ca_pem is not None:
             self.ca_path.write_text(ca_pem)
