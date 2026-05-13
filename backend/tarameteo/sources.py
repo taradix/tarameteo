@@ -15,23 +15,28 @@ from tarameteo.logger import (
     LoggerLevelAction,
     setup_logger,
 )
-from tarameteo.registry import registry_load
+from tarameteo.melccfp import source as melccfp_source
+from tarameteo.metar import source as metar_source
+from tarameteo.msc import source as msc_source
 from tarameteo.source import Source
 from tarameteo.ts import InfluxWriter
 
 logger = logging.getLogger(__name__)
 
-REGISTRY_GROUP = "tarameteo_source"
+_SOURCES: dict[str, Source] = {
+    "metar": metar_source,
+    "msc": msc_source,
+    "melccfp": melccfp_source,
+}
 
 
-def _select_sources(registry: dict, names: list[str]) -> list:
-    all_sources = registry.get(REGISTRY_GROUP, {})
+def _select_sources(names: list[str]) -> list[Source]:
     if not names:
-        return list(all_sources.values())
-    unknown = [n for n in names if n not in all_sources]
+        return list(_SOURCES.values())
+    unknown = [n for n in names if n not in _SOURCES]
     if unknown:
-        raise SystemExit(f"Unknown source(s): {', '.join(unknown)}. Available: {', '.join(all_sources)}")
-    return [all_sources[n] for n in names]
+        raise SystemExit(f"Unknown source(s): {', '.join(unknown)}. Available: {', '.join(_SOURCES)}")
+    return [_SOURCES[n] for n in names]
 
 SYNC_INTERVAL = timedelta(hours=1)
 
@@ -70,8 +75,7 @@ async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | Non
     Intended to be launched as an :mod:`asyncio` background task from the
     FastAPI lifespan.  Exits cleanly on :exc:`asyncio.CancelledError`.
     """
-    registry = registry_load(REGISTRY_GROUP)
-    sources = _select_sources(registry, names or [])
+    sources = _select_sources(names or [])
     logger.info(
         "Sources runner started with %d source(s).",
         len(sources),
@@ -102,8 +106,7 @@ async def _run_backfill(
     to_month: int,
     names: list[str],
 ) -> None:
-    registry = registry_load(REGISTRY_GROUP)
-    sources = _select_sources(registry, names)
+    sources = _select_sources(names)
 
     async with httpx.AsyncClient(timeout=30) as client:
         for source in sources:

@@ -40,11 +40,6 @@ check = [
   "ruff>=0.15.0,<1.0.0",
 ]
 
-[project.entry-points."tarameteo_source"]
-melccfp = "tarameteo.melccfp:source"
-metar = "tarameteo.metar:source"
-msc = "tarameteo.msc:source"
-
 [project.entry-points."pytest11"]
 tarameteo = "tarameteo.testing.fixtures"
 tarameteo-services = "tarameteo.testing.services"
