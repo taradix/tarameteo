@@ -97,9 +97,9 @@ async def test_weather_handler_rejects_wrong_domain(memory_store, memory_writer,
 
 
 async def test_weather_handler_falls_back_to_server_time_on_ntp_failure(memory_store, memory_writer, memory_queue):
-    # millis() fallback: firmware boot time in ms treated as seconds → year 1970
+    # Firmware sends timestamp=0 when NTP sync has not occurred
     before = datetime.now(UTC)
-    await weather_handler(make_message(timestamp=30000), ts_writer=memory_writer, queue=memory_queue)
+    await weather_handler(make_message(timestamp=0), ts_writer=memory_writer, queue=memory_queue)
     after = datetime.now(UTC)
 
     assert_that(memory_store.points, contains_exactly(
