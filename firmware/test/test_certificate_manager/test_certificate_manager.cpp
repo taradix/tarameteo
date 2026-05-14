@@ -419,7 +419,7 @@ void test_certificate_manager_location_persists_across_instances(void) {
     certMgr1.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
     certMgr1.startProvisioningMode(&mockServer);
 
-    WiFiManager wifiMgr(testPrefs, &mockWiFi, &mockArduino);
+    WiFiManager wifiMgr;
     certMgr1.setWiFiManager(&wifiMgr);
 
     mockServer.setArg("wifi_ssid", "my-network");

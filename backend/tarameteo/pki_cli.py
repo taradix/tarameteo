@@ -205,7 +205,7 @@ def issue(
 
     if not response.chain_pem:
         return IssueResult(
-            status=RotateStatus.ERROR,
+            status=IssueStatus.ERROR,
             reasons=("CA returned an empty certificate chain",),
             key_path=key_path,
             cert_path=cert_path,
