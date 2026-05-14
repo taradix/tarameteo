@@ -111,8 +111,10 @@ def init(
         )
 
     try:
-        atomic_write(key_path, key_pem, 0o600)
-        atomic_write(cert_path, response.cert_pem, 0o644)
+        atomic_write([
+            (key_path, key_pem, 0o600),
+            (cert_path, response.cert_pem, 0o644),
+        ])
     except Exception as e:
         return InitResult(
             status=InitStatus.ERROR,
@@ -211,9 +213,11 @@ def issue(
         )
 
     try:
-        atomic_write(key_path, key_pem, mode=0o600)
-        atomic_write(cert_path, response.cert_pem)
-        atomic_write(ca_cert_path, response.chain_pem[0])
+        atomic_write([
+            (key_path, key_pem, 0o600),
+            (cert_path, response.cert_pem, 0o644),
+            (ca_cert_path, response.chain_pem[0], 0o644),
+        ])
     except Exception as e:
         return IssueResult(
             status=IssueStatus.ERROR,

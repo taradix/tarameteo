@@ -60,7 +60,10 @@ class TLSCredentials:
 
     def save(self, key_pem: str, cert_pem: str, ca_pem: str | None = None) -> None:
         """Save the PEMs to files securely."""
-        atomic_write(self.key_path, key_pem, mode=0o600)
-        atomic_write(self.cert_path, cert_pem)
+        writes = [
+            (self.key_path, key_pem, 0o600),
+            (self.cert_path, cert_pem, 0o644),
+        ]
         if ca_pem is not None:
-            atomic_write(self.ca_path, ca_pem)
+            writes.append((self.ca_path, ca_pem, 0o644))
+        atomic_write(writes)
