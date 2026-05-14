@@ -201,6 +201,15 @@ def issue(
             ca_cert_path=ca_cert_path,
         )
 
+    if not response.chain_pem:
+        return IssueResult(
+            status=RotateStatus.ERROR,
+            reasons=("CA returned an empty certificate chain",),
+            key_path=key_path,
+            cert_path=cert_path,
+            ca_cert_path=ca_cert_path,
+        )
+
     try:
         atomic_write(key_path, key_pem, mode=0o600)
         atomic_write(cert_path, response.cert_pem)
