@@ -82,6 +82,7 @@ private:
 
     // NVS operations
     bool loadFromNVS();
+    bool loadFromEmbedded();
     bool saveToNVS(const char* certPem, const char* keyPem, const char* caCertPem);
 
     // Provisioning server

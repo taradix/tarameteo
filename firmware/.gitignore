@@ -9,3 +9,4 @@ coverage.info
 coverage.cleaned.info
 coverage_html/
 compile_commands.json
+certs/
