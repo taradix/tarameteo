@@ -21,6 +21,7 @@
 #include "config.h"
 #include <Arduino.h>
 #include <Preferences.h>
+#include <cmath>
 #include <esp_sleep.h>
 
 // CertificateManager adapters
@@ -237,6 +238,12 @@ void loop() {
       certManager.getLatitude(),
       certManager.getLongitude()
   };
+
+  // Validate sensor readings
+  if (std::isnan(data.temperature) || std::isnan(data.pressure) || std::isnan(data.humidity)) {
+    Serial.println("ERROR: Sensor returned invalid readings");
+    powerManager.sleep();
+  }
 
   // Print sensor readings
   Serial.println("Sensor Readings:");
