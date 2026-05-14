@@ -38,11 +38,13 @@ def _select_sources(names: list[str]) -> list[Source]:
         raise SystemExit(f"Unknown source(s): {', '.join(unknown)}. Available: {', '.join(_SOURCES)}")
     return [_SOURCES[n] for n in names]
 
-SYNC_INTERVAL = timedelta(hours=1)
-
 
 def _next_fetch_time() -> datetime:
-    return datetime.now(UTC) + SYNC_INTERVAL
+    now = datetime.now(UTC)
+    target = now.replace(minute=5, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(hours=1)
+    return target
 
 
 async def _run_source_once(source: Source, client: httpx.AsyncClient, ts_writer: InfluxWriter, queue: Queue) -> None:
