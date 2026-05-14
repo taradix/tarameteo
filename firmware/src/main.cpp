@@ -79,31 +79,26 @@ void setup() {
     Serial.println("WiFi credentials not found in NVS");
   }
 
-  // Initialize certificate manager
+  // Initialize certificate manager (certs are pre-flashed into firmware)
   Serial.println("Initializing certificate manager...");
   certManager.setWiFiManager(&wifiManager); // Link for unified provisioning
   if (!certManager.begin()) {
-    Serial.println("Certificates not found in NVS");
+    Serial.println("Certificate initialization failed");
   }
 
-  // Check if provisioning is needed (WiFi or Certificates)
-  if (wifiManager.needsProvisioning() || certManager.needsProvisioning()) {
+  // Provisioning is only needed for WiFi credentials (certs are pre-flashed)
+  if (wifiManager.needsProvisioning()) {
     Serial.println("===========================================");
     Serial.println("PROVISIONING MODE");
     Serial.println("===========================================");
-    if (wifiManager.needsProvisioning()) {
-      Serial.println("WiFi credentials not found!");
-    }
-    if (certManager.needsProvisioning()) {
-      Serial.println("mTLS certificates not found!");
-    }
+    Serial.println("WiFi credentials not found!");
     Serial.println();
     Serial.println("Device is in provisioning mode.");
     Serial.println();
-    Serial.println("To provision (WiFi + Certificates):");
+    Serial.println("To provision WiFi and location:");
     Serial.printf("1. Connect to WiFi network: TaraMeteoProv-XXXX\n");
     Serial.println("2. Open browser to: http://192.168.4.1");
-    Serial.println("3. Enter WiFi credentials and upload certificates");
+    Serial.println("3. Enter WiFi credentials and sensor location");
     Serial.println();
     Serial.println("Device will wait up to 5 minutes for provisioning...");
     Serial.println("===========================================");
@@ -119,7 +114,7 @@ void setup() {
     // Wait for provisioning - must call handleProvisioningLoop() to service HTTP requests
     unsigned long startTime = millis();
     unsigned long lastDot = millis();
-    while ((wifiManager.needsProvisioning() || certManager.needsProvisioning()) && (millis() - startTime) < 300000) {
+    while (wifiManager.needsProvisioning() && (millis() - startTime) < 300000) {
       certManager.handleProvisioningLoop(); // Service HTTP requests
       delay(10);                            // Small delay to prevent watchdog issues
 
@@ -130,7 +125,7 @@ void setup() {
       }
     }
 
-    if (wifiManager.needsProvisioning() || certManager.needsProvisioning()) {
+    if (wifiManager.needsProvisioning()) {
       Serial.println("\nProvisioning timeout. Rebooting...");
       delay(2000);
       ESP.restart();

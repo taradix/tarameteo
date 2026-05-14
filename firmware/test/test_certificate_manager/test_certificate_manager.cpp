@@ -16,10 +16,12 @@ void delay(unsigned long ms) { _mock_millis += ms; }
 #endif
 
 #include "../../lib/CertificateManager/include/CertificateManager.h"
+#include "../../lib/WiFiManager/WiFiManager.h"
 
 // Include implementation files for linking
 #include "../../lib/CertificateManager/src/CertificateManager.cpp"
 #include "../../lib/CertificateManager/src/X509Parser.cpp"
+#include "../../lib/WiFiManager/WiFiManager.cpp"
 #include "../../test/mocks/mocks.cpp"
 
 // Test data - valid PEM certificate
@@ -334,34 +336,44 @@ void test_certificate_manager_provisioning_loop(void) {
   TEST_ASSERT_GREATER_THAN(0, mockServer.handleClientCallCount);
 }
 
-void test_certificate_manager_provision_request_with_valid_certs(void) {
+void test_certificate_manager_provision_request_with_wifi(void) {
+  MockWebServer mockServer;
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  certMgr.begin();
+
+  // Pre-flash certs so the manager is provisioned for cert purposes
+  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
+  certMgr.startProvisioningMode(&mockServer);
+
+  // Provisioning form now only accepts WiFi + location
+  mockServer.setArg("wifi_ssid", "my-network");
+  mockServer.setArg("wifi_password", "my-password");
+  mockServer.setArg("latitude", "45.504");
+  mockServer.setArg("longitude", "-73.617");
+
+  // Need a WiFiManager for the handler to store credentials
+  // In UNIT_TEST mode, the mock path is taken
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  mockServer.triggerHandler("/provision");
+
+  TEST_ASSERT_EQUAL(200, mockServer.lastResponseCode);
+  TEST_ASSERT_TRUE(mockArduino.hasLogContaining("WiFi credentials stored"));
+}
+
+void test_certificate_manager_provision_request_missing_wifi(void) {
   MockWebServer mockServer;
   CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
   certMgr.begin();
   certMgr.startProvisioningMode(&mockServer);
 
-  mockServer.setArg("cert", VALID_CERT_PEM);
-  mockServer.setArg("key", VALID_KEY_PEM);
+  // Missing wifi_ssid and wifi_password
   mockServer.setArg("latitude", "45.504");
   mockServer.setArg("longitude", "-73.617");
   mockServer.triggerHandler("/provision");
 
-  TEST_ASSERT_EQUAL(200, mockServer.lastResponseCode);
-  TEST_ASSERT_TRUE(certMgr.isProvisioned());
-}
-
-void test_certificate_manager_provision_request_missing_fields(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-  certMgr.startProvisioningMode(&mockServer);
-
-  // Missing cert
-  mockServer.setArg("key", VALID_KEY_PEM);
-  mockServer.triggerHandler("/provision");
-
   TEST_ASSERT_EQUAL(400, mockServer.lastResponseCode);
-  TEST_ASSERT_FALSE(certMgr.isProvisioned());
 }
 
 void test_certificate_manager_provision_request_missing_location(void) {
@@ -370,23 +382,26 @@ void test_certificate_manager_provision_request_missing_location(void) {
   certMgr.begin();
   certMgr.startProvisioningMode(&mockServer);
 
-  // Missing latitude and longitude
-  mockServer.setArg("cert", VALID_CERT_PEM);
-  mockServer.setArg("key", VALID_KEY_PEM);
+  // Has WiFi but missing latitude and longitude
+  mockServer.setArg("wifi_ssid", "my-network");
+  mockServer.setArg("wifi_password", "my-password");
   mockServer.triggerHandler("/provision");
 
   TEST_ASSERT_EQUAL(400, mockServer.lastResponseCode);
-  TEST_ASSERT_FALSE(certMgr.isProvisioned());
 }
 
 void test_certificate_manager_provision_stores_location(void) {
   MockWebServer mockServer;
   CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
   certMgr.begin();
+  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
   certMgr.startProvisioningMode(&mockServer);
 
-  mockServer.setArg("cert", VALID_CERT_PEM);
-  mockServer.setArg("key", VALID_KEY_PEM);
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  mockServer.setArg("wifi_ssid", "my-network");
+  mockServer.setArg("wifi_password", "my-password");
   mockServer.setArg("latitude", "45.504");
   mockServer.setArg("longitude", "-73.617");
   mockServer.triggerHandler("/provision");
@@ -401,9 +416,14 @@ void test_certificate_manager_location_persists_across_instances(void) {
     MockWebServer mockServer;
     CertificateManager certMgr1(testPrefs, &mockWiFi, &mockArduino);
     certMgr1.begin();
+    certMgr1.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
     certMgr1.startProvisioningMode(&mockServer);
-    mockServer.setArg("cert", VALID_CERT_PEM);
-    mockServer.setArg("key", VALID_KEY_PEM);
+
+    WiFiManager wifiMgr(testPrefs, &mockWiFi, &mockArduino);
+    certMgr1.setWiFiManager(&wifiMgr);
+
+    mockServer.setArg("wifi_ssid", "my-network");
+    mockServer.setArg("wifi_password", "my-password");
     mockServer.setArg("latitude", "45.504");
     mockServer.setArg("longitude", "-73.617");
     mockServer.triggerHandler("/provision");
@@ -414,6 +434,22 @@ void test_certificate_manager_location_persists_across_instances(void) {
 
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLatitude());
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLongitude());
+}
+
+// ========================================
+// Test Cases - Load From Embedded
+// ========================================
+
+void test_certificate_manager_load_from_embedded_returns_false_in_unit_test(void) {
+  // In UNIT_TEST builds, loadFromEmbedded() always returns false
+  // because the extern symbols don't exist. This tests that begin()
+  // falls through correctly to needsProvisioning().
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+
+  bool result = certMgr.begin();
+
+  TEST_ASSERT_FALSE(result);
+  TEST_ASSERT_TRUE(certMgr.needsProvisioning());
 }
 
 // ========================================
@@ -489,11 +525,14 @@ int main(int argc, char **argv) {
   RUN_TEST(test_certificate_manager_start_provisioning_mode);
   RUN_TEST(test_certificate_manager_stop_provisioning_mode);
   RUN_TEST(test_certificate_manager_provisioning_loop);
-  RUN_TEST(test_certificate_manager_provision_request_with_valid_certs);
-  RUN_TEST(test_certificate_manager_provision_request_missing_fields);
+  RUN_TEST(test_certificate_manager_provision_request_with_wifi);
+  RUN_TEST(test_certificate_manager_provision_request_missing_wifi);
   RUN_TEST(test_certificate_manager_provision_request_missing_location);
   RUN_TEST(test_certificate_manager_provision_stores_location);
   RUN_TEST(test_certificate_manager_location_persists_across_instances);
+
+  // Load from embedded tests
+  RUN_TEST(test_certificate_manager_load_from_embedded_returns_false_in_unit_test);
 
   // CN extraction tests
   RUN_TEST(test_certificate_manager_extract_cn_from_certificate);
@@ -527,11 +566,12 @@ void loop() {
   RUN_TEST(test_certificate_manager_start_provisioning_mode);
   RUN_TEST(test_certificate_manager_stop_provisioning_mode);
   RUN_TEST(test_certificate_manager_provisioning_loop);
-  RUN_TEST(test_certificate_manager_provision_request_with_valid_certs);
-  RUN_TEST(test_certificate_manager_provision_request_missing_fields);
+  RUN_TEST(test_certificate_manager_provision_request_with_wifi);
+  RUN_TEST(test_certificate_manager_provision_request_missing_wifi);
   RUN_TEST(test_certificate_manager_provision_request_missing_location);
   RUN_TEST(test_certificate_manager_provision_stores_location);
   RUN_TEST(test_certificate_manager_location_persists_across_instances);
+  RUN_TEST(test_certificate_manager_load_from_embedded_returns_false_in_unit_test);
   RUN_TEST(test_certificate_manager_extract_cn_from_certificate);
   RUN_TEST(test_certificate_manager_persistence_across_instances);
   UNITY_END();

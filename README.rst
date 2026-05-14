@@ -22,6 +22,27 @@ Outputs:
 - ``<device_id>.pem`` — client certificate (CN = ``<device_id>``)
 - ``ca.pem`` — CA certificate
 
+Flash a sensor
+--------------
+
+Certificates are embedded into the firmware at build time. Set ``SENSOR_ID``
+to the device identifier (used as the certificate CN and MQTT topic)::
+
+    SENSOR_ID=outdoor-north uv run pio run -e esp32 --target upload
+
+On first boot, the sensor enters **provisioning mode** (WiFi AP
+``TaraMeteoProv-XXXX``) where you provide WiFi credentials and GPS location
+via a web form at ``http://192.168.4.1``.
+
+To erase and re-provision::
+
+    uv run pio run -t erase
+    SENSOR_ID=outdoor-north uv run pio run -e esp32 --target upload
+
+To monitor serial output::
+
+    uv run pio device monitor
+
 Wire a sensor
 -------------
 
@@ -44,10 +65,3 @@ in I²C mode.
 +----------------------+---------------------------+------------------------------+
 | SDI                  | SDA (I²C Data)            | Data line                    |
 +----------------------+---------------------------+------------------------------+
-
-Flash a sensor
---------------
-
-% uv run pio run -t upload
-% uv run pio run -t erase
-% uv run pio device monitor                                                                                                         [
