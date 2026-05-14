@@ -1,4 +1,5 @@
 #include "BME280Sensor.h"
+#include <cmath>
 
 BME280Sensor::BME280Sensor(uint8_t address, int8_t sda, int8_t scl, float seaLevelPressure)
     : _address(address), _sda(sda), _scl(scl), _seaLevelPressure(seaLevelPressure), _available(false) {
@@ -37,7 +38,7 @@ bool BME280Sensor::configureSensor() {
 float BME280Sensor::getTemperature() const {
   if (!_available) {
     updateLastError("Sensor not available");
-    return 0.0f;
+    return NAN;
   }
   return const_cast<Adafruit_BME280 &>(_bme).readTemperature();
 }
@@ -45,7 +46,7 @@ float BME280Sensor::getTemperature() const {
 float BME280Sensor::getPressure() const {
   if (!_available) {
     updateLastError("Sensor not available");
-    return 0.0f;
+    return NAN;
   }
   return const_cast<Adafruit_BME280 &>(_bme).readPressure() / 100.0f; // Convert Pa to hPa
 }
@@ -53,7 +54,7 @@ float BME280Sensor::getPressure() const {
 float BME280Sensor::getHumidity() const {
   if (!_available) {
     updateLastError("Sensor not available");
-    return 0.0f;
+    return NAN;
   }
   return const_cast<Adafruit_BME280 &>(_bme).readHumidity();
 }
@@ -61,7 +62,7 @@ float BME280Sensor::getHumidity() const {
 float BME280Sensor::getAltitude() const {
   if (!_available) {
     updateLastError("Sensor not available");
-    return 0.0f;
+    return NAN;
   }
   return const_cast<Adafruit_BME280 &>(_bme).readAltitude(_seaLevelPressure);
 }
