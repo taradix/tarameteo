@@ -42,8 +42,9 @@ bool TimeManager::syncTimeWithNTP() {
 
 unsigned long TimeManager::getCurrentTimestamp() {
   if (!_timeSynced) {
-    // Fallback to millis() if time is not synced
-    return millis();
+    // Return 0 to signal that no valid time is available.
+    // The backend detects pre-2020 timestamps and substitutes server time.
+    return 0;
   }
   return time(nullptr);
 }
