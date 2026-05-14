@@ -47,8 +47,9 @@ bool CertificateManager::begin() {
       _arduino->log("CertificateManager: Certificates validated successfully");
       return true;
     } else {
-      _arduino->log("CertificateManager: Certificate validation failed");
-      // Don't return false - allow provisioning to proceed
+      _arduino->log("CertificateManager: Certificate validation failed, clearing invalid certificates");
+      clearClientCredentials();
+      clearCACertificate();
     }
   }
 
