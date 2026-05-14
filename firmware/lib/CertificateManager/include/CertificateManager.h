@@ -15,7 +15,7 @@ public:
     static const int MAX_CERT_SIZE = 4096;
     static const int MAX_KEY_SIZE = 4096;
     static const int MAX_CN_LENGTH = 64;
-    static const int CERT_EXPIRY_WARNING_DAYS = 30;
+    static const int CERT_EXPIRY_WARNING_DAYS = 365;
 
     // Constructor with dependency injection
     CertificateManager(Preferences& prefs, IWiFi* wifi, IArduino* arduino);

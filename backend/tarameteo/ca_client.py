@@ -18,7 +18,7 @@ from yarl import URL
 from tarameteo.pki import CertificateMaterial
 
 TTL_MIN = 1
-TTL_MAX = 365
+TTL_MAX = 3650
 
 
 def validate_ttl_days(value: int | None) -> int | None:

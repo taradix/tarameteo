@@ -14,7 +14,7 @@ Provision a new sensor
 Generate a key and client certificate for a new sensor::
 
     export PKI_API_TOKEN=<CA_TOKEN>
-    tarameteo-pki rotate <device_id>
+    tarameteo-pki issue <device_id>
 
 Outputs:
 

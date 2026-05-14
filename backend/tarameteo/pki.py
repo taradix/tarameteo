@@ -30,7 +30,7 @@ from tarameteo.crypto import (
     load_key,
 )
 
-DEFAULT_TTL_DAYS = 30
+DEFAULT_TTL_DAYS = 3650
 
 
 class CertificateMaterial(BaseModel):

@@ -1,8 +1,6 @@
 """Integration tests for the MQTT module."""
 
 import asyncio
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from hamcrest import (
@@ -10,7 +8,6 @@ from hamcrest import (
     contains_exactly,
     has_properties,
 )
-from pytest_xdocker.retry import retry
 
 from tarameteo.mqtt import (
     MQTTConsumer,
@@ -78,13 +75,3 @@ async def test_mqtt_receive_message(make_mqtt_consumer, mqtt_publisher):
         qos=0,
         retain=False,
     )))
-
-
-def test_mqtt_reload_certificates(make_certs, make_mqtt_consumer):
-    """Updating certificates should call reload."""
-    with patch.object(MQTTConsumer, "reload") as mock_reload:
-        consumer = make_mqtt_consumer("weather/+/event", lambda _m: None)
-        path = Path(consumer.cafile).parent
-        make_certs("weather-consumer", path)
-
-        retry(mock_reload.assert_called_once).catching(AssertionError)

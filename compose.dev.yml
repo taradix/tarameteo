@@ -40,5 +40,5 @@ services:
       - sh
       - -ec
       - |
-        tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns ${SERVER_HOSTNAME} --san-ip ${IPV4_NETWORK:-172.22.1}.241
+        tarameteo-pki issue mosquitto --san-dns tarameteo-mosquitto --san-dns ${SERVER_HOSTNAME} --san-ip ${IPV4_NETWORK:-172.22.1}.241
         chown -R 1883:1883 /tls

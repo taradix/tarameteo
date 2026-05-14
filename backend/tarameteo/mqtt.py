@@ -1,4 +1,4 @@
-"""MQTT module with mTLS support and automatic certificate rotation handling."""
+"""MQTT module with mTLS support."""
 
 import json
 import logging
@@ -7,13 +7,10 @@ import ssl
 import threading
 from collections import deque
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, Self
 
 import paho.mqtt.client as mqtt
 from attrs import define, field
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
 
 logger = logging.getLogger(__name__)
 
@@ -42,54 +39,9 @@ class MQTTMessage:
         )
 
 
-@define(eq=False)
-class _CertWatchHandler(FileSystemEventHandler):
-    """Watchdog handler that detects certificate file changes with debounce."""
-
-    _cert_paths: set[str]
-    _callback: Callable[[], None]
-    _debounce_seconds: float = 2.0
-    _timer: threading.Timer | None = field(init=False, default=None)
-    _lock: threading.Lock = field(init=False, factory=threading.Lock)
-
-    def __attrs_post_init__(self):
-        super().__init__()
-
-    def on_modified(self, event):
-        self._handle(event)
-
-    def on_moved(self, event):
-        self._handle(event)
-
-    def _handle(self, event):
-        if event.is_directory:
-            return
-
-        # atomic_write renames a temp file → dest_path is the real cert path
-        path = getattr(event, "dest_path", None) or event.src_path
-        resolved = str(Path(path).resolve())
-        if resolved not in self._cert_paths:
-            return
-
-        logger.debug("Certificate file changed: %s", resolved)
-        with self._lock:
-            if self._timer is not None:
-                self._timer.cancel()
-            self._timer = threading.Timer(self._debounce_seconds, self._fire)
-            self._timer.daemon = True
-            self._timer.start()
-
-    def _fire(self):
-        logger.info("Debounce expired, triggering certificate reload")
-        try:
-            self._callback()
-        except Exception:
-            logger.exception("Error in cert reload callback")
-
-
 @define
 class MQTTBase:
-    """Base class providing mTLS connection lifecycle and cert watching."""
+    """Base class providing mTLS connection lifecycle."""
 
     host: str
     cafile: str = field(kw_only=True)
@@ -100,11 +52,8 @@ class MQTTBase:
     client_id: str = field(kw_only=True)
     port: int = field(default=8883, kw_only=True)
     keepalive: int = field(default=60, kw_only=True)
-    watch_certs: bool = field(default=True, kw_only=True)
     _client: mqtt.Client | None = field(init=False, default=None)
     _connected: threading.Event = field(init=False, factory=threading.Event)
-    _reinit_lock: threading.Lock = field(init=False, factory=threading.Lock)
-    _observer: Observer | None = field(init=False, default=None)
     _running: bool = field(init=False, default=False)
 
     @classmethod
@@ -166,60 +115,16 @@ class MQTTBase:
         self._client = self._build_client()
         self._client.connect(self.host, self.port, self.keepalive)
         self._client.loop_start()
-        if self.watch_certs:
-            self._start_cert_watcher()
         self._running = True
 
     def disconnect(self):
-        """Stop cert watcher, networking loop, and disconnect."""
+        """Stop networking loop and disconnect."""
         self._running = False
         self._connected.clear()
-        self._stop_cert_watcher()
         if self._client is not None:
             self._client.loop_stop()
             self._client.disconnect()
             self._client = None
-
-    def reload(self):
-        """Tear down and rebuild the MQTT client with fresh TLS context."""
-        with self._reinit_lock:
-            if not self._running:
-                return
-            logger.info("Reinitializing MQTT connection due to cert change")
-            self._connected.clear()
-            try:
-                if self._client is not None:
-                    self._client.loop_stop()
-                    self._client.disconnect()
-                self._client = self._build_client()
-                self._client.connect(self.host, self.port, self.keepalive)
-                self._client.loop_start()
-            except Exception:
-                logger.exception("Failed to reinitialize MQTT connection")
-
-    def _start_cert_watcher(self):
-        cert_paths = set()
-        watch_dirs = set()
-        for path_str in (self.cafile, self.certfile, self.keyfile):
-            if path_str is None:
-                continue
-            resolved = str(Path(path_str).resolve())
-            cert_paths.add(resolved)
-            watch_dirs.add(os.path.dirname(resolved))
-
-        handler = _CertWatchHandler(cert_paths, lambda: self.reload())
-        self._observer = Observer()
-        for d in watch_dirs:
-            self._observer.schedule(handler, d, recursive=False)
-        self._observer.daemon = True
-        self._observer.start()
-        logger.info("Certificate watcher started for %s", watch_dirs)
-
-    def _stop_cert_watcher(self):
-        if self._observer is not None:
-            self._observer.stop()
-            self._observer.join(timeout=5)
-            self._observer = None
 
     def __enter__(self):
         self.connect()

@@ -173,52 +173,9 @@ services:
       - sh
       - -ec
       - |
-        tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
+        tarameteo-pki issue mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
         chown -R 1883:1883 /tls
     restart: no
-
-  mosquitto-rotate:
-    build:
-      context: backend
-      args:
-        <<: *python-build-args
-    depends_on:
-      ca:
-        condition: service_healthy
-      mosquitto-init:
-        condition: service_completed_successfully
-    volumes:
-      - mosquitto-tls:/tls
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./taracert/docker-reload.py:/docker-reload.py:ro
-    environment:
-      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
-      PKI_API_URL: http://tarameteo-ca/v1/certs
-      PKI_API_TOKEN: ${CA_TOKEN}
-      PKI_OUTPUT_DIR: /tls
-    command:
-      - sh
-      - -ec
-      - |
-        while :; do
-          tarameteo-pki check mosquitto
-          case $? in
-            0) ;;
-            1)
-              tarameteo-pki renew mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
-              chown -R 1883:1883 /tls
-              /docker-reload.py mosquitto
-              ;;
-            2)
-              tarameteo-pki rotate mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
-              chown -R 1883:1883 /tls
-              /docker-reload.py mosquitto
-              ;;
-            *) exit 1 ;;
-          esac
-          sleep 12h
-        done
-    restart: always
 
   nginx:
     build: nginx
