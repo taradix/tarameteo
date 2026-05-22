@@ -46,7 +46,7 @@ def env_file(env_vars, request):
 
     Cached for troubleshooting purposes.
     """
-    env_file = request.config.cache.makedir("compose") / "env"
+    env_file = request.config.cache.makedir("tarameteo") / "env"
     with env_file.open("w") as f:
         for k, v in env_vars.items():
             f.write(f"{k}={v}\n")

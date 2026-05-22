@@ -1077,7 +1077,7 @@ requires-dist = [
     { name = "pytest-unique", marker = "extra == 'test'", specifier = ">=0.1.8,<1.0.0" },
     { name = "pytest-xdocker", marker = "extra == 'test'", specifier = ">=0.2.8,<1.0.0" },
     { name = "ruff", marker = "extra == 'check'", specifier = ">=0.15.0,<1.0.0" },
-    { name = "taraqueue", specifier = ">=0.5.0" },
+    { name = "taraqueue", specifier = ">=0.6.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
     { name = "yarl", specifier = ">=1.22.0,<2.0.0" },
 ]
@@ -1085,14 +1085,14 @@ provides-extras = ["test", "check"]
 
 [[package]]
 name = "taraqueue"
-version = "0.5.0"
+version = "0.6.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "yarl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/50/09ff775fabd5dfceee2237c02246362d699a8e2b8bfbd3d04bdb4573ab3b/taraqueue-0.5.0.tar.gz", hash = "sha256:f29e8d68ed63654ed9c1a061136a04d81bdf84b9afeb34b65435a0fd1fd2fea3", size = 79781, upload-time = "2026-05-13T18:23:31.199Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/bd/848a8c858b4ae39b9bf2c5b0ad561373ec294ea55565c03c3c59c0418dd4/taraqueue-0.6.2.tar.gz", hash = "sha256:32de2795f8b6fc81018a9125b68717df3b817bb59ca2d76828581e2ff7335a39", size = 151223, upload-time = "2026-05-22T21:24:29.372Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a5/d4/d227a2f444f37987f8807ae8eaeaa5a51be60a83253830f27179d21a3080/taraqueue-0.5.0-py3-none-any.whl", hash = "sha256:e0811f41cd594f278dc28f290909fca8479bb76ccbbf5da0a136052fc0d4f547", size = 8648, upload-time = "2026-05-13T18:23:29.776Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/85/d4e4bde04258c6d17d04510001a4aefead8e92003fae91486585f54cdf6a/taraqueue-0.6.2-py3-none-any.whl", hash = "sha256:b8941c6d2994becc153084be78c1a3ad0c04f6e6a1dbb53cac639d8ded0dd3fe", size = 11025, upload-time = "2026-05-22T21:24:28.495Z" },
 ]
 
 [[package]]
