@@ -35,5 +35,28 @@
     "none": "Aucun capteur sélectionné.",
     "remove": "Retirer {{name}}",
     "toggle": "Basculer {{name}}"
+  },
+  "alerts": {
+    "create": "Créer une alerte",
+    "title": "Nouvelle alerte météo",
+    "fields": {
+      "temperature": "Température",
+      "humidity": "Humidité",
+      "pressure": "Pression",
+      "rain": "Pluie",
+      "snow": "Neige"
+    },
+    "conditions": {
+      "above": "au-dessus de",
+      "below": "en dessous de"
+    },
+    "threshold": "Valeur",
+    "email": "Adresse courriel",
+    "submit": "Créer l'alerte",
+    "sending": "Envoi…",
+    "confirmationSent": "Vérifiez votre courriel pour confirmer l'alerte.",
+    "error": "Échec de la création. Veuillez réessayer.",
+    "cancel": "Annuler",
+    "close": "Fermer"
   }
 }

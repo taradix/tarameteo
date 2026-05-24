@@ -35,5 +35,28 @@
     "none": "No sensors selected.",
     "remove": "Remove {{name}}",
     "toggle": "Toggle {{name}}"
+  },
+  "alerts": {
+    "create": "Set alert",
+    "title": "New weather alert",
+    "fields": {
+      "temperature": "Temperature",
+      "humidity": "Humidity",
+      "pressure": "Pressure",
+      "rain": "Rain",
+      "snow": "Snow"
+    },
+    "conditions": {
+      "above": "above",
+      "below": "below"
+    },
+    "threshold": "Value",
+    "email": "Email address",
+    "submit": "Create alert",
+    "sending": "Sending…",
+    "confirmationSent": "Check your email to confirm the alert.",
+    "error": "Failed to create alert. Please try again.",
+    "cancel": "Cancel",
+    "close": "Close"
   }
 }

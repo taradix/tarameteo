@@ -3,8 +3,9 @@
 import asyncio
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import (
@@ -18,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from taraqueue import Queue, QueueEmpty
 
+from tarameteo.alerts import Alert, AlertCreate, AlertStore
 from tarameteo.ca_client import (
     CAClient,
     IssueCertificateRequest,
@@ -25,6 +27,8 @@ from tarameteo.ca_client import (
     get_ca_client,
 )
 from tarameteo.consumer import run as run_consumer
+from tarameteo.db import SessionLocal
+from tarameteo.notifier import SmtpNotifier
 from tarameteo.sensors import (
     AggregateReading,
     SensorEntry,
@@ -33,6 +37,7 @@ from tarameteo.sensors import (
     WeatherReading,
 )
 from tarameteo.sources import run_sync
+from tarameteo.tokens import sign_token, verify_token
 from tarameteo.ts import (
     InfluxReader,
     InfluxWriter,
@@ -50,6 +55,26 @@ async def lifespan(app: FastAPI):
     app.state.ts_reader = None
     app.state.ts_writer = None
 
+    # Alert infrastructure.
+    alert_secret = os.environ.get("ALERT_SECRET", "")
+    app.state.alert_secret = alert_secret
+    app.state.alert_base_url = os.environ.get("ALERT_BASE_URL", "")
+    app.state.alert_cooldown = timedelta(
+        seconds=_parse_cooldown(os.environ.get("ALERT_COOLDOWN", "3600"))
+    )
+
+    # Notifier.
+    notifier = None
+    if os.environ.get("SMTP_HOST"):
+        notifier = SmtpNotifier(
+            host=os.environ["SMTP_HOST"],
+            port=int(os.environ.get("SMTP_PORT", "587")),
+            username=os.environ.get("SMTP_USERNAME", ""),
+            password=os.environ.get("SMTP_PASSWORD", ""),
+            from_address=os.environ.get("SMTP_FROM", "noreply@taram.ca"),
+        )
+    app.state.notifier = notifier
+
     if os.environ.get("INFLUX_URL"):
         app.state.ts_reader = InfluxReader.from_env()
         app.state.ts_writer = InfluxWriter.from_env()
@@ -63,7 +88,7 @@ async def lifespan(app: FastAPI):
 
         tasks.append(
             asyncio.create_task(
-                run_consumer(app.state.ts_writer, app.state.queue),
+                run_consumer(app.state.ts_writer, app.state.queue, notifier=notifier, alert_secret=alert_secret, alert_base_url=app.state.alert_base_url, alert_cooldown=app.state.alert_cooldown),
                 name="mqtt-consumer",
             ),
         )
@@ -75,6 +100,11 @@ async def lifespan(app: FastAPI):
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+
+
+def _parse_cooldown(value: str) -> float:
+    """Parse cooldown value in seconds."""
+    return float(value)
 
 
 app = FastAPI(
@@ -191,6 +221,84 @@ async def stream_sensor_weather(name: str, request: Request, queue: QueueDep) ->
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# --- Alert endpoints ---
+
+
+def get_alert_store(request: Request) -> AlertStore:
+    db = SessionLocal()
+    try:
+        return AlertStore(db)
+    except Exception:
+        db.close()
+        raise
+
+
+AlertStoreDep = Annotated[AlertStore, Depends(get_alert_store)]
+
+
+@app.post("/api/alerts", status_code=201)
+async def post_alert(body: AlertCreate, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
+    secret = request.app.state.alert_secret
+    notifier = request.app.state.notifier
+    base_url = request.app.state.alert_base_url
+
+    if not secret or not notifier:
+        raise HTTPException(status_code=503, detail="Alert service not configured")
+
+    alert_id = uuid.uuid4().hex
+    alert = Alert(
+        id=alert_id,
+        email=body.email,
+        sensor=body.sensor,
+        field=body.field,
+        condition=body.condition,
+        threshold=body.threshold,
+    )
+    alert_store.create(alert)
+
+    token = sign_token({"alert_id": alert_id, "action": "confirm"}, secret, expires_in=86400)
+    confirm_url = f"{base_url}/api/alerts/confirm/{token}"
+
+    subject = "Confirm your weather alert"
+    email_body = (
+        f"Please confirm your alert:\n\n"
+        f"Sensor: {alert.sensor}\n"
+        f"Condition: {alert.field} {alert.condition} {alert.threshold}\n\n"
+        f"Click to confirm:\n{confirm_url}\n"
+    )
+
+    await notifier.send(alert.email, subject, email_body)
+    return {"status": "confirmation_sent"}
+
+
+@app.get("/api/alerts/confirm/{token}")
+def confirm_alert(token: str, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
+    secret = request.app.state.alert_secret
+    payload = verify_token(token, secret)
+    if not payload or payload.get("action") != "confirm":
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    alert_id = payload["alert_id"]
+    if not alert_store.confirm(alert_id):
+        raise HTTPException(status_code=404, detail="Alert not found or already confirmed")
+
+    return {"status": "confirmed"}
+
+
+@app.get("/api/alerts/unsubscribe/{token}")
+def unsubscribe_alert(token: str, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
+    secret = request.app.state.alert_secret
+    payload = verify_token(token, secret)
+    if not payload or payload.get("action") != "unsubscribe":
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    alert_id = payload["alert_id"]
+    if not alert_store.delete(alert_id):
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    return {"status": "unsubscribed"}
 
 
 @app.exception_handler(Exception)

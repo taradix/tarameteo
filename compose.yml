@@ -20,6 +20,7 @@ services:
         condition: service_started
     volumes:
       - ca-trust:/ca:ro
+      - alert-data:/data
     environment:
       CA_URL: http://tarameteo-ca/v1/certs
       CA_TOKEN: ${CA_TOKEN}
@@ -32,6 +33,16 @@ services:
       MQTT_CA_PATH: /ca/ca.pem
       MQTT_USERNAME: ${MQTT_USERNAME:-admin}
       MQTT_PASSWORD: ${MQTT_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@taram.ca}
+      ALERT_SECRET: ${ALERT_SECRET:-}
+      ALERT_BASE_URL: ${ALERT_BASE_URL:-https://meteo.taram.ca}
+      ALERT_COOLDOWN: ${ALERT_COOLDOWN:-3600}
+      DBDRIVER: sqlite
+      DBNAME: /data/alerts.db
     networks:
       default:
         aliases:
@@ -211,6 +222,7 @@ networks:
         - subnet: ${IPV4_NETWORK:-172.22.1}.0/24
 
 volumes:
+  alert-data:
   ca-tls:
   ca-trust:
   influxdb-data:

@@ -5,10 +5,14 @@ import logging
 import signal
 from argparse import ArgumentParser
 from contextlib import suppress
+from datetime import timedelta
 
 from pydantic import ValidationError
 from taraqueue import Queue
 
+from tarameteo.alert_checker import DEFAULT_COOLDOWN, check_alerts
+from tarameteo.alerts import AlertStore
+from tarameteo.db import SessionLocal
 from tarameteo.logger import (
     LoggerHandlerAction,
     LoggerLevelAction,
@@ -18,6 +22,7 @@ from tarameteo.mqtt import (
     MQTTConsumer,
     MQTTMessage,
 )
+from tarameteo.notifier import Notifier
 from tarameteo.sensors import WeatherReading
 from tarameteo.ts import (
     InfluxWriter,
@@ -27,7 +32,16 @@ from tarameteo.ts import (
 logger = logging.getLogger(__name__)
 
 
-async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queue):
+async def weather_handler(
+    message: MQTTMessage,
+    ts_writer: TSWriter,
+    queue: Queue,
+    *,
+    notifier: Notifier | None = None,
+    alert_secret: str = "",
+    alert_base_url: str = "",
+    alert_cooldown: timedelta = DEFAULT_COOLDOWN,
+):
     try:
         domain, device_id, category = message.topic.split("/")
     except ValueError:
@@ -61,6 +75,22 @@ async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queu
 
     await queue.publish(f"weather:{device_id}", reading.model_dump_json())
 
+    # Check weather alerts.
+    if notifier and alert_secret:
+        db = SessionLocal()
+        try:
+            alert_store = AlertStore(db)
+            await check_alerts(
+                reading,
+                alert_store,
+                notifier,
+                secret=alert_secret,
+                base_url=alert_base_url,
+                cooldown=alert_cooldown,
+            )
+        finally:
+            db.close()
+
     logger.info(
         f"Stored weather data for sensor {device_id}: "
         f"T={reading.temperature}°C"
@@ -70,7 +100,17 @@ async def weather_handler(message: MQTTMessage, ts_writer: TSWriter, queue: Queu
     )
 
 
-async def run(ts_writer: TSWriter, queue: Queue, client_id: str = "weather-consumer", topic: str = "weather/+/event") -> None:
+async def run(
+    ts_writer: TSWriter,
+    queue: Queue,
+    client_id: str = "weather-consumer",
+    topic: str = "weather/+/event",
+    *,
+    notifier: Notifier | None = None,
+    alert_secret: str = "",
+    alert_base_url: str = "",
+    alert_cooldown: timedelta = DEFAULT_COOLDOWN,
+) -> None:
     """Run the MQTT consumer as a long-lived coroutine.
 
     Intended to be launched as an :mod:`asyncio` background task from the
@@ -79,7 +119,15 @@ async def run(ts_writer: TSWriter, queue: Queue, client_id: str = "weather-consu
     loop = asyncio.get_running_loop()
 
     async def _async_handler(message: MQTTMessage) -> None:
-        await weather_handler(message, ts_writer=ts_writer, queue=queue)
+        await weather_handler(
+            message,
+            ts_writer=ts_writer,
+            queue=queue,
+            notifier=notifier,
+            alert_secret=alert_secret,
+            alert_base_url=alert_base_url,
+            alert_cooldown=alert_cooldown,
+        )
 
     def _log_handler_failure(future) -> None:
         with suppress(asyncio.CancelledError):

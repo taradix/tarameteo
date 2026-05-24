@@ -16,6 +16,18 @@ async function get<T>(path: string, params?: Record<string, string | number | un
   return res.json() as Promise<T>;
 }
 
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -23,6 +35,14 @@ export class ApiError extends Error {
     this.status = status;
     this.name = "ApiError";
   }
+}
+
+export interface AlertCreateRequest {
+  email: string;
+  sensor: string;
+  field: string;
+  condition: "above" | "below";
+  threshold: number;
 }
 
 export const api = {
@@ -37,4 +57,6 @@ export const api = {
       `/api/sensors/${encodeURIComponent(name)}/weather/aggregate`,
       { start, end, limit },
     ),
+  createAlert: (alert: AlertCreateRequest) =>
+    post<{ status: string }>("/api/alerts", alert),
 };
