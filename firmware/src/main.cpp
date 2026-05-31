@@ -59,6 +59,14 @@ void setup() {
   Serial.begin(115200);
   delay(1000); // Give serial connection time to start
 
+  // On a cold boot (power-on or manual reset, not a deep-sleep wakeup), hold
+  // briefly so the serial upload tool has time to connect before we potentially
+  // sleep on an error.
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
+    Serial.printf("Cold boot — %d ms upload window...\n", BOOT_DELAY_MS);
+    delay(BOOT_DELAY_MS);
+  }
+
   // Configure deep sleep timer before any possible sleep() call.
   powerManager.begin();
 

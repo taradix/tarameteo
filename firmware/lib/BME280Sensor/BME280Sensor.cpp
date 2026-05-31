@@ -10,8 +10,19 @@ bool BME280Sensor::begin() {
   Wire.begin(_sda, _scl);
 
   if (!_bme.begin(_address)) {
-    snprintf(_lastError, sizeof(_lastError), "Could not find BME280 sensor at address 0x%02X (SDA: %d, SCL: %d)",
-             _address, _sda, _scl);
+    char found[64] = "none";
+    char *p = found;
+    bool any = false;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+      Wire.beginTransmission(addr);
+      if (Wire.endTransmission() == 0) {
+        p += snprintf(p, found + sizeof(found) - p, any ? ", 0x%02X" : "0x%02X", addr);
+        any = true;
+      }
+    }
+    snprintf(_lastError, sizeof(_lastError),
+             "Could not find BME280 at 0x%02X (SDA: %d, SCL: %d) — I2C devices found: %s",
+             _address, _sda, _scl, found);
     return false;
   }
 

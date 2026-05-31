@@ -318,6 +318,13 @@ def make_args_parser():
         help="IP SubjectAlternativeName (repeatable; presence requests a server-auth certificate)",
     )
     issue_parser.add_argument(
+        "--output-stem",
+        dest="output_stem",
+        default=None,
+        metavar="STEM",
+        help="Filename stem for key/cert output (default: device_id)",
+    )
+    issue_parser.add_argument(
         "device_id",
         help="Device identifier (used as Common Name in certificate)",
     )
@@ -352,11 +359,12 @@ def main(argv=None) -> int:
             )
 
         case "issue":
+            stem = args.output_stem if args.output_stem is not None else args.device_id
             server_auth = bool(args.san_dns or args.san_ip)
             with CAClient.from_url(args.api_url, args.api_token) as ca_client:
                 result = issue(
-                    key_path=args.output_dir / f"{args.device_id}.key",
-                    cert_path=args.output_dir / f"{args.device_id}.pem",
+                    key_path=args.output_dir / f"{stem}.key",
+                    cert_path=args.output_dir / f"{stem}.pem",
                     ca_cert_path=args.output_dir / "ca.pem",
                     ca_client=ca_client,
                     common_name=args.device_id,

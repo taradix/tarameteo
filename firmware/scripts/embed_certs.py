@@ -24,7 +24,7 @@ elif not SENSOR_ID:
         "\n** ERROR: SENSOR_ID environment variable is required for esp32 builds.\n"
         "   Example: SENSOR_ID=outdoor-north pio run -e esp32 --target upload\n\n"
     )
-    env.Exit(1)
+    sys.exit(1)
 else:
     CERTS_DIR.mkdir(exist_ok=True)
 
@@ -39,18 +39,13 @@ else:
     else:
         print(f"embed_certs: Issuing certificates for sensor '{SENSOR_ID}'...")
 
-        api_url = os.environ.get("CA_API_URL", "http://localhost:8000")
-        api_token = os.environ.get("CA_API_TOKEN", "")
-
         cmd = [
-            sys.executable, "-m", "tarameteo.pki_cli",
+            "tarameteo-pki",
             "--output-dir", str(CERTS_DIR),
             "issue",
-            "--api-url", api_url,
+            "--output-stem", "client",
+            SENSOR_ID,
         ]
-        if api_token:
-            cmd += ["--api-token", api_token]
-        cmd.append(SENSOR_ID)
 
         result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -61,25 +56,14 @@ else:
                 f"   Output: {result.stdout}\n"
                 f"   Errors: {result.stderr}\n\n"
             )
-            env.Exit(1)
-
-        # The CLI writes {SENSOR_ID}.pem, {SENSOR_ID}.key, ca.pem — rename to
-        # canonical names expected by board_build.embed_txtfiles.
-        issued_cert = CERTS_DIR / f"{SENSOR_ID}.pem"
-        issued_key = CERTS_DIR / f"{SENSOR_ID}.key"
-
-        if issued_cert.exists():
-            issued_cert.rename(cert_path)
-        if issued_key.exists():
-            issued_key.rename(key_path)
-        # ca.pem is already correctly named
+            sys.exit(1)
 
         if not cert_path.exists() or not key_path.exists() or not ca_path.exists():
             sys.stderr.write(
                 f"\n** ERROR: Expected cert files not found in {CERTS_DIR}.\n"
                 f"   Contents: {list(CERTS_DIR.iterdir())}\n\n"
             )
-            env.Exit(1)
+            sys.exit(1)
 
         # Write marker so we can skip on rebuild
         marker.write_text(SENSOR_ID)

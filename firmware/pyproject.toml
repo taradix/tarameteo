@@ -1,5 +1,5 @@
 [project]
-name = "tarameteo"
+name = "tarameteo-firmware"
 version = "0.0.0"
 description = "Weather station firmware"
 authors = [
@@ -8,8 +8,12 @@ authors = [
 readme = "README.rst"
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "platformio (>=6.1.18,<7.0.0)"
+    "platformio (>=6.1.18,<7.0.0)",
+    "tarameteo",
 ]
+
+[tool.uv.sources]
+tarameteo = { path = "../backend", editable = true }
 
 [build-system]
 requires = ["setuptools>=61"]
