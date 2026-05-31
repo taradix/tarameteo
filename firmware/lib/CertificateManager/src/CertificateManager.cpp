@@ -583,7 +583,36 @@ void CertificateManager::handleRootRequest() {
         button { background: #2196F3; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
         button:hover { background: #0b7dda; }
         .info { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .loc-row { display: flex; align-items: center; gap: 8px; }
+        .loc-row input { flex: 1; margin: 10px 0; }
+        #loc-btn { flex-shrink: 0; padding: 10px 14px; font-size: 13px; }
+        #loc-status { font-size: 12px; color: #666; margin: 4px 0 10px; }
     </style>
+    <script>
+        function fillLocation() {
+            var btn = document.getElementById('loc-btn');
+            var status = document.getElementById('loc-status');
+            if (!navigator.geolocation) {
+                status.textContent = 'Geolocation not available (requires HTTPS on most browsers).';
+                return;
+            }
+            btn.disabled = true;
+            status.textContent = 'Getting location...';
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    document.getElementById('latitude').value = pos.coords.latitude.toFixed(6);
+                    document.getElementById('longitude').value = pos.coords.longitude.toFixed(6);
+                    status.textContent = 'Location filled from browser.';
+                    btn.disabled = false;
+                },
+                function(err) {
+                    status.textContent = 'Could not get location — enter manually. (' + err.message + ')';
+                    btn.disabled = false;
+                }
+            );
+        }
+        window.addEventListener('load', fillLocation);
+    </script>
 </head>
 <body>
     <div class="container">
@@ -601,11 +630,15 @@ void CertificateManager::handleRootRequest() {
             <input type="password" name="wifi_password" required placeholder="your-wifi-password">
 
             <h2>Location</h2>
-            <label><strong>Latitude:</strong></label>
-            <input type="number" name="latitude" required step="0.000001" min="-90" max="90" placeholder="45.504">
+            <div class="loc-row">
+                <label><strong>Latitude:</strong></label>
+                <button type="button" id="loc-btn" onclick="fillLocation()">&#x25CE; Use my location</button>
+            </div>
+            <span id="loc-status"></span>
+            <input type="number" id="latitude" name="latitude" required step="0.000001" min="-90" max="90" placeholder="45.504">
 
             <label><strong>Longitude:</strong></label>
-            <input type="number" name="longitude" required step="0.000001" min="-180" max="180" placeholder="-73.617">
+            <input type="number" id="longitude" name="longitude" required step="0.000001" min="-180" max="180" placeholder="-73.617">
 
             <button type="submit">Provision Device</button>
         </form>
