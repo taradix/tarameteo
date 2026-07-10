@@ -659,30 +659,39 @@ void CertificateManager::handleProvisionRequest() {
     return;
   }
 
-  const char *wifiSsid = _provisioningServer->arg("wifi_ssid");
-  const char *wifiPassword = _provisioningServer->arg("wifi_password");
-
-  if (strlen(wifiSsid) == 0 || strlen(wifiPassword) == 0) {
-    sendResponse(400, "WiFi SSID and password must not be empty");
-    return;
-  }
-
   // Validate location fields
   if (!_provisioningServer->hasArg("latitude") || !_provisioningServer->hasArg("longitude")) {
     sendResponse(400, "Missing required fields: latitude and longitude");
     return;
   }
 
-  float latitude = atof(_provisioningServer->arg("latitude"));
-  float longitude = atof(_provisioningServer->arg("longitude"));
-
-  if (latitude < -90.0f || latitude > 90.0f) {
-    sendResponse(400, "Invalid latitude: must be between -90 and 90");
+  if (!applyProvisioning(_provisioningServer->arg("wifi_ssid"), _provisioningServer->arg("wifi_password"),
+                         atof(_provisioningServer->arg("latitude")), atof(_provisioningServer->arg("longitude")))) {
+    sendResponse(400, _lastError);
     return;
   }
+
+  sendResponse(200, "Provisioned successfully! WiFi and location stored. Rebooting in 3 seconds...");
+  _arduino->delay(3000);
+  stopProvisioningMode();
+  _arduino->restart();
+}
+
+// Transport-agnostic provisioning: validate + persist. Shared by HTTP (above) and
+// the BLE transport (Phase 1). On failure sets _lastError and returns false.
+bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wifiPassword, float latitude,
+                                           float longitude) {
+  if (!wifiSsid || !wifiPassword || strlen(wifiSsid) == 0 || strlen(wifiPassword) == 0) {
+    setError("WiFi SSID and password must not be empty");
+    return false;
+  }
+  if (latitude < -90.0f || latitude > 90.0f) {
+    setError("Invalid latitude: must be between -90 and 90");
+    return false;
+  }
   if (longitude < -180.0f || longitude > 180.0f) {
-    sendResponse(400, "Invalid longitude: must be between -180 and 180");
-    return;
+    setError("Invalid longitude: must be between -180 and 180");
+    return false;
   }
 
   // Store location in NVS
@@ -691,31 +700,21 @@ void CertificateManager::handleProvisionRequest() {
   _prefs.putFloat("latitude", _latitude);
   _prefs.putFloat("longitude", _longitude);
 
-  // Store WiFi credentials
-  bool wifiProvisioned = false;
 #ifndef UNIT_TEST
-  if (_wifiManager && _wifiManager->storeCredentials(wifiSsid, wifiPassword)) {
-    _arduino->log("CertificateManager: WiFi credentials stored successfully");
-    wifiProvisioned = true;
-  } else {
-    sendResponse(400, "Failed to store WiFi credentials");
-    return;
+  if (!_wifiManager || !_wifiManager->storeCredentials(wifiSsid, wifiPassword)) {
+    setError("Failed to store WiFi credentials");
+    return false;
   }
+  _arduino->log("CertificateManager: WiFi credentials stored successfully");
 #else
-  if (_wifiManager) {
-    _arduino->log("CertificateManager: WiFi credentials stored successfully (mock)");
-    wifiProvisioned = true;
+  if (!_wifiManager) {
+    setError("WiFi manager not available");
+    return false;
   }
+  _arduino->log("CertificateManager: WiFi credentials stored successfully (mock)");
 #endif
 
-  if (wifiProvisioned) {
-    sendResponse(200, "Provisioned successfully! WiFi and location stored. Rebooting in 3 seconds...");
-    _arduino->delay(3000);
-    stopProvisioningMode();
-    _arduino->restart();
-  } else {
-    sendResponse(400, "WiFi manager not available");
-  }
+  return true;
 }
 
 void CertificateManager::sendResponse(int code, const char *message) {
