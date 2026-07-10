@@ -35,6 +35,7 @@ public:
     void stopProvisioningMode();
     void setWiFiManager(WiFiManager* wifiManager) { _wifiManager = wifiManager; }
     void handleProvisioningLoop();  // Must be called repeatedly to service HTTP requests
+    bool applyProvisioning(const char* wifiSsid, const char* wifiPassword, float latitude, float longitude);
 
     // Storage Management
     bool storeCertificates(const char* certPem, const char* keyPem, const char* caCertPem = nullptr);
@@ -88,9 +89,6 @@ private:
     // Provisioning server
     void setupProvisioningServer();
     void handleProvisionRequest();
-    // Transport-agnostic: validates + persists WiFi creds and location.
-    // Shared by the HTTP handler today and the BLE transport (Phase 1).
-    bool applyProvisioning(const char* wifiSsid, const char* wifiPassword, float latitude, float longitude);
     void handleRootRequest();
     void sendResponse(int code, const char* message);
 

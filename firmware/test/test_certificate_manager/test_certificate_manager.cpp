@@ -5,6 +5,7 @@
 #include "Arduino.h"
 #include "Preferences.h"
 #include "./mocks/mock_arduino_core.h"
+#include "./mocks/mock_ble_provisioner.h"
 #include "./mocks/mock_web_server.h"
 #include "./mocks/mock_wifi.h"
 #include "./mocks/mock_wifi_client.h"
@@ -437,6 +438,71 @@ void test_certificate_manager_location_persists_across_instances(void) {
 }
 
 // ========================================
+// Test Cases - BLE Provisioning Transport
+// ========================================
+// These drive the same main-loop sequence the firmware uses (poll ->
+// applyProvisioning -> notifyStatus) to prove the BLE transport shares the one
+// validated sink with the HTTP path.
+
+void test_ble_provision_valid_payload(void) {
+  MockBleProvisioner ble;
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  ble.setPayload("my-network", "my-password", 45.504f, -73.617f);
+
+  TEST_ASSERT_TRUE(ble.poll());
+  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+  ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
+
+  TEST_ASSERT_TRUE(ok);
+  TEST_ASSERT_EQUAL_STRING("ok", ble.lastStatus.c_str());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLatitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLongitude());
+}
+
+void test_ble_provision_rejects_bad_latitude(void) {
+  MockBleProvisioner ble;
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  ble.setPayload("my-network", "my-password", 999.0f, -73.617f);
+
+  TEST_ASSERT_TRUE(ble.poll());
+  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+  ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
+
+  TEST_ASSERT_FALSE(ok);
+  TEST_ASSERT_TRUE(strstr(ble.lastStatus.c_str(), "Invalid latitude") != NULL);
+}
+
+void test_ble_provision_rejects_empty_credentials(void) {
+  MockBleProvisioner ble;
+  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  ble.setPayload("", "my-password", 45.504f, -73.617f);
+
+  TEST_ASSERT_TRUE(ble.poll());
+  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+  ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
+
+  TEST_ASSERT_FALSE(ok);
+  TEST_ASSERT_TRUE(strstr(ble.lastStatus.c_str(), "must not be empty") != NULL);
+}
+
+void test_ble_poll_empty_when_no_payload(void) {
+  MockBleProvisioner ble;
+  TEST_ASSERT_FALSE(ble.poll());  // nothing staged -> nothing to consume
+}
+
+// ========================================
 // Test Cases - Load From Embedded
 // ========================================
 
@@ -531,6 +597,12 @@ int main(int argc, char **argv) {
   RUN_TEST(test_certificate_manager_provision_stores_location);
   RUN_TEST(test_certificate_manager_location_persists_across_instances);
 
+  // BLE provisioning transport tests
+  RUN_TEST(test_ble_provision_valid_payload);
+  RUN_TEST(test_ble_provision_rejects_bad_latitude);
+  RUN_TEST(test_ble_provision_rejects_empty_credentials);
+  RUN_TEST(test_ble_poll_empty_when_no_payload);
+
   // Load from embedded tests
   RUN_TEST(test_certificate_manager_load_from_embedded_returns_false_in_unit_test);
 
@@ -571,6 +643,10 @@ void loop() {
   RUN_TEST(test_certificate_manager_provision_request_missing_location);
   RUN_TEST(test_certificate_manager_provision_stores_location);
   RUN_TEST(test_certificate_manager_location_persists_across_instances);
+  RUN_TEST(test_ble_provision_valid_payload);
+  RUN_TEST(test_ble_provision_rejects_bad_latitude);
+  RUN_TEST(test_ble_provision_rejects_empty_credentials);
+  RUN_TEST(test_ble_poll_empty_when_no_payload);
   RUN_TEST(test_certificate_manager_load_from_embedded_returns_false_in_unit_test);
   RUN_TEST(test_certificate_manager_extract_cn_from_certificate);
   RUN_TEST(test_certificate_manager_persistence_across_instances);
