@@ -156,6 +156,27 @@ void setup() {
   Serial.printf("Connected to %s (IP: %s)\n", wifiManager.getSSID(), wifiManager.getIP());
   Serial.printf("WiFi RSSI: %d dBm\n", wifiManager.getRSSI());
 
+  // Initialize time manager and sync before certificate validation, which needs current time
+  if (!timeManager.begin()) {
+    printStatus("Time Manager", false, timeManager.getLastError());
+    powerManager.sleep();
+  }
+  printStatus("Time Manager", true);
+
+  Serial.println("Synchronizing time with NTP servers...");
+  if (!timeManager.syncTime()) {
+    printStatus("Time Sync", false, timeManager.getLastError());
+    Serial.println("NTP sync failed. Cannot validate certificate without current time. Sleeping.");
+    powerManager.sleep();
+  }
+  printStatus("Time Sync", true);
+  Serial.printf("Current timestamp: %lu\n", timeManager.getCurrentTimestamp());
+
+  char timeString[32];
+  if (timeManager.getFormattedTime(timeString, sizeof(timeString))) {
+    Serial.printf("Current time: %s\n", timeString);
+  }
+
   // Validate certificates before proceeding
   if (!certManager.validateCertificates()) {
     printStatus("Certificate Validation", false, certManager.getLastError());
@@ -168,29 +189,6 @@ void setup() {
   Serial.printf("Certificate CN: %s\n", certManager.getCN());
   Serial.printf("Sensor Name: %s (from certificate)\n", certManager.getSensorName());
   Serial.printf("Certificate expires: %lu\n", certManager.getExpirationTime());
-
-  // Initialize time manager
-  if (!timeManager.begin()) {
-    printStatus("Time Manager", false, timeManager.getLastError());
-    powerManager.sleep();
-  }
-  printStatus("Time Manager", true);
-
-  // Sync time with NTP servers
-  Serial.println("Synchronizing time with NTP servers...");
-  if (!timeManager.syncTime()) {
-    printStatus("Time Sync", false, timeManager.getLastError());
-    Serial.println("Warning: Using device uptime for timestamps");
-  } else {
-    printStatus("Time Sync", true);
-    Serial.printf("Current timestamp: %lu\n", timeManager.getCurrentTimestamp());
-
-    // Display formatted time
-    char timeString[32];
-    if (timeManager.getFormattedTime(timeString, sizeof(timeString))) {
-      Serial.printf("Current time: %s\n", timeString);
-    }
-  }
 
   // Initialize MQTT client (certificates already loaded by CertificateManager)
   if (!mqttClient.begin()) {
