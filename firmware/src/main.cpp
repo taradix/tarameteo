@@ -26,8 +26,10 @@
 
 // CertificateManager adapters
 #include "ArduinoAdapter.h"
-#include "WebServerAdapter.h"
 #include "WiFiAdapter.h"
+
+// BLE provisioning transport
+#include "NimBLEProvisionerAdapter.h"
 
 // Global objects
 BME280Sensor sensor(BME280_ADDRESS, BME280_SDA, BME280_SCL, SEA_LEVEL_PRESSURE);
@@ -95,44 +97,47 @@ void setup() {
     Serial.println("Certificate initialization failed");
   }
 
-  // Provisioning is only needed for WiFi credentials (certs are pre-flashed)
+  // Provisioning is only needed for WiFi credentials (certs are pre-flashed).
+  // Guarded: NimBLEProvisionerAdapter wraps NimBLE, which has no host build, so
+  // the analysis (clang-tidy, -DUNIT_TEST) pass skips this device-only glue.
+#ifndef UNIT_TEST
   if (wifiManager.needsProvisioning()) {
+    // Advertise "TaraMeteo-XXXX" using the last two MAC octets, matching the old AP name scheme.
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char deviceName[24];
+    snprintf(deviceName, sizeof(deviceName), "TaraMeteo-%02X%02X", mac[4], mac[5]);
+
     Serial.println("===========================================");
-    Serial.println("PROVISIONING MODE");
+    Serial.println("PROVISIONING MODE (BLE)");
     Serial.println("===========================================");
     Serial.println("WiFi credentials not found!");
-    Serial.println();
-    Serial.println("Device is in provisioning mode.");
-    Serial.println();
-    Serial.println("To provision WiFi and location:");
-    Serial.printf("1. Connect to WiFi network: TaraMeteoProv-XXXX\n");
-    Serial.println("2. Open browser to: http://192.168.4.1");
-    Serial.println("3. Enter WiFi credentials and sensor location");
-    Serial.println();
+    Serial.printf("Open the TaraMeteo app and connect to: %s\n", deviceName);
+    Serial.printf("Pair with passkey: %06u\n", (unsigned)BLE_PASSKEY);
+    Serial.println("Then enter WiFi credentials and sensor location.");
     Serial.println("Device will wait up to 5 minutes for provisioning...");
     Serial.println("===========================================");
 
-    // Start provisioning mode with web server
-    WebServerAdapter provisioningServer(80);
-    if (!certManager.startProvisioningMode(&provisioningServer)) {
-      Serial.println("Failed to start provisioning mode!");
+    NimBLEProvisionerAdapter ble;
+    if (!ble.begin(deviceName, BLE_PASSKEY)) {
+      Serial.println("Failed to start BLE provisioning!");
       delay(5000);
       ESP.restart();
     }
 
-    // Wait for provisioning - must call handleProvisioningLoop() to service HTTP requests
     unsigned long startTime = millis();
-    unsigned long lastDot = millis();
     while (wifiManager.needsProvisioning() && (millis() - startTime) < 300000) {
-      certManager.handleProvisioningLoop(); // Service HTTP requests
-      delay(10);                            // Small delay to prevent watchdog issues
-
-      // Print progress dot every second
-      if (millis() - lastDot > 1000) {
-        Serial.print(".");
-        lastDot = millis();
+      if (ble.poll()) {
+        bool ok = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+        ble.notifyStatus(ok ? "ok" : certManager.getLastError());
+        if (!ok) {
+          Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
+        }
       }
+      delay(10); // Small delay to prevent watchdog issues
     }
+
+    ble.stop();
 
     if (wifiManager.needsProvisioning()) {
       Serial.println("\nProvisioning timeout. Rebooting...");
@@ -144,6 +149,7 @@ void setup() {
     delay(1000);
     ESP.restart();
   }
+#endif // UNIT_TEST
 
   // Connect to WiFi (credentials now loaded from NVS)
   Serial.println("Connecting to WiFi...");
