@@ -70,7 +70,7 @@ def compose_server(project, env_file, compose_files, process):
 
 
 @pytest.fixture(scope="session")
-def api_service(compose_server):
+def api_service(compose_server, nginx_service):
     """API service fixture."""
     server = compose_server("Application startup complete")
     with server.run("api") as service:
@@ -86,7 +86,7 @@ async def api_client(api_service):
 
 
 @pytest.fixture(scope="session")
-def ca_service(compose_server):
+def ca_service(compose_server, mosquitto_service):
     """CA service fixture."""
     server = compose_server("Application startup complete")
     with server.run("ca") as service:
@@ -104,7 +104,7 @@ def ca_client(ca_service):
 
 
 @pytest.fixture(scope="session")
-def influxdb_service(compose_server):
+def influxdb_service(compose_server, api_service):
     """InfluxDB service fixture."""
     server = compose_server("port=8086")
     with server.run("influxdb") as service:
@@ -134,8 +134,24 @@ def influxdb_writer(influxdb_service):
 
 
 @pytest.fixture(scope="session")
-def mosquitto_service(compose_server):
+def mosquitto_service(compose_server, api_service):
     """Mosquitto service fixture."""
     server = compose_server("mosquitto version 2.0.* running")
     with server.run("mosquitto") as service:
         yield service
+
+
+@pytest.fixture(scope="session")
+def nginx_service(compose_server):
+    """Nginx service fixture."""
+    server = compose_server("start worker process")
+    with server.run("nginx") as service:
+        yield service
+
+
+@pytest.fixture
+async def nginx_client(nginx_service):
+    """Client to the nginx service fixture, over the self-signed dev cert."""
+    url = f"https://{nginx_service.ip}"
+    async with AsyncClient(base_url=url, timeout=5.0, verify=False) as client:  # noqa: S501
+        yield client
