@@ -72,6 +72,41 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: true
 
+  firmware-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [esp32, esp32c3]
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python environment
+        uses: ./.github/actions/setup-uv-env
+        with:
+          python-version: "3.14"
+          working-directory: firmware
+
+      # Placeholder certs so embed_certs.py skips issuing from the CA.
+      - name: Prepare config and certs
+        working-directory: firmware
+        run: |
+          cp include/config.h.example include/config.h
+          mkdir -p certs
+          for f in client.pem client.key ca.pem; do echo placeholder > certs/$f; done
+          echo ci > certs/.sensor_id
+
+      # PlatformIO fails the build if the image exceeds the app partition.
+      - name: Build firmware
+        working-directory: firmware
+        shell: bash
+        env:
+          SENSOR_ID: ci
+        run: |
+          uv run pio run -e ${{ matrix.env }} | tee build.log
+          echo "**${{ matrix.env }}**: $(grep -E '^(RAM|Flash):' build.log | tr '\n' ' ')" >> $GITHUB_STEP_SUMMARY
+
   firmware-coverage:
     runs-on: ubuntu-latest
     needs: firmware-test
