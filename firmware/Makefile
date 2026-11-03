@@ -38,9 +38,9 @@ test: .pio/libdeps/native/integrity.dat include/config.h
 .PHONY: coverage
 coverage: test
 	@echo "==> Generating coverage report..."
-	@lcov --capture --directory .pio/build/native --output-file coverage.info
-	@lcov --remove coverage.info '/usr/*' '*/test/*' '*/.pio/*' --output-file coverage.cleaned.info
-	@genhtml coverage.cleaned.info --output-directory coverage_html
+	@lcov --ignore-errors inconsistent,inconsistent --capture --directory .pio/build/native --output-file coverage.info
+	@lcov --ignore-errors inconsistent,inconsistent --remove coverage.info '/usr/*' '*/test/*' '*/.pio/*' --output-file coverage.cleaned.info
+	@genhtml --ignore-errors inconsistent,inconsistent coverage.cleaned.info --output-directory coverage_html
 	@echo "==> Coverage report generated in coverage_html/index.html"
 
 .PHONY: clean

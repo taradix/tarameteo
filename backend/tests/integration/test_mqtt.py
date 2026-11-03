@@ -17,7 +17,7 @@ from tarameteo.mqtt import (
 
 
 @pytest.fixture
-def make_mqtt_consumer(mosquitto_service, make_certs):
+def make_mqtt_consumer(mosquitto_service, make_certs, unique):
     created: list[MQTTConsumer] = []
     certs = make_certs("weather-consumer")
 
@@ -25,7 +25,7 @@ def make_mqtt_consumer(mosquitto_service, make_certs):
         consumer = MQTTConsumer(
             host=mosquitto_service.ip,
             port=8884,
-            client_id="weather-consumer",
+            client_id=unique("text"),
             topic=topic,
             on_message=on_message,
             username="admin",
@@ -57,12 +57,13 @@ def mqtt_publisher(mosquitto_service, make_certs):
 @pytest.mark.asyncio
 async def test_mqtt_receive_message(make_mqtt_consumer, mqtt_publisher):
     """Publishing a message should be received by the consumer."""
+    loop = asyncio.get_running_loop()
     received = asyncio.Event()
     messages = []
 
     def handler(message: MQTTMessage):
-        received.set()
         messages.append(message)
+        loop.call_soon_threadsafe(received.set)
 
     make_mqtt_consumer("weather/+/event", handler)
     mqtt_publisher.publish(topic="weather/test-device/event", payload="data")
