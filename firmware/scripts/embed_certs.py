@@ -15,9 +15,9 @@ Import("env")  # noqa: F821 — PlatformIO injects this
 CERTS_DIR = Path(env.subst("$PROJECT_DIR")) / "certs"
 SENSOR_ID = os.environ.get("SENSOR_ID", "").strip()
 
-# Only run for the esp32 environment (skip native tests, analysis, etc.)
+# Only run for device environments (skip native tests, analysis, etc.)
 current_env = env.subst("$PIOENV")
-if current_env != "esp32":
+if current_env not in ("esp32", "esp32c3"):
     pass  # Nothing to do for non-device builds
 elif not SENSOR_ID:
     sys.stderr.write(
