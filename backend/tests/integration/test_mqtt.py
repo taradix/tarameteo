@@ -33,7 +33,7 @@ def make_mqtt_consumer(mosquitto_service, make_certs, unique):
             cafile=certs["cafile"],
         )
         consumer.connect()
-        consumer.wait_connected()
+        assert consumer.wait_connected(), "consumer did not subscribe"
         created.append(consumer)
         return consumer
 

@@ -94,7 +94,6 @@ class MQTTBase:
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code == 0:
             logger.info("Connected to %s:%s", self.host, self.port)
-            self._connected.set()
             self._post_connect()
         else:
             logger.error("Connection failed: %s", reason_code)
@@ -104,10 +103,14 @@ class MQTTBase:
         logger.info("Disconnected (rc=%s)", reason_code)
 
     def _post_connect(self):
-        """Hook for subclasses to act after connection is established."""
+        """Hook for subclasses to act after CONNACK; must mark the client ready."""
+        self._connected.set()
 
     def wait_connected(self, timeout: float = 5.0) -> bool:
-        """Block until the MQTT CONNACK is received. Returns True on success."""
+        """Block until the client is ready. Returns True on success.
+
+        Ready means CONNACK received, plus SUBACK for consumers.
+        """
         return self._connected.wait(timeout=timeout)
 
     def connect(self):
@@ -146,12 +149,19 @@ class MQTTConsumer(MQTTBase):
     def _build_client(self) -> mqtt.Client:
         client = super()._build_client()
         client.on_message = self._on_message
+        client.on_subscribe = self._on_subscribe
         return client
 
     def _post_connect(self):
         if self._client is not None:
             self._client.subscribe(self.topic, qos=self.qos)
-            logger.info("Subscribed to %s (qos=%d)", self.topic, self.qos)
+
+    def _on_subscribe(self, client, userdata, mid, reason_code_list, properties):
+        if any(rc.is_failure for rc in reason_code_list):
+            logger.error("Subscribe to %s failed: %s", self.topic, reason_code_list)
+            return
+        logger.info("Subscribed to %s (qos=%d)", self.topic, self.qos)
+        self._connected.set()
 
     def _on_message(self, client, userdata, msg: mqtt.MQTTMessage):
         message = MQTTMessage.from_msg(msg)
@@ -182,6 +192,7 @@ class MQTTPublisher(MQTTBase):
                 )
             if count:
                 logger.info("Drained %d pending publish(es)", count)
+            self._connected.set()
 
     def publish(self, topic: str, payload: Any, *,
                 qos: int | None = None,
