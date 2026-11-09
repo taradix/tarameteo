@@ -175,7 +175,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ['20', '22', '24']
+        node-version: ['22', '24', '26']
       fail-fast: false
     steps:
       - name: Check out
@@ -192,6 +192,10 @@ jobs:
 
   mobile-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['22', '24', '26']
+      fail-fast: false
     steps:
       - name: Check out
         uses: actions/checkout@v7
@@ -199,7 +203,7 @@ jobs:
       - name: Set up Node environment
         uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: ${{ matrix.node-version }}
 
       - name: Run test target
         working-directory: mobile
