@@ -14,10 +14,33 @@
   "automergeStrategy": "squash",
   "platformAutomerge": false,
   "recreateWhen": "always",
+  "npmrc": "allow-remote=all",
+  "npmrcMerge": true,
   "packageRules": [
     {
       "matchPackageNames": ["typescript", "typescript-eslint"],
       "groupName": "typescript"
+    },
+    {
+      "description": "Expo SDK pins these; upgrade with `npx expo install expo@<next> --fix`.",
+      "matchFileNames": ["mobile/package.json"],
+      "matchPackageNames": [
+        "expo",
+        "expo-*",
+        "@expo/*",
+        "react",
+        "react-dom",
+        "react-native",
+        "react-native-*",
+        "@types/react",
+        "jest",
+        "jest-expo",
+        "@types/jest",
+        "eslint",
+        "eslint-config-expo",
+        "typescript"
+      ],
+      "enabled": false
     }
   ]
 }

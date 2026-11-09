@@ -11,3 +11,4 @@ uv.lock                   linguist-generated=true
 package-lock.json         linguist-generated=true
 backend/openapi.json      linguist-generated=true
 frontend/src/api-types.ts linguist-generated=true
+mobile/src/api-types.ts   linguist-generated=true
