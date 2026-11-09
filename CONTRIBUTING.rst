@@ -176,6 +176,25 @@ Open ``build/html/index.html`` in your browser to view the docs.
 Read more about `Sphinx <https://www.sphinx-doc.org/en/stable/>`__.
 
 
+Changing the API
+----------------
+
+The backend schema in ``backend/openapi.json`` is the contract for all
+clients. After changing a response model or endpoint, regenerate the
+schema and the client types, and commit both:
+
+.. code-block:: text
+
+    > make -C backend openapi
+    > npm --prefix frontend run openapi
+
+``make check`` fails when either file is stale.
+
+Keep ``/api`` changes additive: new endpoints and new optional fields
+are fine, but removing or renaming a field or endpoint breaks installed
+mobile apps. Put breaking changes under a new ``/api/v2`` instead.
+
+
 Upgrading the database
 ----------------------
 

@@ -2,7 +2,9 @@
 
 import os
 import secrets
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import (
     Depends,
@@ -25,7 +27,10 @@ CA_KEY = Path(os.getenv("CA_KEY", "/tls/ca.key"))
 CA_CERT = Path(os.getenv("CA_CERT", "/tls/ca.pem"))
 
 
-def require_token(authorization: str | None = Header(default=None), env = os.environ) -> None:
+def require_token(
+    authorization: str | None = Header(default=None),
+    env: Annotated[Mapping[str, str], Depends(lambda: os.environ)] = os.environ,
+) -> None:
     expected = env.get("CA_TOKEN", "")
     if not expected:
         return

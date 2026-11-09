@@ -1,12 +1,14 @@
 """Certificate Authority (CA) client."""
 
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from json import JSONDecodeError
+from typing import Annotated
 
 import httpx
 from attrs import define
+from fastapi import Depends
 from pydantic import (
     BaseModel,
     Field,
@@ -140,7 +142,9 @@ class CAClient:
             ) from e
 
 
-def get_ca_client(env = os.environ) -> Iterator[CAClient]:
+def get_ca_client(
+    env: Annotated[Mapping[str, str], Depends(lambda: os.environ)] = os.environ,
+) -> Iterator[CAClient]:
     url = env["CA_URL"]
     token = env["CA_TOKEN"]
     with CAClient.from_url(url, token) as ca_client:

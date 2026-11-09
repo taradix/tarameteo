@@ -23,6 +23,13 @@ check: $(VENV)
 	@uv lock --check
 	@echo "==> Linting Python code..."
 	@$(RUN) ruff check .
+	@$(MAKE) --no-print-directory openapi
+	@git diff --exit-code openapi.json
+
+.PHONY: openapi
+openapi: $(VENV)
+	@echo "==> Generating OpenAPI schema..."
+	@$(PYTHON) -W error -c 'import json; from pathlib import Path; from tarameteo.api import app; Path("openapi.json").write_text(json.dumps(app.openapi(), indent=2) + "\n", newline="\n")'
 
 .PHONY: test
 test: $(VENV)

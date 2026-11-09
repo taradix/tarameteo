@@ -1,0 +1,1087 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TaraMeteo API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/certs": {
+      "post": {
+        "summary": "Post Cert",
+        "operationId": "post_cert_api_certs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueCertificateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateMaterial"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensors": {
+      "get": {
+        "summary": "Get Sensors",
+        "operationId": "get_sensors_api_sensors_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "$ref": "#/components/schemas/SensorEntry"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object",
+                  "title": "Response Get Sensors Api Sensors Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensors/{name}": {
+      "get": {
+        "summary": "Get Sensor",
+        "operationId": "get_sensor_api_sensors__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensors/{name}/weather": {
+      "get": {
+        "summary": "Get Sensor Weather",
+        "operationId": "get_sensor_weather_api_sensors__name__weather_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "ISO timestamp (inclusive)",
+              "title": "Start"
+            },
+            "description": "ISO timestamp (inclusive)"
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO timestamp (exclusive)",
+              "title": "End"
+            },
+            "description": "ISO timestamp (exclusive)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WeatherReading"
+                  },
+                  "title": "Response Get Sensor Weather Api Sensors  Name  Weather Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensors/{name}/weather/aggregate": {
+      "get": {
+        "summary": "Get Sensor Weather Aggregate",
+        "operationId": "get_sensor_weather_aggregate_api_sensors__name__weather_aggregate_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "ISO timestamp (inclusive)",
+              "title": "Start"
+            },
+            "description": "ISO timestamp (inclusive)"
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO timestamp (exclusive)",
+              "title": "End"
+            },
+            "description": "ISO timestamp (exclusive)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AggregateReading"
+                  },
+                  "title": "Response Get Sensor Weather Aggregate Api Sensors  Name  Weather Aggregate Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensors/{name}/weather/latest": {
+      "get": {
+        "summary": "Get Sensor Weather Latest",
+        "operationId": "get_sensor_weather_latest_api_sensors__name__weather_latest_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherReading"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensors/{name}/weather/stream": {
+      "get": {
+        "summary": "Stream Sensor Weather",
+        "operationId": "stream_sensor_weather_api_sensors__name__weather_stream_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts": {
+      "post": {
+        "summary": "Post Alert",
+        "operationId": "post_alert_api_alerts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Post Alert Api Alerts Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/confirm/{token}": {
+      "get": {
+        "summary": "Confirm Alert",
+        "operationId": "confirm_alert_api_alerts_confirm__token__get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Confirm Alert Api Alerts Confirm  Token  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/unsubscribe/{token}": {
+      "get": {
+        "summary": "Unsubscribe Alert",
+        "operationId": "unsubscribe_alert_api_alerts_unsubscribe__token__get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Unsubscribe Alert Api Alerts Unsubscribe  Token  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AggregateReading": {
+        "properties": {
+          "sensor": {
+            "type": "string",
+            "title": "Sensor"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "temperature_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Min"
+          },
+          "temperature_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Avg"
+          },
+          "temperature_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Max"
+          },
+          "humidity_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Min"
+          },
+          "humidity_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Avg"
+          },
+          "humidity_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity Max"
+          },
+          "pressure_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pressure Min"
+          },
+          "pressure_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pressure Avg"
+          },
+          "pressure_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pressure Max"
+          },
+          "rain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rain"
+          },
+          "snow": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snow"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sensor",
+          "timestamp"
+        ],
+        "title": "AggregateReading",
+        "description": "A period aggregate (min/avg/max) weather measurement."
+      },
+      "AlertCreate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "sensor": {
+            "type": "string",
+            "title": "Sensor"
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "temperature",
+              "humidity",
+              "pressure",
+              "rain",
+              "snow"
+            ],
+            "title": "Field"
+          },
+          "condition": {
+            "$ref": "#/components/schemas/Condition"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "sensor",
+          "field",
+          "condition",
+          "threshold"
+        ],
+        "title": "AlertCreate",
+        "description": "Payload for creating a new alert."
+      },
+      "CertificateMaterial": {
+        "properties": {
+          "cert_pem": {
+            "type": "string",
+            "title": "Cert Pem"
+          },
+          "chain_pem": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Chain Pem"
+          },
+          "serial_number": {
+            "type": "integer",
+            "title": "Serial Number"
+          },
+          "not_before": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Not Before"
+          },
+          "not_after": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Not After"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "issuer": {
+            "type": "string",
+            "title": "Issuer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cert_pem",
+          "serial_number",
+          "not_before",
+          "not_after",
+          "subject",
+          "issuer"
+        ],
+        "title": "CertificateMaterial",
+        "description": "Material produced by issuing (or self-signing) an X.509 certificate."
+      },
+      "Condition": {
+        "type": "string",
+        "enum": [
+          "above",
+          "below"
+        ],
+        "title": "Condition"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IssueCertificateRequest": {
+        "properties": {
+          "csr_pem": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Csr Pem"
+          },
+          "ttl_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Days"
+          },
+          "client_auth": {
+            "type": "boolean",
+            "title": "Client Auth",
+            "default": true
+          },
+          "server_auth": {
+            "type": "boolean",
+            "title": "Server Auth",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "csr_pem"
+        ],
+        "title": "IssueCertificateRequest",
+        "description": "Request to a Certificate Authority (CA) to issue an X.509 certificate."
+      },
+      "SensorEntry": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "timeseries",
+              "aggregate"
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "SensorEntry"
+      },
+      "SensorInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/SensorStatistics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "latitude",
+          "longitude",
+          "statistics"
+        ],
+        "title": "SensorInfo",
+        "description": "Full sensor record returned by GET /api/sensors/{name}."
+      },
+      "SensorStatistics": {
+        "properties": {
+          "total_readings": {
+            "type": "integer",
+            "title": "Total Readings"
+          },
+          "first_reading": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Reading"
+          },
+          "last_reading": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reading"
+          },
+          "last_24h_readings": {
+            "type": "integer",
+            "title": "Last 24H Readings"
+          },
+          "average_temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Temperature"
+          },
+          "average_humidity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Humidity"
+          },
+          "average_pressure": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Pressure"
+          },
+          "average_rssi": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Rssi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_readings",
+          "first_reading",
+          "last_reading",
+          "last_24h_readings",
+          "average_temperature",
+          "average_humidity",
+          "average_pressure",
+          "average_rssi"
+        ],
+        "title": "SensorStatistics",
+        "description": "Aggregated statistics over the stats window."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WeatherReading": {
+        "properties": {
+          "sensor": {
+            "type": "string",
+            "title": "Sensor",
+            "description": "Sensor name"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "Timestamp of reading"
+          },
+          "temperature": {
+            "type": "number",
+            "title": "Temperature",
+            "description": "Temperature in Celsius"
+          },
+          "humidity": {
+            "type": "number",
+            "title": "Humidity",
+            "description": "Humidity percentage"
+          },
+          "pressure": {
+            "type": "number",
+            "title": "Pressure",
+            "description": "Pressure in hPa"
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude",
+            "description": "Sensor latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude",
+            "description": "Sensor longitude"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude",
+            "description": "Altitude in meters"
+          },
+          "rain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rain",
+            "description": "Rainfall in mm"
+          },
+          "snow": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snow",
+            "description": "Snowfall in mm"
+          },
+          "rssi": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rssi",
+            "description": "WiFi RSSI in dBm"
+          },
+          "retry_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Count",
+            "description": "Number of retry attempts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sensor",
+          "timestamp",
+          "temperature",
+          "humidity",
+          "pressure",
+          "latitude",
+          "longitude"
+        ],
+        "title": "WeatherReading",
+        "description": "A single weather measurement."
+      }
+    }
+  }
+}

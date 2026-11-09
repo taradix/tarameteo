@@ -42,7 +42,7 @@ class WeatherReading(BaseModel):
     """A single weather measurement."""
 
     sensor: str = Field(..., description="Sensor name")
-    timestamp: datetime | int = Field(..., description="Timestamp of reading")
+    timestamp: datetime = Field(..., description="Timestamp of reading")
     temperature: float = Field(..., description="Temperature in Celsius")
     humidity: float = Field(..., description="Humidity percentage")
     pressure: float = Field(..., description="Pressure in hPa")

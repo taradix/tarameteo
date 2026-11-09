@@ -1,31 +1,13 @@
 # Auto detect text files and perform LF normalization.
 *          text=auto
 
-# Python files
-*.py       text diff=python
-poetry.lock linguist-generated=true
+*.py       diff=python
 
-# Jupyter notebooks
-*.ipynb    text eol=lf
+# Shell scripts run in Linux containers; CRLF breaks the shebang.
+*.sh       text eol=lf
 
-# Documents
-*.csv      text
-*.md       text diff=markdown
-*.rst      text
-*.txt      text
-
-# Git files
-*.gitattributes text
-.gitignore text
-
-# Serialisation
-*.json     text
-*.toml     text
-*.xml      text
-*.yaml     text
-*.yml      text
-
-# Exclude files from exporting
-.gitattributes export-ignore
-.gitignore     export-ignore
-.gitkeep       export-ignore
+# Generated files: collapse diffs in PRs.
+uv.lock                   linguist-generated=true
+package-lock.json         linguist-generated=true
+backend/openapi.json      linguist-generated=true
+frontend/src/api-types.ts linguist-generated=true
