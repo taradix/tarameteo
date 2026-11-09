@@ -3,7 +3,7 @@ NODE_MODULES := node_modules
 NODE := npm exec -- node
 TOUCH := $(NODE) -e 'fs.utimesSync(process.argv[1], new Date(), new Date())'
 
-$(NODE_MODULES):
+$(NODE_MODULES): package-lock.json
 	@echo Installing Node environment
 	@npm install
 	@$(TOUCH) $@
