@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { CartesianChart, Line } from "victory-native";
 
 import { api, type AggregateReading, type SensorEntry, type WeatherReading } from "@/api";
 import { age, summarize, type Trend } from "@/summary";
@@ -99,7 +100,19 @@ function TimeseriesBody({ readings, now }: { readings: WeatherReading[]; now: nu
         {num(latest.humidity, 0)} % · {num(latest.pressure, 0)} hPa
         <TrendArrow trend={pressureTrend} />
       </Text>
+      <Sparkline readings={readings} />
     </>
+  );
+}
+
+function Sparkline({ readings }: { readings: WeatherReading[] }) {
+  const data = readings.map((r) => ({ x: Date.parse(r.timestamp), temperature: r.temperature }));
+  return (
+    <View style={styles.sparkline} accessible={false}>
+      <CartesianChart data={data} xKey="x" yKeys={["temperature"]}>
+        {({ points }) => <Line points={points.temperature} color="#888" strokeWidth={2} />}
+      </CartesianChart>
+    </View>
   );
 }
 
@@ -135,5 +148,6 @@ const styles = StyleSheet.create({
   value: { fontSize: 15, marginTop: 4 },
   time: { fontSize: 13, color: "#888", marginTop: 2 },
   stale: { color: "#c62828" },
+  sparkline: { height: 40, marginTop: 8 },
   message: { padding: 16, textAlign: "center" },
 });
