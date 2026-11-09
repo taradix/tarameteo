@@ -3,19 +3,20 @@ import './LanguageToggle.css'
 
 function LanguageToggle() {
   const { i18n } = useTranslation()
+  // resolvedLanguage maps a detected locale like "en-US" to a supported one ("en").
+  const isEnglish = i18n.resolvedLanguage === 'en'
 
   const toggleLanguage = () => {
-    const newLang = i18n.language === 'en' ? 'fr' : 'en'
-    i18n.changeLanguage(newLang)
+    i18n.changeLanguage(isEnglish ? 'fr' : 'en')
   }
 
   return (
     <button
       onClick={toggleLanguage}
       className="language-toggle"
-      aria-label={i18n.language === 'en' ? 'Passer en français' : 'Switch to English'}
+      aria-label={isEnglish ? 'Passer en français' : 'Switch to English'}
     >
-      {i18n.language === 'en' ? 'FR' : 'EN'}
+      {isEnglish ? 'FR' : 'EN'}
     </button>
   )
 }

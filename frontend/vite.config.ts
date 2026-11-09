@@ -16,5 +16,11 @@ export default defineConfig({
     globals: true,
     environment: "happy-dom",
     setupFiles: "./src/test/setup.ts",
+    unstubGlobals: true,
+    coverage: {
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/api-types.ts", "src/main.tsx", "src/test/**", "src/**/*.test.{ts,tsx}"],
+      thresholds: { statements: 50, branches: 50, functions: 50, lines: 50 },
+    },
   },
 });

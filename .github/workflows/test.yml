@@ -168,7 +168,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: backend-report
-          path: htmlcov
+          path: backend/htmlcov
         if: ${{ failure() }}
 
   frontend-test:
@@ -230,5 +230,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: frontend-report
-          path: coverage
+          path: frontend/coverage
         if: ${{ failure() }}
