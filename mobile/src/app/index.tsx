@@ -1,4 +1,5 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 
 import { api, type WeatherReading } from "@/api";
@@ -6,6 +7,7 @@ import { api, type WeatherReading } from "@/api";
 const REFETCH_MS = 30_000;
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const sensorsQuery = useQuery({
     queryKey: ["sensors"],
     queryFn: api.listSensors,
@@ -38,13 +40,14 @@ export default function Dashboard() {
       data={names}
       keyExtractor={(name) => name}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-      ListEmptyComponent={sensorsQuery.isLoading ? undefined : <Text style={styles.message}>No sensors</Text>}
+      ListEmptyComponent={sensorsQuery.isLoading ? undefined : <Text style={styles.message}>{t("dashboard.empty")}</Text>}
       renderItem={({ item, index }) => <SensorRow name={item} reading={latest[index]?.data} />}
     />
   );
 }
 
 function SensorRow({ name, reading }: { name: string; reading?: WeatherReading }) {
+  const { i18n } = useTranslation();
   return (
     <View style={styles.row}>
       <Text style={styles.name}>{name}</Text>
@@ -53,7 +56,7 @@ function SensorRow({ name, reading }: { name: string; reading?: WeatherReading }
           <Text style={styles.value}>
             {reading.temperature.toFixed(1)} °C · {reading.humidity.toFixed(0)} % · {reading.pressure.toFixed(0)} hPa
           </Text>
-          <Text style={styles.time}>{new Date(reading.timestamp).toLocaleString()}</Text>
+          <Text style={styles.time}>{new Date(reading.timestamp).toLocaleString(i18n.language)}</Text>
         </>
       ) : (
         <Text style={styles.time}>…</Text>
