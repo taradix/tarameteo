@@ -19,7 +19,7 @@ package-lock.json: package.json
 # Build node_modules with deps.
 $(NODE_MODULES): package-lock.json
 	@echo "==> Installing Node environment..."
-	@npm install
+	@npm ci
 	@$(TOUCH) $@
 
 # Convenience target to build node_modules
