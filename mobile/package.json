@@ -19,6 +19,9 @@
   "jest": {
     "preset": "jest-expo",
     "testTimeout": 30000,
+    "setupFiles": [
+      "react-native-gesture-handler/jestSetup"
+    ],
     "collectCoverageFrom": [
       "src/**/*.{ts,tsx}",
       "!src/api-types.ts",

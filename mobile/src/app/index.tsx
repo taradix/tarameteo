@@ -1,17 +1,15 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { Link } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { CartesianChart, Line } from "victory-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 
 import { api, type AggregateReading, type SensorEntry, type WeatherReading } from "@/api";
+import { useFormat } from "@/format";
+import { aggregateQuery, REFETCH_MS, weatherQuery } from "@/queries";
 import { age, summarize, type Trend } from "@/summary";
 
-// Sensors report hourly and MELCCFP daily; pull to refresh covers the impatient.
-const REFETCH_MS = 5 * 60_000;
 // Two missed hourly readings.
 const STALE_MS = 3 * 3600_000;
-
-const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -25,12 +23,7 @@ export default function Dashboard() {
   const sensors = (sensorsQuery.data?.sensors ?? []).filter((s) => s.kind === "timeseries" || s.kind === "aggregate");
 
   const weather = useQueries({
-    queries: sensors.map((s) => ({
-      queryKey: ["weather", s.kind, s.name],
-      queryFn: (): Promise<WeatherReading[] | AggregateReading[]> =>
-        s.kind === "timeseries" ? api.getWeather(s.name, hoursAgo(24)) : api.getWeatherAggregate(s.name, hoursAgo(7 * 24)),
-      refetchInterval: REFETCH_MS,
-    })),
+    queries: sensors.map((s) => (s.kind === "timeseries" ? weatherQuery(s.name, 24) : aggregateQuery(s.name, 7 * 24))),
   });
 
   const refreshing = sensorsQuery.isFetching || weather.some((q) => q.isFetching);
@@ -66,19 +59,19 @@ function SensorCard({ sensor, data, fetchedAt }: { sensor: SensorEntry; data?: W
     ) : (
       <AggregateBody reading={(data as AggregateReading[]).at(-1)!} />
     );
-  return (
+  const card = (
     <View style={styles.row}>
       <Text style={styles.name}>{sensor.name}</Text>
       {body}
     </View>
   );
-}
-
-function useFormat() {
-  const { t, i18n } = useTranslation();
-  const num = (v: number | null | undefined, digits: number) =>
-    v == null ? "–" : v.toLocaleString(i18n.language, { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return { t, i18n, num };
+  // ponytail: aggregate sensors get a detail screen with their own charts in the next phase.
+  if (sensor.kind !== "timeseries") return card;
+  return (
+    <Link href={{ pathname: "/sensor/[name]", params: { name: sensor.name } }} asChild>
+      <Pressable accessibilityRole="button">{card}</Pressable>
+    </Link>
+  );
 }
 
 // Ages are relative to the last fetch, which refreshes every REFETCH_MS.
@@ -100,19 +93,7 @@ function TimeseriesBody({ readings, now }: { readings: WeatherReading[]; now: nu
         {num(latest.humidity, 0)} % · {num(latest.pressure, 0)} hPa
         <TrendArrow trend={pressureTrend} />
       </Text>
-      <Sparkline readings={readings} />
     </>
-  );
-}
-
-function Sparkline({ readings }: { readings: WeatherReading[] }) {
-  const data = readings.map((r) => ({ x: Date.parse(r.timestamp), temperature: r.temperature }));
-  return (
-    <View style={styles.sparkline} accessible={false}>
-      <CartesianChart data={data} xKey="x" yKeys={["temperature"]}>
-        {({ points }) => <Line points={points.temperature} color="#888" strokeWidth={2} />}
-      </CartesianChart>
-    </View>
   );
 }
 
@@ -147,7 +128,5 @@ const styles = StyleSheet.create({
   big: { fontSize: 22, fontWeight: "600" },
   value: { fontSize: 15, marginTop: 4 },
   time: { fontSize: 13, color: "#888", marginTop: 2 },
-  stale: { color: "#c62828" },
-  sparkline: { height: 40, marginTop: 8 },
-  message: { padding: 16, textAlign: "center" },
+  stale: { color: "#c62828" },  message: { padding: 16, textAlign: "center" },
 });

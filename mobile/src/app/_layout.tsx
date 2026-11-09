@@ -2,6 +2,7 @@ import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-
 import { Stack } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { AppState } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import "@/i18n";
 
@@ -16,8 +17,11 @@ focusManager.setEventListener((setFocused) => {
 export default function RootLayout() {
   const { t } = useTranslation();
   return (
-    <QueryClientProvider client={queryClient}>
-      <Stack screenOptions={{ title: t("app.title") }} />
-    </QueryClientProvider>
+    // Charts need it for press-and-hold.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <Stack screenOptions={{ title: t("app.title") }} />
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }

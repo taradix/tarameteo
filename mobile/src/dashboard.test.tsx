@@ -1,12 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { default as i18n } from "i18next";
 import type { ReactNode } from "react";
 
 import Dashboard from "./app/index";
+import SensorScreen from "./app/sensor/[name]";
 import "./i18n";
 
 // Lives outside src/app/ because Expo Router treats every file there as a route.
+
+// expo-router/testing-library would replace our reanimated mock with an empty one, so the detail screen
+// renders without a router: Link is declarative, and the route params are stubbed.
+jest.mock("expo-router", () => ({
+  ...jest.requireActual("expo-router"),
+  Stack: { Screen: () => null },
+  useLocalSearchParams: () => ({ name: "s1" }),
+}));
 
 const BASE = "https://meteo.taram.ca";
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
@@ -103,6 +112,39 @@ test("pull to refresh refetches the sensors and their readings", async () => {
   await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
   expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors`);
   expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringMatching(`^${BASE}/api/sensors/s1/weather\\?start=`));
+});
+
+test("the detail screen charts the latest values, and switching range refetches", async () => {
+  stubFetch({ [`${BASE}/api/sensors/s1/weather`]: readings });
+  await render(<SensorScreen />, { wrapper });
+
+  expect(await screen.findByText(/^21\.5 °C · /)).toBeOnTheScreen();
+  expect(screen.getByText("Temperature")).toBeOnTheScreen();
+  expect(screen.getByText(/^1,013 hPa · /)).toBeOnTheScreen();
+  jest.mocked(globalThis.fetch).mockClear();
+
+  await act(() => fireEvent.press(screen.getByRole("tab", { name: "7 d" })));
+  await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+  const start = new URL(jest.mocked(globalThis.fetch).mock.calls[0][0] as string).searchParams.get("start")!;
+  expect(Date.now() - Date.parse(start)).toBeGreaterThan(6 * 24 * 3600_000);
+});
+
+test("the detail screen says when a range is empty", async () => {
+  stubFetch({ [`${BASE}/api/sensors/s1/weather`]: [] });
+  await render(<SensorScreen />, { wrapper });
+
+  expect(await screen.findByText("No data in range.")).toBeOnTheScreen();
+  jest.mocked(globalThis.fetch).mockClear();
+
+  await act(() => screen.getByTestId("sensor-scroll").props.refreshControl.props.onRefresh());
+  await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+});
+
+test("the detail screen shows fetch errors", async () => {
+  stubFetch({});
+  await render(<SensorScreen />, { wrapper });
+
+  expect(await screen.findByText("ApiError: 404 Not Found")).toBeOnTheScreen();
 });
 
 test("shows an empty state without sensors", async () => {
