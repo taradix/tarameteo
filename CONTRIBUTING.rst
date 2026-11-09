@@ -187,12 +187,15 @@ schema and the client types, and commit both:
 
     > make -C backend openapi
     > npm --prefix frontend run openapi
+    > npm --prefix mobile run openapi
 
 ``make check`` fails when either file is stale.
 
 Keep ``/api`` changes additive: new endpoints and new optional fields
 are fine, but removing or renaming a field or endpoint breaks installed
 mobile apps. Put breaking changes under a new ``/api/v2`` instead.
+New enum values, such as a new sensor ``kind``, count as additive, so
+clients must ignore values they don't recognise.
 
 
 Upgrading the database

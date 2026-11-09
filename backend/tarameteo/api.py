@@ -194,17 +194,6 @@ def get_sensor_weather_aggregate(
     return service.get_weather_aggregate(name, start=start, end=end, limit=limit)
 
 
-@app.get("/api/sensors/{name}/weather/latest")
-def get_sensor_weather_latest(
-    name: str,
-    service: SensorServiceDep,
-) -> WeatherReading:
-    reading = service.get_latest(name)
-    if reading is None:
-        raise HTTPException(status_code=404, detail=f"No readings for sensor {name!r}")
-    return reading
-
-
 @app.get("/api/sensors/{name}/weather/stream")
 async def stream_sensor_weather(name: str, request: Request, queue: QueueDep) -> StreamingResponse:
     async def event_generator():

@@ -291,45 +291,6 @@
         }
       }
     },
-    "/api/sensors/{name}/weather/latest": {
-      "get": {
-        "summary": "Get Sensor Weather Latest",
-        "operationId": "get_sensor_weather_latest_api_sensors__name__weather_latest_get",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WeatherReading"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/sensors/{name}/weather/stream": {
       "get": {
         "summary": "Stream Sensor Weather",

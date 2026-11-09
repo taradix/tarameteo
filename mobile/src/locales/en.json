@@ -11,6 +11,19 @@
     "noSensors": "Add a sensor to see charts.",
     "empty": "No sensors."
   },
+  "card": {
+    "range": "min {{min}} · max {{max}}",
+    "aggregate": "min {{min}} · avg {{avg}} · max {{max}} °C",
+    "precipitation": "rain {{rain}} mm · snow {{snow}} mm",
+    "rising": "rising",
+    "falling": "falling",
+    "noData": "No data in the last 24 h.",
+    "ago": {
+      "minutes": "{{count}} min ago",
+      "hours": "{{count}} h ago",
+      "days": "{{count}} d ago"
+    }
+  },
   "chart": {
     "temperature": "Temperature",
     "humidity": "Humidity",

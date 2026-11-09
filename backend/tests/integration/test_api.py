@@ -83,19 +83,6 @@ async def test_api_sensor_get(api_client, weather_points):
 
 
 @pytest.mark.asyncio
-async def test_api_sensor_weather_latest(api_client, weather_points):
-    sensor, points = weather_points
-    expected = points[-1]
-    response = await api_client.get(f"/api/sensors/{sensor}/weather/latest")
-    assert_that(response.json(), has_entries(
-        sensor=sensor,
-        temperature=expected.fields["temperature"],
-        humidity=expected.fields["humidity"],
-        pressure=expected.fields["pressure"],
-    ))
-
-
-@pytest.mark.asyncio
 async def test_api_sensor_weather_range(api_client, weather_points):
     sensor, points = weather_points
     start = (points[0].timestamp - timedelta(minutes=1)).isoformat()

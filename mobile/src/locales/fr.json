@@ -11,6 +11,19 @@
     "noSensors": "Ajoutez un capteur pour voir les graphiques.",
     "empty": "Aucun capteur."
   },
+  "card": {
+    "range": "min {{min}} · max {{max}}",
+    "aggregate": "min {{min}} · moy {{avg}} · max {{max}} °C",
+    "precipitation": "pluie {{rain}} mm · neige {{snow}} mm",
+    "rising": "en hausse",
+    "falling": "en baisse",
+    "noData": "Aucune donnée dans les dernières 24 h.",
+    "ago": {
+      "minutes": "il y a {{count}} min",
+      "hours": "il y a {{count}} h",
+      "days": "il y a {{count}} j"
+    }
+  },
   "chart": {
     "temperature": "Température",
     "humidity": "Humidité",

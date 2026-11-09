@@ -209,40 +209,6 @@ def test_sensor_get_missing(api_app, unique):
     assert_that(response.status_code, equal_to(404))
 
 
-def test_sensor_weather_latest(api_app, memory_writer, unique):
-    name = unique("text")
-    now = datetime.now(UTC)
-
-    memory_writer.write_point(
-        "weather",
-        make_weather(temperature=19.0),
-        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
-        timestamp=now - timedelta(minutes=10),
-    )
-    memory_writer.write_point(
-        "weather",
-        make_weather(temperature=23.5),
-        tags={"device_id": name, "latitude": 0.0, "longitude": 0.0},
-        timestamp=now - timedelta(minutes=1),
-    )
-
-    response = api_app.get(f"/api/sensors/{name}/weather/latest")
-
-    assert_that(response.status_code, equal_to(200))
-    assert_that(response.json(), has_entries(
-        sensor=name,
-        temperature=23.5,
-    ))
-
-
-def test_sensor_weather_latest_missing(api_app, unique):
-    name = unique("text")
-
-    response = api_app.get(f"/api/sensors/{name}/weather/latest")
-
-    assert_that(response.status_code, equal_to(404))
-
-
 def test_sensor_weather_range(api_app, memory_writer, unique):
     name = unique("text")
     start = datetime(2026, 1, 1, tzinfo=UTC)
