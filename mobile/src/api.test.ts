@@ -10,6 +10,13 @@ test("getLatest calls the public API with an encoded sensor name", async () => {
   expect(fetchMock).toHaveBeenCalledWith("https://meteo.taram.ca/api/sensors/a%20b/weather/latest");
 });
 
+test("listSensors calls the public API", async () => {
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ sensors: [] })));
+
+  await expect(api.listSensors()).resolves.toEqual({ sensors: [] });
+  expect(fetchMock).toHaveBeenCalledWith("https://meteo.taram.ca/api/sensors");
+});
+
 test("non-OK responses throw ApiError with the status", async () => {
   fetchMock.mockResolvedValue(new Response("", { status: 404, statusText: "Not Found" }));
 

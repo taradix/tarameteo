@@ -209,6 +209,30 @@ jobs:
         working-directory: mobile
         run: make test
 
+  mobile-coverage:
+    runs-on: ubuntu-latest
+    needs: mobile-test
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node environment
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Run coverage target
+        working-directory: mobile
+        run: make coverage
+
+      - name: Upload HTML report if check failed.
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-report
+          path: mobile/coverage
+        if: ${{ failure() }}
+
   frontend-coverage:
     runs-on: ubuntu-latest
     needs: frontend-test

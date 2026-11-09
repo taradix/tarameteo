@@ -17,7 +17,21 @@
     "openapi": "openapi-typescript ../backend/openapi.json -o src/api-types.ts"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testTimeout": 30000,
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}",
+      "!src/api-types.ts",
+      "!src/**/*.test.{ts,tsx}"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 90,
+        "branches": 90,
+        "functions": 90,
+        "lines": 90
+      }
+    }
   },
   "overrides": {
     "openapi-typescript": {
@@ -43,6 +57,7 @@
     "react-native-screens": "~4.30.1"
   },
   "devDependencies": {
+    "@testing-library/react-native": "^14.1.0",
     "@types/jest": "30.0.0",
     "@types/react": "~19.3.0",
     "eslint": "^9.39.5",
