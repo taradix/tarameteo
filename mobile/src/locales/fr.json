@@ -54,7 +54,11 @@
     "add": "Ajouter",
     "none": "Aucun capteur sélectionné.",
     "remove": "Retirer {{name}}",
-    "toggle": "Basculer {{name}}"
+    "toggle": "Basculer {{name}}",
+    "choose": "Choisir les capteurs",
+    "search": "Chercher par nom…",
+    "all": "Tous",
+    "noLocation": "Position indisponible : tous les capteurs, par nom."
   },
   "alerts": {
     "create": "Créer une alerte",

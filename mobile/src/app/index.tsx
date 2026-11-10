@@ -1,11 +1,13 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Link } from "expo-router";
+import { Link, Stack } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 
-import { api, type AggregateReading, type SensorEntry, type WeatherReading } from "@/api";
+import { api, KINDS, type AggregateReading, type SensorEntry, type WeatherReading } from "@/api";
+import { COLOR } from "@/components/WeatherChart";
 import { useFormat } from "@/format";
 import { aggregateQuery, REFETCH_MS, weatherQuery } from "@/queries";
+import { useShown } from "@/shown";
 import { age, summarize, type Trend } from "@/summary";
 
 // Two missed hourly readings.
@@ -15,12 +17,12 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const sensorsQuery = useQuery({
     queryKey: ["sensors"],
-    queryFn: api.listSensors,
+    queryFn: () => api.listSensors(),
     refetchInterval: REFETCH_MS,
   });
 
-  // Clients ignore sensor kinds they don't know (see CONTRIBUTING.rst).
-  const sensors = (sensorsQuery.data?.sensors ?? []).filter((s) => s.kind === "timeseries" || s.kind === "aggregate");
+  const shown = useShown();
+  const sensors = (sensorsQuery.data?.sensors ?? []).filter((s) => KINDS.includes(s.kind) && shown.has(s.name));
 
   const weather = useQueries({
     queries: sensors.map((s) => (s.kind === "timeseries" ? weatherQuery(s.name, 24) : aggregateQuery(s.name, 7 * 24))),
@@ -36,12 +38,27 @@ export default function Dashboard() {
     return <Text style={styles.message}>{String(sensorsQuery.error)}</Text>;
   }
 
+  const choose = (
+    <Link href="/sensors" asChild>
+      <Pressable style={styles.choose}>
+        <Text style={styles.chooseText}>{t("sensors.choose")}</Text>
+      </Pressable>
+    </Link>
+  );
+
   return (
     <FlatList
       data={sensors}
       keyExtractor={(s) => s.name}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-      ListEmptyComponent={sensorsQuery.isLoading ? undefined : <Text style={styles.message}>{t("dashboard.empty")}</Text>}
+      ListHeaderComponent={
+        <Stack.Screen
+          options={{ headerRight: () => <Link href="/sensors" style={styles.headerLink}>{t("sensors.title")}</Link> }}
+        />
+      }
+      ListEmptyComponent={
+        shown.size === 0 ? choose : sensorsQuery.isLoading ? undefined : <Text style={styles.message}>{t("dashboard.empty")}</Text>
+      }
       renderItem={({ item, index }) => <SensorCard sensor={item} data={weather[index]?.data} fetchedAt={weather[index]?.dataUpdatedAt ?? 0} />}
     />
   );
@@ -124,5 +141,9 @@ const styles = StyleSheet.create({
   big: { fontSize: 22, fontWeight: "600" },
   value: { fontSize: 15, marginTop: 4 },
   time: { fontSize: 13, color: "#888", marginTop: 2 },
-  stale: { color: "#c62828" },  message: { padding: 16, textAlign: "center" },
+  stale: { color: "#c62828" },
+  message: { padding: 16, textAlign: "center" },
+  choose: { alignSelf: "center", margin: 24, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: COLOR },
+  chooseText: { color: "#fff", fontSize: 16 },
+  headerLink: { color: COLOR, fontSize: 16 },
 });

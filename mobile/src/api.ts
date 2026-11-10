@@ -29,9 +29,18 @@ async function get<T>(path: string): Promise<T> {
 const weather = (name: string, suffix: string, start: string) =>
   `/api/sensors/${encodeURIComponent(name)}/weather${suffix}?start=${encodeURIComponent(start)}`;
 
+// Clients ignore sensor kinds they don't know (see CONTRIBUTING.rst).
+export const KINDS: readonly string[] = ["timeseries", "aggregate"];
+
+// Sorts nearest first, within radius km when given.
+export type Near = { latitude: number; longitude: number; radius?: number };
+
+const near = ({ latitude, longitude, radius }: Near) =>
+  `?latitude=${latitude}&longitude=${longitude}${radius ? `&radius=${radius}` : ""}`;
+
 export const api = {
   // GET /api/sensors returns dict[str, list[SensorEntry]], which has no named schema.
-  listSensors: () => get<{ sensors: SensorEntry[] }>("/api/sensors"),
+  listSensors: (around?: Near) => get<{ sensors: SensorEntry[] }>(`/api/sensors${around ? near(around) : ""}`),
   getWeather: (name: string, start: string) => get<WeatherReading[]>(weather(name, "", start)),
   getWeatherAggregate: (name: string, start: string) =>
     get<AggregateReading[]>(weather(name, "/aggregate", start)),

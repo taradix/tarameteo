@@ -54,7 +54,11 @@
     "add": "Add",
     "none": "No sensors selected.",
     "remove": "Remove {{name}}",
-    "toggle": "Toggle {{name}}"
+    "toggle": "Toggle {{name}}",
+    "choose": "Choose sensors",
+    "search": "Search by name…",
+    "all": "All",
+    "noLocation": "Location unavailable: all sensors, by name."
   },
   "alerts": {
     "create": "Set alert",
