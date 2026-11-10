@@ -9,8 +9,10 @@ from datetime import (
 )
 from unittest.mock import AsyncMock
 
+import pytest
 from hamcrest import (
     assert_that,
+    close_to,
     contains_exactly,
     contains_inanyorder,
     equal_to,
@@ -85,23 +87,27 @@ def test_certs_post(api_app, unique):
     ))
 
 
+def located(name, latitude="45.5", longitude="-73.6"):
+    return {"device_id": name, "latitude": latitude, "longitude": longitude}
+
+
 def test_sensors_list(api_app, memory_writer, unique):
     name_a, name_b = unique("text"), unique("text")
     now = datetime.now(UTC)
 
     memory_writer.write_point(
-        "weather", make_weather(), tags={"device_id": name_a}, timestamp=now,
+        "weather", make_weather(), tags=located(name_a), timestamp=now,
     )
     memory_writer.write_point(
-        "weather", make_weather(), tags={"device_id": name_b}, timestamp=now,
+        "weather", make_weather(), tags=located(name_b), timestamp=now,
     )
 
     response = api_app.get("/api/sensors")
 
     assert_that(response.status_code, equal_to(200))
     assert_that(response.json()["sensors"], contains_inanyorder(
-        has_entries(name=name_a, kind="timeseries"),
-        has_entries(name=name_b, kind="timeseries"),
+        has_entries(name=name_a, kind="timeseries", latitude=45.5, longitude=-73.6, distance_km=None),
+        has_entries(name=name_b, kind="timeseries", latitude=45.5, longitude=-73.6, distance_km=None),
     ))
 
 
@@ -110,10 +116,10 @@ def test_sensors_list_includes_aggregate(api_app, memory_writer, unique):
     now = datetime.now(UTC)
 
     memory_writer.write_point(
-        "weather", make_weather(), tags={"device_id": ts_name}, timestamp=now,
+        "weather", make_weather(), tags=located(ts_name), timestamp=now,
     )
     memory_writer.write_point(
-        "weather_aggregate", make_aggregate(), tags={"device_id": agg_name}, timestamp=now,
+        "weather_aggregate", make_aggregate(), tags=located(agg_name), timestamp=now,
     )
 
     response = api_app.get("/api/sensors")
@@ -123,6 +129,67 @@ def test_sensors_list_includes_aggregate(api_app, memory_writer, unique):
         has_entries(name=ts_name, kind="timeseries"),
         has_entries(name=agg_name, kind="aggregate"),
     ))
+
+
+def test_sensors_list_uses_latest_location(api_app, memory_writer, unique):
+    name = unique("text")
+    now = datetime.now(UTC)
+
+    memory_writer.write_point(
+        "weather", make_weather(), tags=located(name, "45.0", "-73.0"), timestamp=now - timedelta(hours=1),
+    )
+    memory_writer.write_point(
+        "weather", make_weather(), tags=located(name, "46.0", "-74.0"), timestamp=now,
+    )
+
+    response = api_app.get("/api/sensors")
+
+    assert_that(response.json()["sensors"], contains_exactly(
+        has_entries(name=name, latitude=46.0, longitude=-74.0),
+    ))
+
+
+def test_sensors_list_skips_sensor_without_location(api_app, memory_writer, unique):
+    name = unique("text")
+    memory_writer.write_point(
+        "weather", make_weather(), tags={"device_id": name}, timestamp=datetime.now(UTC),
+    )
+
+    response = api_app.get("/api/sensors")
+
+    assert_that(response.json()["sensors"], equal_to([]))
+
+
+def test_sensors_list_near_sorts_by_distance_within_radius(api_app, memory_writer, unique):
+    montreal, quebec, toronto = unique("text"), unique("text"), unique("text")
+    now = datetime.now(UTC)
+    memory_writer.write_point("weather", make_weather(), tags=located(quebec, "46.81", "-71.21"), timestamp=now)
+    memory_writer.write_point("weather", make_weather(), tags=located(toronto, "43.65", "-79.38"), timestamp=now)
+    memory_writer.write_point(
+        "weather_aggregate", make_aggregate(), tags=located(montreal, "45.50", "-73.57"), timestamp=now,
+    )
+
+    response = api_app.get("/api/sensors", params={"latitude": 45.5, "longitude": -73.6, "radius": 300})
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json()["sensors"], contains_exactly(
+        has_entries(name=montreal, kind="aggregate", distance_km=close_to(2.3, 0.1)),
+        has_entries(name=quebec, kind="timeseries", distance_km=close_to(235, 2)),
+    ))
+
+
+@pytest.mark.parametrize("params", [
+    {"latitude": 45.5},
+    {"longitude": -73.6},
+    {"radius": 50},
+    {"latitude": 91, "longitude": 0},
+    {"latitude": 0, "longitude": 181},
+    {"latitude": 0, "longitude": 0, "radius": 0},
+])
+def test_sensors_list_rejects_invalid_point(api_app, params):
+    response = api_app.get("/api/sensors", params=params)
+
+    assert_that(response.status_code, equal_to(422))
 
 
 def test_sensor_get(api_app, memory_writer, unique):

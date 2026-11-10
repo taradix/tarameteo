@@ -282,6 +282,15 @@ export interface components {
              * @enum {string}
              */
             kind: "timeseries" | "aggregate";
+            /** Latitude */
+            latitude: number;
+            /** Longitude */
+            longitude: number;
+            /**
+             * Distance Km
+             * @description Distance from the queried point, if any
+             */
+            distance_km?: number | null;
         };
         /**
          * SensorInfo
@@ -442,7 +451,14 @@ export interface operations {
     };
     get_sensors_api_sensors_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Sort nearest first from this point */
+                latitude?: number | null;
+                /** @description Sort nearest first from this point */
+                longitude?: number | null;
+                /** @description Only sensors within this many km of the point */
+                radius?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -458,6 +474,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: components["schemas"]["SensorEntry"][];
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

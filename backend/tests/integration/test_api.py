@@ -9,6 +9,7 @@ from datetime import (
 import pytest
 from hamcrest import (
     assert_that,
+    close_to,
     contains_exactly,
     contains_string,
     greater_than_or_equal_to,
@@ -62,8 +63,10 @@ def weather_points(influxdb_writer, unique):
 @pytest.mark.asyncio
 async def test_api_sensors_list(api_client, weather_points):
     sensor, _ = weather_points
-    response = await api_client.get("/api/sensors")
-    assert_that(response.json(), has_entries(sensors=has_item(has_entries(name=sensor))))
+    response = await api_client.get("/api/sensors", params={"latitude": 45.5, "longitude": -73.6, "radius": 10})
+    assert_that(response.json(), has_entries(sensors=has_item(has_entries(
+        name=sensor, latitude=45.504, longitude=-73.617, distance_km=close_to(1.4, 0.1),
+    ))))
 
 
 @pytest.mark.asyncio

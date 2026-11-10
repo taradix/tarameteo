@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { api } from "../api";
-import type { AggregateReading, SensorEntry, WeatherReading } from "../types";
+import type { AggregateReading, SensorRef, WeatherReading } from "../types";
 
 const REFETCH_MS = 30_000;
 
@@ -14,7 +14,7 @@ export function useSensorList() {
 }
 
 // end=null means live mode: initial REST fetch + SSE for incremental updates.
-export function useWeather(sensors: SensorEntry[], start: string, end: Date | null) {
+export function useWeather(sensors: SensorRef[], start: string, end: Date | null) {
   const tsSensors = sensors.filter((s) => s.kind === "timeseries");
   const aggSensors = sensors.filter((s) => s.kind === "aggregate");
 

@@ -7,6 +7,7 @@ from datetime import (
     datetime,
     timedelta,
 )
+from math import asin, cos, radians, sin, sqrt
 from typing import Literal
 
 from attrs import define
@@ -36,6 +37,19 @@ logger = logging.getLogger(__name__)
 class SensorEntry(BaseModel):
     name: str
     kind: SensorKind
+    latitude: float
+    longitude: float
+    distance_km: float | None = Field(None, description="Distance from the queried point, if any")
+
+
+EARTH_RADIUS_KM = 6371.0
+
+
+def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points (haversine)."""
+    phi1, phi2 = radians(lat1), radians(lat2)
+    a = sin((phi2 - phi1) / 2) ** 2 + cos(phi1) * cos(phi2) * sin(radians(lon2 - lon1) / 2) ** 2
+    return 2 * EARTH_RADIUS_KM * asin(sqrt(a))
 
 
 class WeatherReading(BaseModel):
@@ -111,21 +125,39 @@ class SensorService:
 
     ts_reader: TSReader
 
-    def list_sensors(self) -> list[SensorEntry]:
+    def list_sensors(
+        self,
+        *,
+        near: tuple[float, float] | None = None,
+        radius_km: float | None = None,
+    ) -> list[SensorEntry]:
+        """List sensors by name, or nearest first (within radius_km, if given) when near is given."""
         start = datetime.now(UTC) - STATS_WINDOW
-        timeseries = [
-            SensorEntry(name=name, kind="timeseries")
-            for name in self.ts_reader.list_tag_values(
-                measurement=MEASUREMENT, tag_key=SENSOR_TAG, start=start,
-            )
+        sensors = [
+            *self._list_located(MEASUREMENT, "timeseries", start),
+            *self._list_located(AGGREGATE_MEASUREMENT, "aggregate", start),
         ]
-        aggregates = [
-            SensorEntry(name=name, kind="aggregate")
-            for name in self.ts_reader.list_tag_values(
-                measurement=AGGREGATE_MEASUREMENT, tag_key=SENSOR_TAG, start=start,
-            )
+        if near is None:
+            return sensors
+
+        for s in sensors:
+            s.distance_km = distance_km(*near, s.latitude, s.longitude)
+        nearby = [s for s in sensors if radius_km is None or s.distance_km <= radius_km]
+        return sorted(nearby, key=lambda s: s.distance_km)
+
+    def _list_located(self, measurement: str, kind: SensorKind, start: datetime) -> list[SensorEntry]:
+        # Points come oldest first, so a sensor that moved keeps its latest location.
+        locations: dict[str, tuple[float, float]] = {}
+        for p in self.ts_reader.last_points(measurement=measurement, start=start):
+            name, lat, lon = (p.tags.get(k) for k in (SENSOR_TAG, "latitude", "longitude"))
+            if name is None or lat is None or lon is None:
+                logger.warning("Skipping %s series without sensor name or location: %s", measurement, p.tags)
+                continue
+            locations[name] = (float(lat), float(lon))
+        return [
+            SensorEntry(name=name, kind=kind, latitude=lat, longitude=lon)
+            for name, (lat, lon) in sorted(locations.items())
         ]
-        return timeseries + aggregates
 
     def get_weather(
         self,

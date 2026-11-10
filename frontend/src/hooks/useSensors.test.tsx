@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useSensorList, useWeather } from "./useSensors";
 import { queryWrapper, stubEventSource, stubFetch } from "../test/utils";
-import type { SensorEntry } from "../types";
+import type { SensorRef } from "../types";
 
-const sensors: SensorEntry[] = [
+const sensors: SensorRef[] = [
   { name: "ts", kind: "timeseries" },
   { name: "agg", kind: "aggregate" },
 ];

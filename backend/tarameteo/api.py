@@ -160,8 +160,16 @@ def post_cert(
 
 
 @app.get("/api/sensors")
-def get_sensors(service: SensorServiceDep) -> dict[str, list[SensorEntry]]:
-    return {"sensors": service.list_sensors()}
+def get_sensors(
+    service: SensorServiceDep,
+    latitude: Annotated[float | None, Query(ge=-90, le=90, description="Sort nearest first from this point")] = None,
+    longitude: Annotated[float | None, Query(ge=-180, le=180, description="Sort nearest first from this point")] = None,
+    radius: Annotated[float | None, Query(gt=0, description="Only sensors within this many km of the point")] = None,
+) -> dict[str, list[SensorEntry]]:
+    near = (latitude, longitude) if latitude is not None and longitude is not None else None
+    if near is None and (latitude, longitude, radius) != (None, None, None):
+        raise HTTPException(status_code=422, detail="latitude and longitude go together, and radius needs both")
+    return {"sensors": service.list_sensors(near=near, radius_km=radius)}
 
 
 @app.get("/api/sensors/{name}")

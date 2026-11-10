@@ -65,17 +65,8 @@ class TSReader(Protocol):
     ) -> TSPoint | None:
         """Return the most recent point for the series."""
 
-    def list_tag_values(
-        self,
-        *,
-        measurement: str,
-        tag_key: str,
-        start: datetime | None = None,
-        stop: datetime | None = None,
-        contains: str | None = None,
-        limit: int = 1000,
-    ) -> list[str]:
-        """Convenience for populating UI dropdowns."""
+    def last_points(self, *, measurement: str, start: datetime) -> list[TSPoint]:
+        """Return the most recent point of each series (tag set) in ascending timestamp order."""
 
 
 class TSWriter(Protocol):
@@ -188,43 +179,19 @@ class InfluxReader(TSReader):
             return None
         return max(points, key=lambda p: p.timestamp)
 
-    def list_tag_values(
-        self,
-        *,
-        measurement: str,
-        tag_key: str,
-        start: datetime | None = None,
-        stop: datetime | None = None,
-        contains: str | None = None,
-        limit: int = 1000,
-    ) -> list[str]:
-        if limit <= 0:
-            return []
-
-        flux, params = self._build_tag_values_query(
+    def last_points(self, *, measurement: str, start: datetime) -> list[TSPoint]:
+        flux, params = self._build_points_query(
             measurement=measurement,
-            tag_key=tag_key,
             start=start,
-            stop=stop,
-            contains=contains,
-            limit=limit,
+            stop=None,
+            tags=None,
+            fields=None,
+            every=None,
+            aggregate=None,
         )
-        records = self._query_records(flux, params=params)
-
-        # We arrange the query so the tag value is in a column named "value"
-        vals = []
-        for r in records:
-            v = r.values.get("value")
-            if isinstance(v, str):
-                vals.append(v)
-        # Dedup while preserving order
-        seen = set()
-        out = []
-        for v in vals:
-            if v not in seen:
-                seen.add(v)
-                out.append(v)
-        return out
+        # last() runs per field, so a point only holds the fields written at its timestamp.
+        records = self._query_records(flux + "\n  |> last()", params=params)
+        return self._records_to_points(records)
 
     def _query_tables(self, flux: str, *, params: Mapping[str, Any]) -> list[FluxTable]:
         for attempt in count():
@@ -332,45 +299,6 @@ class InfluxReader(TSReader):
         # "last()" works per series; this returns one row per field.
         flux_lines.append('  |> last()')
 
-        flux = "\n".join(flux_lines)
-        return flux, params
-
-    def _build_tag_values_query(
-        self,
-        *,
-        measurement: str,
-        tag_key: str,
-        start: datetime | None,
-        stop: datetime | None,
-        contains: str | None,
-        limit: int,
-    ) -> tuple[str, dict[str, Any]]:
-        params: dict[str, Any] = {
-            "bucket": self.bucket,
-            "measurement": measurement,
-            "tag_key": tag_key,
-            "n": limit,
-            "start": start if start is not None else datetime(1970, 1, 1, tzinfo=UTC),
-        }
-        if stop is not None:
-            params["stop"] = stop
-        if contains is not None:
-            params["contains"] = contains
-
-        flux_lines = [
-            'from(bucket: bucket)',
-            '  |> range(start: start' + (', stop: stop' if stop is not None else '') + ')',
-            '  |> filter(fn: (r) => r._measurement == measurement)',
-            '  |> keep(columns: [tag_key])',
-            '  |> group()',
-            '  |> distinct(column: tag_key)',
-            '  |> rename(columns: {"_value": "value"})',
-        ]
-
-        if contains is not None:
-            flux_lines.append('  |> filter(fn: (r) => containsStr(v: r.value, substr: contains))')
-
-        flux_lines.append('  |> limit(n: n)')
         flux = "\n".join(flux_lines)
         return flux, params
 
@@ -600,38 +528,11 @@ class MemoryReader(TSReader):
         )
         return points[-1] if points else None
 
-    def list_tag_values(
-        self,
-        *,
-        measurement: str,
-        tag_key: str,
-        start: datetime | None = None,
-        stop: datetime | None = None,
-        contains: str | None = None,
-        limit: int = 1000,
-    ) -> list[str]:
-        if limit <= 0:
-            return []
-
-        seen: set[str] = set()
-        out: list[str] = []
-        for p in self.store.points:
-            if p.measurement != measurement:
-                continue
-            if start is not None and p.timestamp < start:
-                continue
-            if stop is not None and p.timestamp >= stop:
-                continue
-            v = p.tags.get(tag_key)
-            if v is None or v in seen:
-                continue
-            if contains is not None and contains not in v:
-                continue
-            seen.add(v)
-            out.append(v)
-            if len(out) >= limit:
-                break
-        return out
+    def last_points(self, *, measurement: str, start: datetime) -> list[TSPoint]:
+        latest: dict[tuple[tuple[str, str], ...], TSPoint] = {}
+        for p in self.query_points(measurement=measurement, start=start):
+            latest[tuple(sorted(p.tags.items()))] = p
+        return sorted(latest.values(), key=lambda p: p.timestamp)
 
 
 @define(frozen=True)

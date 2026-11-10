@@ -1,7 +1,7 @@
 import type { ChartDataset } from "chart.js";
 import { addDays, parseISO, startOfDay } from "date-fns";
 import { bandColorFor, colorFor } from "../colors";
-import type { AggregateReading, SensorEntry, WeatherField, WeatherReading } from "../types";
+import type { AggregateReading, SensorRef, WeatherField, WeatherReading } from "../types";
 
 // These fields have min/avg/max structure in AggregateReading; all others are single values.
 const BAND_FIELDS = new Set<WeatherField>(["temperature", "humidity", "pressure"]);
@@ -47,7 +47,7 @@ function steps(aggData: AggregateReading[], value: (r: AggregateReading) => numb
 }
 
 export function buildDatasets(
-  sensors: SensorEntry[],
+  sensors: SensorRef[],
   fields: WeatherField[],
   readings: WeatherReading[],
   aggregates: AggregateReading[],

@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useDashboardState } from "../hooks/useDashboardState";
 import { useSensorList, useWeather } from "../hooks/useSensors";
-import type { SensorEntry, WeatherField } from "../types";
+import type { SensorRef, WeatherField } from "../types";
 import { AlertForm } from "./AlertForm";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
@@ -22,14 +22,14 @@ export function Dashboard() {
 
   const sensorList = useSensorList();
 
-  const selectedEntries = useMemo<SensorEntry[]>(
+  const selectedEntries = useMemo<SensorRef[]>(
     () => sensors.map(
       (name) => sensorList.data?.sensors.find((s) => s.name === name) ?? { name, kind: "timeseries" },
     ),
     [sensors, sensorList.data?.sensors],
   );
 
-  const visibleEntries = useMemo<SensorEntry[]>(
+  const visibleEntries = useMemo<SensorRef[]>(
     () => selectedEntries.filter((s) => !hidden.includes(s.name)),
     [selectedEntries, hidden],
   );

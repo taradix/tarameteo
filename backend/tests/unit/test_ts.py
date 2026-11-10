@@ -9,7 +9,6 @@ from datetime import (
 from hamcrest import (
     assert_that,
     contains_exactly,
-    contains_inanyorder,
     empty,
     has_properties,
     none,
@@ -160,39 +159,16 @@ def test_memory_reader_latest_respects_lookback(memory_writer, memory_reader):
     assert_that(memory_reader.latest("weather", lookback="1h"), none())
 
 
-def test_memory_reader_list_tag_values_unique(memory_writer, memory_reader):
-    """Duplicate tag values should only be reported once."""
-    ts = datetime(2026, 1, 1, tzinfo=UTC)
-    memory_writer.write_point("weather", {"v": 1.0}, tags={"device_id": "a"}, timestamp=ts)
-    memory_writer.write_point("weather", {"v": 2.0}, tags={"device_id": "a"}, timestamp=ts)
-    memory_writer.write_point("weather", {"v": 3.0}, tags={"device_id": "b"}, timestamp=ts)
+def test_memory_reader_last_points_one_per_series(memory_writer, memory_reader):
+    """Last points should hold the newest point of each tag set, oldest first."""
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    memory_writer.write_point("weather", {"v": 1.0}, tags={"device_id": "a"}, timestamp=base)
+    memory_writer.write_point("weather", {"v": 2.0}, tags={"device_id": "b"}, timestamp=base + timedelta(hours=2))
+    memory_writer.write_point("weather", {"v": 3.0}, tags={"device_id": "a"}, timestamp=base + timedelta(hours=1))
 
-    result = memory_reader.list_tag_values(measurement="weather", tag_key="device_id")
+    result = memory_reader.last_points(measurement="weather", start=base)
 
-    assert_that(result, contains_inanyorder("a", "b"))
-
-
-def test_memory_reader_list_tag_values_contains_filter(memory_writer, memory_reader):
-    """The contains filter should narrow results to values containing the substring."""
-    ts = datetime(2026, 1, 1, tzinfo=UTC)
-    memory_writer.write_point("weather", {"v": 1.0}, tags={"device_id": "sensor-a"}, timestamp=ts)
-    memory_writer.write_point("weather", {"v": 2.0}, tags={"device_id": "other-b"}, timestamp=ts)
-
-    result = memory_reader.list_tag_values(
-        measurement="weather", tag_key="device_id", contains="sensor",
-    )
-
-    assert_that(result, contains_exactly("sensor-a"))
-
-
-def test_memory_reader_list_tag_values_limit(memory_writer, memory_reader):
-    """Limit should cap the number of returned values."""
-    ts = datetime(2026, 1, 1, tzinfo=UTC)
-    for name in ["a", "b", "c"]:
-        memory_writer.write_point("weather", {"v": 1.0}, tags={"device_id": name}, timestamp=ts)
-
-    result = memory_reader.list_tag_values(
-        measurement="weather", tag_key="device_id", limit=2,
-    )
-
-    assert len(result) == 2
+    assert_that(result, contains_exactly(
+        has_properties(fields={"v": 3.0}),
+        has_properties(fields={"v": 2.0}),
+    ))

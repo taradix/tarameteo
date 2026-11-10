@@ -16,7 +16,7 @@ import {
 import { Line } from "react-chartjs-2";
 import "chartjs-adapter-date-fns";
 import zoomPlugin from "chartjs-plugin-zoom";
-import type { AggregateReading, SensorEntry, WeatherField, WeatherReading } from "../types";
+import type { AggregateReading, SensorRef, WeatherField, WeatherReading } from "../types";
 import { buildDatasets, extendedRange, type Point } from "./chartData";
 
 ChartJS.register(
@@ -28,7 +28,7 @@ interface Props {
   title: string;
   unit: string;
   fields: WeatherField[];
-  sensors: SensorEntry[];
+  sensors: SensorRef[];
   readings: WeatherReading[];
   aggregates: AggregateReading[];
   start: Date;
