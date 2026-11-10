@@ -1,19 +1,23 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useSensorSearch } from "../hooks/useSensors";
+
+// A datalist past this is a scroll, not a suggestion.
+const SUGGESTIONS = 20;
 
 interface Props {
   selected: string[];
   hidden: string[];
-  available: string[];
   onChange: (sensors: string[]) => void;
   onHiddenChange: (hidden: string[]) => void;
 }
 
-export function SensorPicker({ selected, hidden, available, onChange, onHiddenChange }: Props) {
+export function SensorPicker({ selected, hidden, onChange, onHiddenChange }: Props) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
   const [focused, setFocused] = useState(false);
+  const search = useSensorSearch(input, SUGGESTIONS);
 
   const add = () => {
     const name = input.trim();
@@ -35,7 +39,9 @@ export function SensorPicker({ selected, hidden, available, onChange, onHiddenCh
     if (e.key === "Enter") add();
   };
 
-  const suggestions = focused ? available.filter((s) => !selected.includes(s)) : [];
+  // A sensor with both kinds comes back twice; one suggestion is enough.
+  const names = new Set(search.data?.sensors.map((s) => s.name));
+  const suggestions = focused ? [...names].filter((s) => !selected.includes(s)) : [];
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">

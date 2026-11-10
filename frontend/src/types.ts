@@ -9,10 +9,6 @@ export type SensorKind = SensorEntry["kind"];
 export type SensorRef = Pick<SensorEntry, "name" | "kind">;
 export type WeatherReading = Schemas["WeatherReading"];
 export type AggregateReading = Schemas["AggregateReading"];
-
-// GET /api/sensors returns dict[str, list[SensorEntry]], which has no named schema.
-export interface SensorsList {
-  sensors: SensorEntry[];
-}
+export type SensorList = Schemas["SensorList"];
 
 export type WeatherField = "temperature" | "humidity" | "pressure" | "altitude" | "rain" | "snow" | "rssi";

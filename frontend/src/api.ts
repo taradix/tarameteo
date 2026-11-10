@@ -1,12 +1,19 @@
-import type { AggregateReading, SensorsList, WeatherReading } from "./types";
+import type { AggregateReading, SensorList, WeatherReading } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
-async function get<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+export interface SensorFilter {
+  names?: string[];
+  q?: string;
+  limit?: number;
+}
+
+// Arrays repeat the key (names=a&names=b), as FastAPI expects.
+async function get<T>(path: string, params?: Record<string, string | number | string[] | undefined>): Promise<T> {
   const url = new URL(`${BASE}${path}`, window.location.origin);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined) url.searchParams.set(k, String(v));
+      if (v !== undefined) [v].flat().forEach((x) => url.searchParams.append(k, String(x)));
     }
   }
   const res = await fetch(url.toString().replace(window.location.origin, ""));
@@ -46,7 +53,7 @@ export interface AlertCreateRequest {
 }
 
 export const api = {
-  listSensors: () => get<SensorsList>("/api/sensors"),
+  listSensors: (filter: SensorFilter = {}) => get<SensorList>("/api/sensors", { ...filter }),
   getWeather: (name: string, start: string, end?: string, limit?: number) =>
     get<WeatherReading[]>(
       `/api/sensors/${encodeURIComponent(name)}/weather`,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useSensorList, useWeather } from "./useSensors";
+import { useSensorList, useSensorSearch, useWeather } from "./useSensors";
 import { queryWrapper, stubEventSource, stubFetch } from "../test/utils";
 import type { SensorRef } from "../types";
 
@@ -11,10 +11,31 @@ const sensors: SensorRef[] = [
 const reading = (sensor: string, timestamp: string) => ({ sensor, timestamp, temperature: 1 });
 
 describe("useSensorList", () => {
-  it("fetches the sensor list", async () => {
-    stubFetch({ "/api/sensors": { sensors } });
-    const { result } = renderHook(() => useSensorList(), { wrapper: queryWrapper() });
+  it("fetches the selected sensors by sorted name", async () => {
+    const fetch = stubFetch({ "/api/sensors": { sensors } });
+    const { result } = renderHook(() => useSensorList(["ts", "agg"]), { wrapper: queryWrapper() });
     await waitFor(() => expect(result.current.data).toEqual({ sensors }));
+    expect(fetch).toHaveBeenCalledWith("/api/sensors?names=agg&names=ts");
+  });
+
+  it("doesn't fetch without a selection", () => {
+    const fetch = stubFetch({});
+    renderHook(() => useSensorList([]), { wrapper: queryWrapper() });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("useSensorSearch", () => {
+  it("searches the trimmed input once typing pauses", async () => {
+    const fetch = stubFetch({ "/api/sensors": { sensors } });
+    const { result, rerender } = renderHook(({ input }) => useSensorSearch(input, 20), {
+      wrapper: queryWrapper(),
+      initialProps: { input: "" },
+    });
+    rerender({ input: " t" });
+    rerender({ input: " ts " });
+    await waitFor(() => expect(result.current.data).toEqual({ sensors }));
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/sensors?q=ts&limit=20");
   });
 });
 

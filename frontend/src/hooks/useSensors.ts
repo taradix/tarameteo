@@ -1,16 +1,42 @@
 import { useEffect, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { api } from "../api";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { api, type SensorFilter } from "../api";
 import type { AggregateReading, SensorRef, WeatherReading } from "../types";
 
 const REFETCH_MS = 30_000;
 
-export function useSensorList() {
+// Selected sensors by name: their kinds decide which endpoint charts them.
+export function useSensorList(names: string[]) {
+  // Sorted so the cache key doesn't depend on the order sensors were picked in.
+  const filter: SensorFilter = { names: [...names].sort() };
   return useQuery({
-    queryKey: ["sensors"],
-    queryFn: api.listSensors,
+    queryKey: ["sensors", filter],
+    queryFn: () => api.listSensors(filter),
+    enabled: names.length > 0,
     refetchInterval: REFETCH_MS,
   });
+}
+
+// Name suggestions, searched once typing pauses.
+export function useSensorSearch(input: string, limit: number) {
+  const q = useDebounced(input.trim(), 300);
+  const filter: SensorFilter = { q, limit };
+  return useQuery({
+    queryKey: ["sensors", filter],
+    queryFn: () => api.listSensors(filter),
+    enabled: q.length > 0,
+    // Keep the suggestions while the next search loads.
+    placeholderData: keepPreviousData,
+  });
+}
+
+function useDebounced<T>(value: T, ms: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return debounced;
 }
 
 // end=null means live mode: initial REST fetch + SSE for incremental updates.

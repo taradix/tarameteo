@@ -20,7 +20,7 @@ export function Dashboard() {
     { fields: ["rain", "snow"], title: t("chart.precipitation"), unit: "mm" },
   ];
 
-  const sensorList = useSensorList();
+  const sensorList = useSensorList(sensors);
 
   const selectedEntries = useMemo<SensorRef[]>(
     () => sensors.map(
@@ -55,7 +55,6 @@ export function Dashboard() {
       <SensorPicker
         selected={sensors}
         hidden={hidden}
-        available={sensorList.data?.sensors.map((s) => s.name) ?? []}
         onChange={(next) => setParams({ sensors: next })}
         onHiddenChange={(next) => setParams({ hidden: next })}
       />

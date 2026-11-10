@@ -8,6 +8,12 @@ describe("api", () => {
     await expect(api.listSensors()).resolves.toEqual({ sensors: [{ name: "s1", kind: "timeseries" }] });
   });
 
+  it("repeats array params", async () => {
+    const fetch = stubFetch({ "/api/sensors": { sensors: [] } });
+    await api.listSensors({ names: ["a b", "c"], limit: 5 });
+    expect(fetch).toHaveBeenCalledWith("/api/sensors?names=a+b&names=c&limit=5");
+  });
+
   it("encodes the sensor name and skips undefined params", async () => {
     const fetch = stubFetch({ "/api/sensors/a%20b/weather": [] });
     await api.getWeather("a b", "2026-01-01T00:00:00Z");
