@@ -72,7 +72,7 @@ beforeEach(async () => {
   await i18n.changeLanguage("en");
 });
 
-test("shows a card per shown sensor of a known kind", async () => {
+test("fetches only the shown sensors and cards the known kinds", async () => {
   show("s1", "s2", "agg", "future");
   stubFetch({
     [`${BASE}/api/sensors`]: {
@@ -81,7 +81,6 @@ test("shows a card per shown sensor of a known kind", async () => {
         { name: "s2", kind: "timeseries" },
         { name: "agg", kind: "aggregate" },
         { name: "future", kind: "forecast" },
-        { name: "hidden", kind: "timeseries" },
       ],
     },
     [`${BASE}/api/sensors/s1/weather`]: readings,
@@ -100,7 +99,7 @@ test("shows a card per shown sensor of a known kind", async () => {
   expect(await screen.findByText("min -1.0 · avg 3.5 · max 8.1 °C")).toBeOnTheScreen();
   expect(screen.getByText("rain 4.2 mm · snow – mm")).toBeOnTheScreen();
   expect(screen.queryByText("future")).not.toBeOnTheScreen();
-  expect(screen.queryByText("hidden")).not.toBeOnTheScreen();
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?names=agg&names=future&names=s1&names=s2`);
 });
 
 test("asks to choose sensors until some are shown", async () => {
@@ -108,7 +107,7 @@ test("asks to choose sensors until some are shown", async () => {
   await render(<Dashboard />, { wrapper });
 
   expect(await screen.findByRole("link", { name: "Choose sensors" })).toBeOnTheScreen();
-  expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  expect(globalThis.fetch).not.toHaveBeenCalled();
 });
 
 test("the picker lists sensors near the rounded position and toggles them", async () => {
@@ -124,39 +123,43 @@ test("the picker lists sensors near the rounded position and toggles them", asyn
 
   expect(await screen.findByText("1.4 km")).toBeOnTheScreen();
   expect(screen.getByText("42 km")).toBeOnTheScreen();
-  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?latitude=45.5&longitude=-73.62&radius=50`);
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?latitude=45.5&longitude=-73.62&radius=50&limit=50`);
 
   await act(() => fireEvent(screen.getByLabelText("Toggle far"), "valueChange", true));
   expect(screen.getByLabelText("Toggle far").props.value).toBe(true);
   expect(Storage.getItemSync("shown")).toBe('["far"]');
 
-  await act(() => fireEvent.changeText(screen.getByPlaceholderText("Search by name…"), " NE "));
-  expect(screen.queryByText("far")).not.toBeOnTheScreen();
+  await act(() => fireEvent.changeText(screen.getByPlaceholderText("Search by name…"), " né "));
+  await waitFor(() =>
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(`${BASE}/api/sensors?q=n%C3%A9&latitude=45.5&longitude=-73.62&radius=50&limit=50`),
+  );
 
   await act(() => fireEvent.press(screen.getByRole("tab", { name: "All" })));
   await waitFor(() =>
-    expect(globalThis.fetch).toHaveBeenLastCalledWith(`${BASE}/api/sensors?latitude=45.5&longitude=-73.62`),
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(`${BASE}/api/sensors?q=n%C3%A9&latitude=45.5&longitude=-73.62&limit=50`),
   );
 });
 
-test("the picker lists every sensor by name without location", async () => {
+test("the picker lists sensors by name without location, and says when it cut the list", async () => {
   mockGranted = false;
   stubFetch({
     [`${BASE}/api/sensors`]: {
       sensors: [
-        { name: "b", kind: "timeseries", latitude: 0, longitude: 0 },
         { name: "a", kind: "aggregate", latitude: 0, longitude: 0 },
+        { name: "b", kind: "timeseries", latitude: 0, longitude: 0 },
         { name: "future", kind: "forecast", latitude: 0, longitude: 0 },
       ],
+      truncated: true,
     },
   });
   await render(<SensorsScreen />, { wrapper });
 
-  expect(await screen.findByText("Location unavailable: all sensors, by name.")).toBeOnTheScreen();
+  expect(await screen.findByText("Location unavailable: sensors by name.")).toBeOnTheScreen();
   await screen.findByText("a");
   expect(screen.getAllByLabelText(/^Toggle /).map((s) => s.props.accessibilityLabel)).toEqual(["Toggle a", "Toggle b"]);
   expect(screen.queryByRole("tab")).not.toBeOnTheScreen();
-  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors`);
+  expect(screen.getByText("Showing the first 50. Search to narrow.")).toBeOnTheScreen();
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?limit=50`);
 });
 
 test("the picker says when nothing matches, and shows list errors", async () => {
@@ -198,7 +201,7 @@ test("pull to refresh refetches the sensors and their readings", async () => {
   await act(() => list.props.refreshControl.props.onRefresh());
 
   await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
-  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors`);
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?names=s1`);
   expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringMatching(`^${BASE}/api/sensors/s1/weather\\?start=`));
 });
 
@@ -257,6 +260,7 @@ test("shows an empty state when no shown sensor exists", async () => {
 });
 
 test("shows the error when the sensor list fails", async () => {
+  show("s1");
   stubFetch({ [`${BASE}/api/sensors`]: new Response("", { status: 500, statusText: "Server Error" }) });
   await render(<Dashboard />, { wrapper });
 

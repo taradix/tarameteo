@@ -58,7 +58,9 @@
     "choose": "Choisir les capteurs",
     "search": "Chercher par nom…",
     "all": "Tous",
-    "noLocation": "Position indisponible : tous les capteurs, par nom."
+    "noLocation": "Position indisponible : capteurs par nom.",
+    "truncated": "Les {{count}} premiers. Cherchez pour affiner.",
+    "truncatedNear": "Les {{count}} plus proches. Cherchez ou choisissez un rayon plus petit pour affiner."
   },
   "alerts": {
     "create": "Créer une alerte",

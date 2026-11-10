@@ -26,6 +26,13 @@ test("listSensors calls the public API", async () => {
   expect(fetchMock).toHaveBeenCalledWith("https://meteo.taram.ca/api/sensors");
 });
 
+test("listSensors repeats names, encodes values and skips undefined filters", async () => {
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ sensors: [] })));
+
+  await api.listSensors({ names: ["a b", "c"], q: "é&", radius: undefined, limit: 5 });
+  expect(fetchMock).toHaveBeenCalledWith("https://meteo.taram.ca/api/sensors?names=a%20b&names=c&q=%C3%A9%26&limit=5");
+});
+
 test("non-OK responses throw ApiError with the status", async () => {
   fetchMock.mockResolvedValue(new Response("", { status: 404, statusText: "Not Found" }));
 

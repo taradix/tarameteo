@@ -15,14 +15,17 @@ const STALE_MS = 3 * 3600_000;
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const shown = useShown();
+  // Sorted so the cache key doesn't depend on the order sensors were picked in.
+  const names = [...shown].sort();
   const sensorsQuery = useQuery({
-    queryKey: ["sensors"],
-    queryFn: () => api.listSensors(),
+    queryKey: ["sensors", { names }],
+    queryFn: () => api.listSensors({ names }),
+    enabled: names.length > 0,
     refetchInterval: REFETCH_MS,
   });
 
-  const shown = useShown();
-  const sensors = (sensorsQuery.data?.sensors ?? []).filter((s) => KINDS.includes(s.kind) && shown.has(s.name));
+  const sensors = (sensorsQuery.data?.sensors ?? []).filter((s) => KINDS.includes(s.kind));
 
   const weather = useQueries({
     queries: sensors.map((s) => (s.kind === "timeseries" ? weatherQuery(s.name, 24) : aggregateQuery(s.name, 7 * 24))),

@@ -32,15 +32,26 @@ const weather = (name: string, suffix: string, start: string) =>
 // Clients ignore sensor kinds they don't know (see CONTRIBUTING.rst).
 export const KINDS: readonly string[] = ["timeseries", "aggregate"];
 
-// Sorts nearest first, within radius km when given.
-export type Near = { latitude: number; longitude: number; radius?: number };
+// Filters for GET /api/sensors; latitude/longitude sort nearest first, within radius km when given.
+export type SensorFilter = {
+  names?: string[];
+  q?: string;
+  latitude?: number;
+  longitude?: number;
+  radius?: number;
+  limit?: number;
+};
 
-const near = ({ latitude, longitude, radius }: Near) =>
-  `?latitude=${latitude}&longitude=${longitude}${radius ? `&radius=${radius}` : ""}`;
+// Arrays repeat the key (names=a&names=b), as FastAPI expects; undefined values are left out.
+const query = (filter: SensorFilter) => {
+  const pairs = Object.entries(filter).flatMap(([key, value]) =>
+    value === undefined ? [] : [value].flat().map((v) => `${key}=${encodeURIComponent(v)}`),
+  );
+  return pairs.length ? `?${pairs.join("&")}` : "";
+};
 
 export const api = {
-  // GET /api/sensors returns dict[str, list[SensorEntry]], which has no named schema.
-  listSensors: (around?: Near) => get<{ sensors: SensorEntry[] }>(`/api/sensors${around ? near(around) : ""}`),
+  listSensors: (filter: SensorFilter = {}) => get<Schemas["SensorList"]>(`/api/sensors${query(filter)}`),
   getWeather: (name: string, start: string) => get<WeatherReading[]>(weather(name, "", start)),
   getWeatherAggregate: (name: string, start: string) =>
     get<AggregateReading[]>(weather(name, "/aggregate", start)),

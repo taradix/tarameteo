@@ -1,16 +1,28 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import * as Location from "expo-location";
 import { Stack } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
-import { api, KINDS, type Near } from "@/api";
+import { api, KINDS, type SensorFilter } from "@/api";
 import { COLOR } from "@/components/WeatherChart";
 import { useFormat } from "@/format";
 import { toggleShown, useShown } from "@/shown";
 
 const RADII = [10, 50, 200, null];
+// Enough to scroll through; past that, searching or a smaller radius beats scrolling.
+const LIMIT = 50;
 const round = (x: number) => Math.round(x * 100) / 100;
+
+// Searches once typing pauses, not on every keystroke.
+function useDebounced<T>(value: T, ms: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return debounced;
+}
 
 // Two decimals (about 1 km) is enough to sort sensors, and all the server learns about the phone.
 async function currentPosition() {
@@ -28,18 +40,17 @@ export default function SensorsScreen() {
   // Denied or failed (location off): fall back to every sensor by name.
   const position = useQuery({ queryKey: ["position"], queryFn: currentPosition, retry: false, staleTime: 10 * 60_000 });
   const here = position.data ?? undefined;
-  const near: Near | undefined = here && (radius ? { ...here, radius } : here);
+  const q = useDebounced(filter.trim(), 300) || undefined;
+  const params: SensorFilter = { q, ...here, radius: here && (radius ?? undefined), limit: LIMIT };
   const sensorsQuery = useQuery({
-    queryKey: near ? ["sensors", near] : ["sensors"],
-    queryFn: () => api.listSensors(near),
+    queryKey: ["sensors", params],
+    queryFn: () => api.listSensors(params),
     enabled: !position.isPending,
+    // Keep the list while the next search loads, instead of flashing empty on every keystroke.
+    placeholderData: keepPreviousData,
   });
 
-  const needle = filter.trim().toLocaleLowerCase();
-  const sensors = (sensorsQuery.data?.sensors ?? []).filter(
-    (s) => KINDS.includes(s.kind) && s.name.toLocaleLowerCase().includes(needle),
-  );
-  if (!here) sensors.sort((a, b) => a.name.localeCompare(b.name));
+  const sensors = (sensorsQuery.data?.sensors ?? []).filter((s) => KINDS.includes(s.kind));
 
   return (
     <FlatList
@@ -75,6 +86,11 @@ export default function SensorsScreen() {
           )}
           {sensorsQuery.error && <Text style={styles.message}>{String(sensorsQuery.error)}</Text>}
         </>
+      }
+      ListFooterComponent={
+        sensorsQuery.data?.truncated ? (
+          <Text style={styles.message}>{t(here ? "sensors.truncatedNear" : "sensors.truncated", { count: LIMIT })}</Text>
+        ) : undefined
       }
       ListEmptyComponent={sensorsQuery.isSuccess ? <Text style={styles.message}>{t("dashboard.empty")}</Text> : undefined}
       renderItem={({ item }) => (

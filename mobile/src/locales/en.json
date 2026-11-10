@@ -58,7 +58,9 @@
     "choose": "Choose sensors",
     "search": "Search by name…",
     "all": "All",
-    "noLocation": "Location unavailable: all sensors, by name."
+    "noLocation": "Location unavailable: sensors by name.",
+    "truncated": "Showing the first {{count}}. Search to narrow.",
+    "truncatedNear": "Showing the {{count}} nearest. Search or pick a smaller radius to narrow."
   },
   "alerts": {
     "create": "Set alert",
