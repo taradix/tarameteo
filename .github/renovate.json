@@ -22,6 +22,12 @@
       "groupName": "typescript"
     },
     {
+      "description": "TS majors wait for typescript-eslint peer support; tick the box on the Dependency Dashboard to try.",
+      "matchPackageNames": ["typescript"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
       "description": "Expo SDK pins these; upgrade with `npx expo install expo@<next> --fix`.",
       "matchFileNames": ["mobile/package.json"],
       "matchPackageNames": [
