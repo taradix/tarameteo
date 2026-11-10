@@ -49,6 +49,66 @@
         "operationId": "get_sensors_api_sensors_get",
         "parameters": [
           {
+            "name": "names",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only sensors with these exact names",
+              "title": "Names"
+            },
+            "description": "Only sensors with these exact names"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only names containing this, any case",
+              "title": "Q"
+            },
+            "description": "Only names containing this, any case"
+          },
+          {
+            "name": "bbox",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Map area as west,south,east,north in degrees; west > east crosses the antimeridian",
+              "title": "Bbox"
+            },
+            "description": "Map area as west,south,east,north in degrees; west > east crosses the antimeridian"
+          },
+          {
             "name": "latitude",
             "in": "query",
             "required": false,
@@ -106,6 +166,26 @@
               "title": "Radius"
             },
             "description": "Only sensors within this many km of the point"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 200,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "At most this many sensors; see truncated",
+              "title": "Limit"
+            },
+            "description": "At most this many sensors; see truncated"
           }
         ],
         "responses": {
@@ -114,14 +194,61 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/SensorEntry"
-                    }
-                  },
-                  "title": "Response Get Sensors Api Sensors Get"
+                  "$ref": "#/components/schemas/SensorList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sensors/clusters": {
+      "get": {
+        "summary": "Get Sensor Clusters",
+        "operationId": "get_sensor_clusters_api_sensors_clusters_get",
+        "parameters": [
+          {
+            "name": "bbox",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Map area as west,south,east,north in degrees; west > east crosses the antimeridian",
+              "title": "Bbox"
+            },
+            "description": "Map area as west,south,east,north in degrees; west > east crosses the antimeridian"
+          },
+          {
+            "name": "zoom",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 22,
+              "minimum": 0,
+              "description": "Map zoom level, which sets the cluster size",
+              "title": "Zoom"
+            },
+            "description": "Map zoom level, which sets the cluster size"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClusterList"
                 }
               }
             }
@@ -760,6 +887,58 @@
         "title": "CertificateMaterial",
         "description": "Material produced by issuing (or self-signing) an X.509 certificate."
       },
+      "Cluster": {
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "title": "Latitude",
+            "description": "Mean latitude of the clustered sensors"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude",
+            "description": "Mean longitude of the clustered sensors"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "sensor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SensorEntry"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The sensor, when the cluster holds only one"
+          }
+        },
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude",
+          "count"
+        ],
+        "title": "Cluster"
+      },
+      "ClusterList": {
+        "properties": {
+          "clusters": {
+            "items": {
+              "$ref": "#/components/schemas/Cluster"
+            },
+            "type": "array",
+            "title": "Clusters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clusters"
+        ],
+        "title": "ClusterList"
+      },
       "Condition": {
         "type": "string",
         "enum": [
@@ -890,6 +1069,28 @@
         ],
         "title": "SensorInfo",
         "description": "Full sensor record returned by GET /api/sensors/{name}."
+      },
+      "SensorList": {
+        "properties": {
+          "sensors": {
+            "items": {
+              "$ref": "#/components/schemas/SensorEntry"
+            },
+            "type": "array",
+            "title": "Sensors"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "More sensors matched than the limit",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "sensors"
+        ],
+        "title": "SensorList"
       },
       "SensorStatistics": {
         "properties": {

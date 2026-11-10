@@ -178,6 +178,79 @@ def test_sensors_list_near_sorts_by_distance_within_radius(api_app, memory_write
     ))
 
 
+@pytest.fixture
+def cities(memory_writer):
+    """Montreal and Quebec weather sensors, and an aggregate across the antimeridian in Fiji."""
+    now = datetime.now(UTC)
+    memory_writer.write_point("weather", make_weather(), tags=located("Montreal", "45.50", "-73.57"), timestamp=now)
+    memory_writer.write_point("weather", make_weather(), tags=located("Quebec", "46.81", "-71.21"), timestamp=now)
+    memory_writer.write_point(
+        "weather_aggregate", make_aggregate(), tags=located("Fiji", "-17.80", "179.50"), timestamp=now,
+    )
+
+
+@pytest.mark.parametrize("params, names", [
+    ({"names": ["Quebec", "Fiji", "Nowhere"]}, ["Fiji", "Quebec"]),
+    ({"q": "MONT"}, ["Montreal"]),
+    ({"bbox": "-75,45,-72,46"}, ["Montreal"]),
+    ({"bbox": "179,-20,-179,-15"}, ["Fiji"]),
+    ({"q": "e", "latitude": 46.8, "longitude": -71.2}, ["Quebec", "Montreal"]),
+])
+def test_sensors_list_filters(api_app, cities, params, names):
+    response = api_app.get("/api/sensors", params=params)
+
+    assert_that(response.status_code, equal_to(200))
+    assert_that(response.json(), has_entries(
+        sensors=contains_exactly(*(has_entries(name=n) for n in names)),
+        truncated=False,
+    ))
+
+
+def test_sensors_list_limit_truncates_in_name_order(api_app, cities):
+    response = api_app.get("/api/sensors", params={"limit": 2})
+
+    assert_that(response.json(), has_entries(
+        sensors=contains_exactly(has_entries(name="Fiji"), has_entries(name="Montreal")),
+        truncated=True,
+    ))
+
+
+def test_sensor_clusters_group_by_zoom(api_app, cities):
+    canada = {"bbox": "-80,40,-70,50"}
+
+    far = api_app.get("/api/sensors/clusters", params={**canada, "zoom": 3})
+    near = api_app.get("/api/sensors/clusters", params={**canada, "zoom": 8})
+
+    # At zoom 3 a cell spans 11.25°, which holds both cities; at zoom 8 it spans 0.35°.
+    assert_that(far.json()["clusters"], contains_exactly(
+        has_entries(count=2, latitude=close_to(46.155, 0.001), longitude=close_to(-72.39, 0.001), sensor=None),
+    ))
+    assert_that(near.json()["clusters"], contains_inanyorder(
+        has_entries(count=1, latitude=45.5, sensor=has_entries(name="Montreal", kind="timeseries")),
+        has_entries(count=1, latitude=46.81, sensor=has_entries(name="Quebec")),
+    ))
+
+
+@pytest.mark.parametrize("path, params", [
+    ("/api/sensors", {"bbox": "1,2,3"}),
+    ("/api/sensors", {"bbox": "a,b,c,d"}),
+    ("/api/sensors", {"bbox": "-181,0,0,1"}),
+    ("/api/sensors", {"bbox": "0,10,1,5"}),
+    ("/api/sensors", {"bbox": "nan,0,1,1"}),
+    ("/api/sensors", {"q": ""}),
+    ("/api/sensors", {"names": [str(i) for i in range(101)]}),
+    ("/api/sensors", {"limit": 0}),
+    ("/api/sensors", {"limit": 201}),
+    ("/api/sensors/clusters", {"bbox": "0,0,1,1"}),
+    ("/api/sensors/clusters", {"zoom": 4}),
+    ("/api/sensors/clusters", {"bbox": "0,0,1,1", "zoom": 23}),
+])
+def test_sensors_list_rejects_invalid_filters(api_app, path, params):
+    response = api_app.get(path, params=params)
+
+    assert_that(response.status_code, equal_to(422))
+
+
 @pytest.mark.parametrize("params", [
     {"latitude": 45.5},
     {"longitude": -73.6},

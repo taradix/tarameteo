@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sensors/clusters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sensor Clusters */
+        get: operations["get_sensor_clusters_api_sensors_clusters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sensors/{name}": {
         parameters: {
             query?: never;
@@ -243,6 +260,28 @@ export interface components {
             /** Issuer */
             issuer: string;
         };
+        /** Cluster */
+        Cluster: {
+            /**
+             * Latitude
+             * @description Mean latitude of the clustered sensors
+             */
+            latitude: number;
+            /**
+             * Longitude
+             * @description Mean longitude of the clustered sensors
+             */
+            longitude: number;
+            /** Count */
+            count: number;
+            /** @description The sensor, when the cluster holds only one */
+            sensor?: components["schemas"]["SensorEntry"] | null;
+        };
+        /** ClusterList */
+        ClusterList: {
+            /** Clusters */
+            clusters: components["schemas"]["Cluster"][];
+        };
         /**
          * Condition
          * @enum {string}
@@ -304,6 +343,17 @@ export interface components {
             /** Longitude */
             longitude: number;
             statistics: components["schemas"]["SensorStatistics"];
+        };
+        /** SensorList */
+        SensorList: {
+            /** Sensors */
+            sensors: components["schemas"]["SensorEntry"][];
+            /**
+             * Truncated
+             * @description More sensors matched than the limit
+             * @default false
+             */
+            truncated: boolean;
         };
         /**
          * SensorStatistics
@@ -452,12 +502,20 @@ export interface operations {
     get_sensors_api_sensors_get: {
         parameters: {
             query?: {
+                /** @description Only sensors with these exact names */
+                names?: string[] | null;
+                /** @description Only names containing this, any case */
+                q?: string | null;
+                /** @description Map area as west,south,east,north in degrees; west > east crosses the antimeridian */
+                bbox?: string | null;
                 /** @description Sort nearest first from this point */
                 latitude?: number | null;
                 /** @description Sort nearest first from this point */
                 longitude?: number | null;
                 /** @description Only sensors within this many km of the point */
                 radius?: number | null;
+                /** @description At most this many sensors; see truncated */
+                limit?: number | null;
             };
             header?: never;
             path?: never;
@@ -471,9 +529,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["SensorEntry"][];
-                    };
+                    "application/json": components["schemas"]["SensorList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sensor_clusters_api_sensors_clusters_get: {
+        parameters: {
+            query: {
+                /** @description Map area as west,south,east,north in degrees; west > east crosses the antimeridian */
+                bbox: string;
+                /** @description Map zoom level, which sets the cluster size */
+                zoom: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClusterList"];
                 };
             };
             /** @description Validation Error */

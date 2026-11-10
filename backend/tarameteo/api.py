@@ -31,8 +31,10 @@ from tarameteo.db import SessionLocal
 from tarameteo.notifier import SmtpNotifier
 from tarameteo.sensors import (
     AggregateReading,
-    SensorEntry,
+    BBox,
+    ClusterList,
     SensorInfo,
+    SensorList,
     SensorService,
     WeatherReading,
 )
@@ -159,17 +161,52 @@ def post_cert(
     return ca_client.issue_certificate(request)
 
 
+BBOX_DESCRIPTION = "Map area as west,south,east,north in degrees; west > east crosses the antimeridian"
+
+
+def _parse_bbox(value: str) -> BBox:
+    try:
+        bbox = BBox(*(float(v) for v in value.split(",")))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="bbox must be west,south,east,north") from None
+    if not (
+        -180 <= bbox.west <= 180 and -180 <= bbox.east <= 180 and -90 <= bbox.south <= bbox.north <= 90
+    ):
+        raise HTTPException(status_code=422, detail="bbox is out of range, or south is above north")
+    return bbox
+
+
 @app.get("/api/sensors")
 def get_sensors(
     service: SensorServiceDep,
+    names: Annotated[list[str] | None, Query(max_length=100, description="Only sensors with these exact names")] = None,
+    q: Annotated[str | None, Query(min_length=1, max_length=100, description="Only names containing this, any case")] = None,
+    bbox: Annotated[str | None, Query(description=BBOX_DESCRIPTION)] = None,
     latitude: Annotated[float | None, Query(ge=-90, le=90, description="Sort nearest first from this point")] = None,
     longitude: Annotated[float | None, Query(ge=-180, le=180, description="Sort nearest first from this point")] = None,
     radius: Annotated[float | None, Query(gt=0, description="Only sensors within this many km of the point")] = None,
-) -> dict[str, list[SensorEntry]]:
+    limit: Annotated[int | None, Query(ge=1, le=200, description="At most this many sensors; see truncated")] = None,
+) -> SensorList:
     near = (latitude, longitude) if latitude is not None and longitude is not None else None
     if near is None and (latitude, longitude, radius) != (None, None, None):
         raise HTTPException(status_code=422, detail="latitude and longitude go together, and radius needs both")
-    return {"sensors": service.list_sensors(near=near, radius_km=radius)}
+    return service.list_sensors(
+        names=names,
+        q=q,
+        bbox=_parse_bbox(bbox) if bbox is not None else None,
+        near=near,
+        radius_km=radius,
+        limit=limit,
+    )
+
+
+@app.get("/api/sensors/clusters")
+def get_sensor_clusters(
+    service: SensorServiceDep,
+    bbox: Annotated[str, Query(description=BBOX_DESCRIPTION)],
+    zoom: Annotated[int, Query(ge=0, le=22, description="Map zoom level, which sets the cluster size")],
+) -> ClusterList:
+    return service.cluster_sensors(_parse_bbox(bbox), zoom)
 
 
 @app.get("/api/sensors/{name}")
