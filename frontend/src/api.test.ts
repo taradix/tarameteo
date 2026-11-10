@@ -35,7 +35,7 @@ describe("api", () => {
 
   it("posts alerts as JSON", async () => {
     const fetch = stubFetch({ "/api/alerts": { status: "ok" } });
-    const alert = { email: "a@b.c", sensor: "s1", field: "rain", condition: "above", threshold: 5 } as const;
+    const alert = { email: "a@b.c", sensor: "s1", field: "rain", condition: "above", threshold: 5, language: "en" } as const;
     await expect(api.createAlert(alert)).resolves.toEqual({ status: "ok" });
     expect(fetch).toHaveBeenCalledWith("/api/alerts", {
       method: "POST",
@@ -46,7 +46,7 @@ describe("api", () => {
 
   it("throws ApiError when a post fails", async () => {
     stubFetch({});
-    const alert = { email: "a@b.c", sensor: "s1", field: "rain", condition: "above", threshold: 5 } as const;
+    const alert = { email: "a@b.c", sensor: "s1", field: "rain", condition: "above", threshold: 5, language: "en" } as const;
     await expect(api.createAlert(alert)).rejects.toMatchObject({ status: 404 });
   });
 });

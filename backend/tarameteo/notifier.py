@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Notifier(Protocol):
     """Protocol for sending alert notifications."""
 
-    async def send(self, recipient: str, subject: str, body: str) -> None: ...
+    async def send(self, recipient: str, subject: str, body: str, headers: dict[str, str] | None = None) -> None: ...
 
 
 @define
@@ -26,11 +26,13 @@ class SmtpNotifier:
     password: str
     from_address: str
 
-    async def send(self, recipient: str, subject: str, body: str) -> None:
+    async def send(self, recipient: str, subject: str, body: str, headers: dict[str, str] | None = None) -> None:
         message = EmailMessage()
         message["From"] = self.from_address
         message["To"] = recipient
         message["Subject"] = subject
+        for name, value in (headers or {}).items():
+            message[name] = value
         message.set_content(body)
 
         await aiosmtplib.send(

@@ -4,8 +4,9 @@ import asyncio
 import logging
 import os
 import uuid
+from collections.abc import Iterator
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import (
@@ -16,9 +17,10 @@ from fastapi import (
     Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from taraqueue import Queue, QueueEmpty
 
+from tarameteo import alert_text
 from tarameteo.alerts import Alert, AlertCreate, AlertStore
 from tarameteo.ca_client import (
     CAClient,
@@ -61,9 +63,6 @@ async def lifespan(app: FastAPI):
     alert_secret = os.environ.get("ALERT_SECRET", "")
     app.state.alert_secret = alert_secret
     app.state.alert_base_url = os.environ.get("ALERT_BASE_URL", "")
-    app.state.alert_cooldown = timedelta(
-        seconds=_parse_cooldown(os.environ.get("ALERT_COOLDOWN", "3600"))
-    )
 
     # Notifier.
     notifier = None
@@ -90,7 +89,7 @@ async def lifespan(app: FastAPI):
 
         tasks.append(
             asyncio.create_task(
-                run_consumer(app.state.ts_writer, app.state.queue, notifier=notifier, alert_secret=alert_secret, alert_base_url=app.state.alert_base_url, alert_cooldown=app.state.alert_cooldown),
+                run_consumer(app.state.ts_writer, app.state.queue, notifier=notifier, alert_secret=alert_secret, alert_base_url=app.state.alert_base_url),
                 name="mqtt-consumer",
             ),
         )
@@ -102,11 +101,6 @@ async def lifespan(app: FastAPI):
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
-
-
-def _parse_cooldown(value: str) -> float:
-    """Parse cooldown value in seconds."""
-    return float(value)
 
 
 app = FastAPI(
@@ -260,16 +254,21 @@ async def stream_sensor_weather(name: str, request: Request, queue: QueueDep) ->
 # --- Alert endpoints ---
 
 
-def get_alert_store(request: Request) -> AlertStore:
+def get_alert_store() -> Iterator[AlertStore]:
     db = SessionLocal()
     try:
-        return AlertStore(db)
-    except Exception:
+        yield AlertStore(db)
+    finally:
         db.close()
-        raise
 
 
 AlertStoreDep = Annotated[AlertStore, Depends(get_alert_store)]
+
+CONFIRM_EXPIRY = timedelta(days=1)
+MAX_ALERTS = 20
+# Confirm emails an address can be sent per day, so the form can't flood a stranger's inbox.
+# ponytail: no per-IP limit; add one (at the proxy) if someone sprays many addresses.
+MAX_PENDING = 3
 
 
 @app.post("/api/alerts", status_code=201)
@@ -281,58 +280,88 @@ async def post_alert(body: AlertCreate, request: Request, alert_store: AlertStor
     if not secret or not notifier:
         raise HTTPException(status_code=503, detail="Alert service not configured")
 
-    alert_id = uuid.uuid4().hex
-    alert = Alert(
-        id=alert_id,
-        email=body.email,
-        sensor=body.sensor,
-        field=body.field,
-        condition=body.condition,
-        threshold=body.threshold,
-    )
+    alert_store.delete_unconfirmed(datetime.now(UTC) - CONFIRM_EXPIRY)
+    if alert_store.count_by_email(body.email) >= MAX_ALERTS:
+        raise HTTPException(status_code=409, detail=f"At most {MAX_ALERTS} alerts per email")
+    # Same answer as when sent, so this doesn't tell anyone about the address.
+    if alert_store.count_by_email(body.email, confirmed=False) >= MAX_PENDING:
+        return {"status": "confirmation_sent"}
+
+    alert = Alert(id=uuid.uuid4().hex, **body.model_dump())
     alert_store.create(alert)
 
-    token = sign_token({"alert_id": alert_id, "action": "confirm"}, secret, expires_in=86400)
-    confirm_url = f"{base_url}/api/alerts/confirm/{token}"
-
-    subject = "Confirm your weather alert"
-    email_body = (
-        f"Please confirm your alert:\n\n"
-        f"Sensor: {alert.sensor}\n"
-        f"Condition: {alert.field} {alert.condition} {alert.threshold}\n\n"
-        f"Click to confirm:\n{confirm_url}\n"
-    )
-
+    token = sign_token({"alert_id": alert.id, "action": "confirm"}, secret, expires_in=CONFIRM_EXPIRY.total_seconds())
+    subject, email_body = alert_text.email(alert, "confirm", f"{base_url}/api/alerts/confirm/{token}")
     await notifier.send(alert.email, subject, email_body)
     return {"status": "confirmation_sent"}
 
 
-@app.get("/api/alerts/confirm/{token}")
-def confirm_alert(token: str, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
+def _token_alert_id(token: str, action: str, request: Request) -> str | None:
     secret = request.app.state.alert_secret
-    payload = verify_token(token, secret)
-    if not payload or payload.get("action") != "confirm":
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
-
-    alert_id = payload["alert_id"]
-    if not alert_store.confirm(alert_id):
-        raise HTTPException(status_code=404, detail="Alert not found or already confirmed")
-
-    return {"status": "confirmed"}
+    payload = verify_token(token, secret) if secret else None
+    return payload["alert_id"] if payload and payload.get("action") == action else None
 
 
-@app.get("/api/alerts/unsubscribe/{token}")
-def unsubscribe_alert(token: str, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
-    secret = request.app.state.alert_secret
-    payload = verify_token(token, secret)
-    if not payload or payload.get("action") != "unsubscribe":
-        raise HTTPException(status_code=400, detail="Invalid token")
+def _html(content: str, status_code: int = 200) -> HTMLResponse:
+    return HTMLResponse(content, status_code=status_code)
 
-    alert_id = payload["alert_id"]
-    if not alert_store.delete(alert_id):
-        raise HTTPException(status_code=404, detail="Alert not found")
 
-    return {"status": "unsubscribed"}
+INVALID_PAGE = alert_text.page("fr", alert_text.INVALID)
+GONE_PAGE = alert_text.page("fr", alert_text.GONE)
+
+# Email links only show a button; acting on GET would let link scanners confirm or stop alerts.
+
+
+@app.get("/api/alerts/confirm/{token}", response_class=HTMLResponse)
+def confirm_alert_page(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "confirm", request)
+    if alert_id is None:
+        return _html(INVALID_PAGE, 400)
+    alert = alert_store.get(alert_id)
+    if alert is None:
+        return _html(GONE_PAGE, 404)
+    text = alert_text.TEXT[alert.language]
+    if alert.confirmed:
+        return _html(alert_text.page(alert.language, text["confirmed"].format(rule=alert_text.rule(alert))))
+    return _html(alert_text.page(alert.language, text["confirm_title"], alert_text.rule(alert), button=text["confirm_button"]))
+
+
+@app.post("/api/alerts/confirm/{token}", response_class=HTMLResponse)
+def confirm_alert(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "confirm", request)
+    if alert_id is None:
+        return _html(INVALID_PAGE, 400)
+    alert_store.confirm(alert_id)
+    alert = alert_store.get(alert_id)
+    if alert is None:
+        return _html(GONE_PAGE, 404)
+    text = alert_text.TEXT[alert.language]
+    return _html(alert_text.page(alert.language, text["confirmed"].format(rule=alert_text.rule(alert))))
+
+
+@app.get("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
+def unsubscribe_alert_page(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "unsubscribe", request)
+    if alert_id is None:
+        return _html(INVALID_PAGE, 400)
+    alert = alert_store.get(alert_id)
+    if alert is None:
+        return _html(GONE_PAGE, 404)
+    text = alert_text.TEXT[alert.language]
+    return _html(alert_text.page(alert.language, text["remove_title"], alert_text.rule(alert), button=text["remove_button"]))
+
+
+# Also the one-click unsubscribe target for the List-Unsubscribe-Post header.
+@app.post("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
+def unsubscribe_alert(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "unsubscribe", request)
+    if alert_id is None:
+        return _html(INVALID_PAGE, 400)
+    alert = alert_store.get(alert_id)
+    if alert is None:
+        return _html(GONE_PAGE, 404)
+    alert_store.delete(alert_id)
+    return _html(alert_text.page(alert.language, alert_text.TEXT[alert.language]["removed"]))
 
 
 @app.exception_handler(Exception)

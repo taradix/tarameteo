@@ -1,4 +1,4 @@
-import type { AggregateReading, SensorList, WeatherReading } from "./types";
+import type { AggregateReading, AlertCreate, SensorList, WeatherReading } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -44,14 +44,6 @@ export class ApiError extends Error {
   }
 }
 
-export interface AlertCreateRequest {
-  email: string;
-  sensor: string;
-  field: string;
-  condition: "above" | "below";
-  threshold: number;
-}
-
 export const api = {
   listSensors: (filter: SensorFilter = {}) => get<SensorList>("/api/sensors", { ...filter }),
   getWeather: (name: string, start: string, end?: string, limit?: number) =>
@@ -64,6 +56,6 @@ export const api = {
       `/api/sensors/${encodeURIComponent(name)}/weather/aggregate`,
       { start, end, limit },
     ),
-  createAlert: (alert: AlertCreateRequest) =>
+  createAlert: (alert: AlertCreate) =>
     post<{ status: string }>("/api/alerts", alert),
 };

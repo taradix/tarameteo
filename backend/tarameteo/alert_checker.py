@@ -1,33 +1,35 @@
 """Threshold checking for weather alerts."""
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-from tarameteo.alerts import AlertStore, Condition
+from tarameteo import alert_text
+from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.notifier import Notifier
 from tarameteo.sensors import WeatherReading
 from tarameteo.tokens import sign_token
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_COOLDOWN = timedelta(hours=1)
+# How far back past the threshold a value must go to count as normal again, so a reading
+# wobbling around the threshold doesn't send an email each time it crosses.
+MARGINS = {"temperature": 1.0, "humidity": 5.0, "pressure": 1.0, "rain": 1.0, "snow": 1.0}
 
 
-def _evaluate_condition(value: float | None, condition: Condition, threshold: float) -> bool:
-    if value is None:
-        return False
-    if condition == Condition.above:
-        return value > threshold
-    return value < threshold
+def _crossed(value: float, alert: Alert) -> bool:
+    return value > alert.threshold if alert.condition == Condition.above else value < alert.threshold
 
 
-def _ensure_utc(dt: datetime | None) -> datetime | None:
-    """Ensure a datetime is timezone-aware (UTC)."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
-    return dt
+def _cleared(value: float, alert: Alert) -> bool:
+    margin = MARGINS[alert.field]
+    if alert.condition == Condition.above:
+        return value <= alert.threshold - margin
+    return value >= alert.threshold + margin
+
+
+def unsubscribe_url(alert: Alert, secret: str, base_url: str) -> str:
+    token = sign_token({"alert_id": alert.id, "action": "unsubscribe"}, secret)
+    return f"{base_url}/api/alerts/unsubscribe/{token}"
 
 
 async def check_alerts(
@@ -37,38 +39,28 @@ async def check_alerts(
     *,
     secret: str,
     base_url: str,
-    cooldown: timedelta = DEFAULT_COOLDOWN,
 ) -> None:
-    """Check active alerts for a sensor and send notifications if triggered."""
-    alerts = alert_store.list_by_sensor(reading.sensor)
-    now = datetime.now(UTC)
-
-    for alert in alerts:
-        # Respect cooldown.
-        last_triggered = _ensure_utc(alert.last_triggered_at)
-        if last_triggered and (now - last_triggered) < cooldown:
-            continue
-
+    """Email once when a value crosses its threshold, and once when it's back to normal."""
+    for alert in alert_store.list_by_sensor(reading.sensor):
         value = getattr(reading, alert.field, None)
-        if not _evaluate_condition(value, alert.condition, alert.threshold):
+        if value is None:
+            continue
+        if not alert.triggered and _crossed(value, alert):
+            key = "alert"
+        elif alert.triggered and _cleared(value, alert):
+            key = "normal"
+        else:
             continue
 
-        # Build unsubscribe link.
-        token = sign_token({"alert_id": alert.id, "action": "unsubscribe"}, secret)
-        unsubscribe_url = f"{base_url}/api/alerts/unsubscribe/{token}"
-
-        subject = f"Weather alert: {alert.field} is {value}"
-        body = (
-            f"Your alert has been triggered.\n\n"
-            f"Sensor: {reading.sensor}\n"
-            f"{alert.field.capitalize()}: {value}\n"
-            f"Condition: {alert.condition} {alert.threshold}\n\n"
-            f"To unsubscribe from this alert:\n{unsubscribe_url}\n"
-        )
-
+        url = unsubscribe_url(alert, secret, base_url)
+        subject, body = alert_text.email(alert, key, url, value)
+        # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
+        headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
         try:
-            await notifier.send(alert.email, subject, body)
-            alert_store.update_last_triggered(alert.id, now)
-            logger.info(f"Alert {alert.id} triggered for {alert.email}")
+            await notifier.send(alert.email, subject, body, headers)
         except Exception:
+            # The state stays, so the next reading tries again.
             logger.exception(f"Failed to send alert {alert.id} to {alert.email}")
+            continue
+        alert_store.set_triggered(alert.id, key == "alert", datetime.now(UTC))
+        logger.info(f"Alert {alert.id} sent {key} to {alert.email}")

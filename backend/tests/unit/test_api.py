@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from datetime import (
     UTC,
     datetime,
@@ -11,21 +12,33 @@ from unittest.mock import AsyncMock
 
 import pytest
 from hamcrest import (
+    all_of,
     assert_that,
     close_to,
     contains_exactly,
     contains_inanyorder,
+    contains_string,
     equal_to,
     has_entries,
     has_properties,
+    is_not,
+    none,
+    not_none,
+    only_contains,
 )
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
-from tarameteo.api import app, stream_sensor_weather
+from tarameteo.alerts import Alert, AlertStore
+from tarameteo.api import app, get_alert_store, stream_sensor_weather
 from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
     get_ca_client,
 )
+from tarameteo.models import SQLModel
+from tarameteo.tokens import sign_token
 
 
 def make_weather(temperature=20.0, humidity=50.0, pressure=1000.0, **extra):
@@ -430,3 +443,92 @@ async def test_stream_sensor_weather(memory_queue, unique):
     await task
 
     assert_that(events, contains_exactly(f"data: {payload}\n\n"))
+
+
+@pytest.fixture
+def alert_api(api_app):
+    """api_app with alerts configured: an in-memory store, and a notifier mock to read emails from."""
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+    db = Session(engine)
+    store = AlertStore(db)
+    app.dependency_overrides[get_alert_store] = lambda: store
+    state = api_app.app.state
+    state.alert_secret, state.alert_base_url, state.notifier = "s", "http://test", AsyncMock()
+    try:
+        yield api_app, store, state.notifier
+    finally:
+        app.dependency_overrides.pop(get_alert_store, None)
+        db.close()
+        engine.dispose()
+
+
+NEW_ALERT = {"email": "user@example.com", "sensor": "outdoor", "field": "temperature", "condition": "below", "threshold": -20}
+
+
+def _link(notifier) -> str:
+    """The path of the link in the last email."""
+    body = notifier.send.call_args.args[2]
+    return re.search(r"http://test(\S+)", body).group(1)
+
+
+def test_alert_confirm_needs_a_button_press(alert_api):
+    client, store, notifier = alert_api
+
+    assert_that(client.post("/api/alerts", json={**NEW_ALERT, "language": "fr"}).status_code, equal_to(201))
+    link = _link(notifier)
+    assert_that(notifier.send.call_args.args[1], equal_to("Confirmez votre alerte météo"))
+
+    # Opening the link, as a link scanner would, changes nothing.
+    page = client.get(link)
+    assert_that(page.text, all_of(contains_string('<form method="post">'), contains_string("en dessous de -20 °C")))
+    assert_that(store.count_by_email("user@example.com", confirmed=True), equal_to(0))
+
+    assert_that(client.post(link).text, contains_string("Alerte confirmée"))
+    assert_that(store.count_by_email("user@example.com", confirmed=True), equal_to(1))
+    assert_that(client.get(link).text, is_not(contains_string("<form")))
+
+
+def test_alert_unsubscribe_needs_a_post(alert_api):
+    client, store, _ = alert_api
+    store.create(Alert(id="a1", confirmed=True, **NEW_ALERT))
+    link = "/api/alerts/unsubscribe/" + sign_token({"alert_id": "a1", "action": "unsubscribe"}, "s")
+
+    assert_that(client.get(link).text, contains_string("Stop this alert?"))
+    assert_that(store.get("a1"), not_none())
+
+    # The one-click unsubscribe POST from a mail client.
+    response = client.post(link, data={"List-Unsubscribe": "One-Click"})
+    assert_that(response.status_code, equal_to(200))
+    assert_that(store.get("a1"), none())
+    assert_that(client.post(link).status_code, equal_to(404))
+
+
+@pytest.mark.parametrize("path", [
+    "/api/alerts/confirm/bad.token",
+    "/api/alerts/unsubscribe/" + sign_token({"alert_id": "a1", "action": "confirm"}, "s"),
+    "/api/alerts/confirm/" + sign_token({"alert_id": "a1", "action": "confirm"}, "s", expires_in=-1),
+    "/api/alerts/confirm/" + sign_token({"alert_id": "a1", "action": "confirm"}, "other"),
+])
+def test_alert_links_reject_bad_tokens(alert_api, path):
+    client, _, _ = alert_api
+
+    assert_that(client.get(path).status_code, equal_to(400))
+    assert_that(client.post(path).status_code, equal_to(400))
+
+
+def test_alert_create_limits_pending_confirmations_silently(alert_api):
+    client, _, notifier = alert_api
+
+    responses = [client.post("/api/alerts", json=NEW_ALERT) for _ in range(5)]
+
+    assert_that([r.json() for r in responses], only_contains(has_entries(status="confirmation_sent")))
+    assert_that(notifier.send.call_count, equal_to(3))
+
+
+def test_alert_create_caps_alerts_per_email(alert_api):
+    client, store, _ = alert_api
+    for i in range(20):
+        store.create(Alert(id=f"a{i}", confirmed=True, **NEW_ALERT))
+
+    assert_that(client.post("/api/alerts", json=NEW_ALERT).status_code, equal_to(409))

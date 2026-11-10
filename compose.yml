@@ -40,7 +40,6 @@ services:
       SMTP_FROM: ${SMTP_FROM:-noreply@taram.ca}
       ALERT_SECRET: ${ALERT_SECRET:-}
       ALERT_BASE_URL: ${ALERT_BASE_URL:-https://meteo.taram.ca}
-      ALERT_COOLDOWN: ${ALERT_COOLDOWN:-3600}
       DBDRIVER: sqlite
       DBNAME: /data/alerts.db
     networks:

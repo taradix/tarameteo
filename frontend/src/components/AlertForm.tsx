@@ -1,9 +1,11 @@
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type AlertCreateRequest } from "../api";
-import type { WeatherField } from "../types";
+import { api } from "../api";
+import type { AlertCreate } from "../types";
 
-const ALERT_FIELDS: WeatherField[] = ["temperature", "humidity", "pressure", "rain", "snow"];
+type AlertField = AlertCreate["field"];
+
+const ALERT_FIELDS: AlertField[] = ["temperature", "humidity", "pressure", "rain", "snow"];
 const CONDITIONS = ["below", "above"] as const;
 
 interface AlertFormProps {
@@ -11,10 +13,10 @@ interface AlertFormProps {
 }
 
 export function AlertForm({ sensors }: AlertFormProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [sensor, setSensor] = useState(sensors[0] ?? "");
-  const [field, setField] = useState<WeatherField>("temperature");
+  const [field, setField] = useState<AlertField>("temperature");
   const [condition, setCondition] = useState<"above" | "below">("below");
   const [threshold, setThreshold] = useState("");
   const [email, setEmail] = useState("");
@@ -24,14 +26,15 @@ export function AlertForm({ sensors }: AlertFormProps) {
     e.preventDefault();
     setStatus("sending");
     try {
-      const request: AlertCreateRequest = {
+      await api.createAlert({
         email,
         sensor,
         field,
         condition,
         threshold: Number(threshold),
-      };
-      await api.createAlert(request);
+        // Emails come in the language of the page they were asked from.
+        language: i18n.resolvedLanguage === "fr" ? "fr" : "en",
+      });
       setStatus("sent");
     } catch {
       setStatus("error");
@@ -74,7 +77,7 @@ export function AlertForm({ sensors }: AlertFormProps) {
           {sensors.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
 
-        <select value={field} onChange={(e) => setField(e.target.value as WeatherField)} className="border rounded px-2 py-1">
+        <select value={field} onChange={(e) => setField(e.target.value as AlertField)} className="border rounded px-2 py-1">
           {ALERT_FIELDS.map((f) => <option key={f} value={f}>{t(`alerts.fields.${f}`)}</option>)}
         </select>
 

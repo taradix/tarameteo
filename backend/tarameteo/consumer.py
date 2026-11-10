@@ -5,12 +5,11 @@ import logging
 import signal
 from argparse import ArgumentParser
 from contextlib import suppress
-from datetime import timedelta
 
 from pydantic import ValidationError
 from taraqueue import Queue
 
-from tarameteo.alert_checker import DEFAULT_COOLDOWN, check_alerts
+from tarameteo.alert_checker import check_alerts
 from tarameteo.alerts import AlertStore
 from tarameteo.db import SessionLocal
 from tarameteo.logger import (
@@ -40,7 +39,6 @@ async def weather_handler(
     notifier: Notifier | None = None,
     alert_secret: str = "",
     alert_base_url: str = "",
-    alert_cooldown: timedelta = DEFAULT_COOLDOWN,
 ):
     try:
         domain, device_id, category = message.topic.split("/")
@@ -86,7 +84,6 @@ async def weather_handler(
                 notifier,
                 secret=alert_secret,
                 base_url=alert_base_url,
-                cooldown=alert_cooldown,
             )
         finally:
             db.close()
@@ -109,7 +106,6 @@ async def run(
     notifier: Notifier | None = None,
     alert_secret: str = "",
     alert_base_url: str = "",
-    alert_cooldown: timedelta = DEFAULT_COOLDOWN,
 ) -> None:
     """Run the MQTT consumer as a long-lived coroutine.
 
@@ -126,7 +122,6 @@ async def run(
             notifier=notifier,
             alert_secret=alert_secret,
             alert_base_url=alert_base_url,
-            alert_cooldown=alert_cooldown,
         )
 
     def _log_handler_failure(future) -> None:

@@ -6,7 +6,7 @@ from typing import Literal
 
 from attrs import define
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session as DBSession
 
 from tarameteo.models import Alert as AlertRow
@@ -21,6 +21,8 @@ AlertField = Literal["temperature", "humidity", "pressure", "rain", "snow"]
 
 ALERT_FIELDS: list[AlertField] = ["temperature", "humidity", "pressure", "rain", "snow"]
 
+Language = Literal["en", "fr"]
+
 
 class Alert(BaseModel):
     """A weather alert (API representation)."""
@@ -31,7 +33,9 @@ class Alert(BaseModel):
     field: AlertField
     condition: Condition
     threshold: float
+    language: Language = "en"
     confirmed: bool = False
+    triggered: bool = False
     created_at: datetime | None = None
     last_triggered_at: datetime | None = None
 
@@ -44,6 +48,7 @@ class AlertCreate(BaseModel):
     field: AlertField
     condition: Condition
     threshold: float
+    language: Language = "en"
 
 
 @define(frozen=True)
@@ -60,6 +65,7 @@ class AlertStore:
             field=alert.field,
             condition=alert.condition,
             threshold=alert.threshold,
+            language=alert.language,
             confirmed=alert.confirmed,
         )
         self.db.add(row)
@@ -81,6 +87,19 @@ class AlertStore:
         self.db.commit()
         return result.rowcount > 0
 
+    def delete_unconfirmed(self, before: datetime) -> None:
+        """Drop alerts whose confirm link has expired."""
+        self.db.execute(
+            delete(AlertRow).where(AlertRow.confirmed == False, AlertRow.created_at < before)  # noqa: E712
+        )
+        self.db.commit()
+
+    def count_by_email(self, email: str, *, confirmed: bool | None = None) -> int:
+        query = select(func.count()).select_from(AlertRow).where(AlertRow.email == email)
+        if confirmed is not None:
+            query = query.where(AlertRow.confirmed == confirmed)
+        return self.db.execute(query).scalar_one()
+
     def get(self, alert_id: str) -> Alert | None:
         row = self.db.execute(
             select(AlertRow).where(AlertRow.id == alert_id)
@@ -93,12 +112,11 @@ class AlertStore:
         ).scalars().all()
         return [self._row_to_alert(row) for row in rows]
 
-    def update_last_triggered(self, alert_id: str, triggered_at: datetime) -> None:
-        self.db.execute(
-            update(AlertRow)
-            .where(AlertRow.id == alert_id)
-            .values(last_triggered_at=triggered_at)
-        )
+    def set_triggered(self, alert_id: str, triggered: bool, at: datetime) -> None:
+        values = {"triggered": triggered}
+        if triggered:
+            values["last_triggered_at"] = at
+        self.db.execute(update(AlertRow).where(AlertRow.id == alert_id).values(**values))
         self.db.commit()
 
     @staticmethod
@@ -110,7 +128,9 @@ class AlertStore:
             field=row.field,
             condition=Condition(row.condition),
             threshold=row.threshold,
+            language=row.language,
             confirmed=row.confirmed,
+            triggered=row.triggered,
             created_at=row.created_at,
             last_triggered_at=row.last_triggered_at,
         )

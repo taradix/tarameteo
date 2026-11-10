@@ -1,13 +1,16 @@
 """Tests for tarameteo.alert_checker."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
 from hamcrest import (
     assert_that,
+    contains_exactly,
     contains_string,
     equal_to,
+    has_entries,
+    starts_with,
 )
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -33,6 +36,20 @@ def notifier():
     return AsyncMock()
 
 
+def _alert(**kwargs) -> Alert:
+    defaults = {
+        "id": "a1",
+        "email": "user@example.com",
+        "sensor": "outdoor-north",
+        "field": "temperature",
+        "condition": Condition.below,
+        "threshold": -20.0,
+        "confirmed": True,
+    }
+    defaults.update(kwargs)
+    return Alert(**defaults)
+
+
 def _reading(**kwargs) -> WeatherReading:
     defaults = {
         "sensor": "outdoor-north",
@@ -47,98 +64,86 @@ def _reading(**kwargs) -> WeatherReading:
     return WeatherReading(**defaults)
 
 
-async def test_triggers_alert_when_threshold_crossed(alert_store, notifier):
-    alert = Alert(
-        id="a1",
-        email="user@example.com",
-        sensor="outdoor-north",
-        field="temperature",
-        condition=Condition.below,
-        threshold=-20.0,
-        confirmed=True,
-    )
-    alert_store.create(alert)
-
-    await check_alerts(
-        _reading(temperature=-25.0),
-        alert_store,
-        notifier,
-        secret="s",
-        base_url="http://localhost",
-    )
-
-    notifier.send.assert_called_once()
-    call_args = notifier.send.call_args
-    assert_that(call_args[0][0], equal_to("user@example.com"))
-    assert_that(call_args[0][1].lower(), contains_string("temperature"))
+async def _check(alert_store, notifier, **reading):
+    await check_alerts(_reading(**reading), alert_store, notifier, secret="s", base_url="http://localhost")
 
 
-async def test_does_not_trigger_when_threshold_not_crossed(alert_store, notifier):
-    alert = Alert(
-        id="a1",
-        email="user@example.com",
-        sensor="outdoor-north",
-        field="temperature",
-        condition=Condition.below,
-        threshold=-20.0,
-        confirmed=True,
-    )
-    alert_store.create(alert)
-
-    await check_alerts(
-        _reading(temperature=-10.0),
-        alert_store,
-        notifier,
-        secret="s",
-        base_url="http://localhost",
-    )
-
-    notifier.send.assert_not_called()
+def _subjects(notifier):
+    return [call.args[1] for call in notifier.send.call_args_list]
 
 
-async def test_respects_cooldown(alert_store, notifier):
-    alert = Alert(
-        id="a1",
-        email="user@example.com",
-        sensor="outdoor-north",
-        field="temperature",
-        condition=Condition.below,
-        threshold=-20.0,
-        confirmed=True,
-    )
-    alert_store.create(alert)
-    alert_store.update_last_triggered("a1", datetime.now(UTC))
+async def test_emails_once_per_crossing_and_once_back_to_normal(alert_store, notifier):
+    alert_store.create(_alert())
 
-    await check_alerts(
-        _reading(temperature=-25.0),
-        alert_store,
-        notifier,
-        secret="s",
-        base_url="http://localhost",
-        cooldown=timedelta(hours=1),
-    )
+    # Below -20, then wobbling within the 1 °C margin, then back above -19.
+    for temperature in [-19.0, -21.0, -22.0, -19.5, -20.5, -18.9, -18.0, -21.0]:
+        await _check(alert_store, notifier, temperature=temperature)
+
+    assert_that(_subjects(notifier), contains_exactly(
+        "outdoor-north: temperature is -21 °C",
+        "outdoor-north: temperature back to normal (-18.9 °C)",
+        "outdoor-north: temperature is -21 °C",
+    ))
+
+
+async def test_above_clears_below_threshold_minus_margin(alert_store, notifier):
+    alert_store.create(_alert(field="humidity", condition=Condition.above, threshold=90.0))
+
+    for humidity in [95.0, 86.0, 85.0]:
+        await _check(alert_store, notifier, humidity=humidity)
+
+    assert_that(_subjects(notifier), contains_exactly(
+        "outdoor-north: humidity is 95 %",
+        "outdoor-north: humidity back to normal (85 %)",
+    ))
+
+
+async def test_skips_reading_without_the_field(alert_store, notifier):
+    alert_store.create(_alert(field="rain", condition=Condition.above, threshold=5.0))
+
+    await _check(alert_store, notifier)
 
     notifier.send.assert_not_called()
 
 
 async def test_does_not_trigger_unconfirmed_alert(alert_store, notifier):
-    alert = Alert(
-        id="a1",
-        email="user@example.com",
-        sensor="outdoor-north",
-        field="temperature",
-        condition=Condition.below,
-        threshold=-20.0,
-        confirmed=False,
-    )
-    alert_store.create(alert)
+    alert_store.create(_alert(confirmed=False))
 
-    await check_alerts(
-        _reading(temperature=-25.0),
-        alert_store,
-        notifier,
-        secret="s",
-        base_url="http://localhost",
-    )
+    await _check(alert_store, notifier, temperature=-25.0)
 
     notifier.send.assert_not_called()
+
+
+async def test_email_has_one_click_unsubscribe(alert_store, notifier):
+    alert_store.create(_alert())
+
+    await _check(alert_store, notifier, temperature=-25.0)
+
+    recipient, _, body, headers = notifier.send.call_args.args
+    assert_that(recipient, equal_to("user@example.com"))
+    assert_that(headers, has_entries(
+        **{"List-Unsubscribe": starts_with("<http://localhost/api/alerts/unsubscribe/")},
+        **{"List-Unsubscribe-Post": "List-Unsubscribe=One-Click"},
+    ))
+    assert_that(body, contains_string(headers["List-Unsubscribe"][1:-1]))
+
+
+async def test_writes_in_the_alert_language(alert_store, notifier):
+    alert_store.create(_alert(language="fr", threshold=-20.5))
+
+    await _check(alert_store, notifier, temperature=-25.5)
+
+    _, subject, body, _ = notifier.send.call_args.args
+    assert_that(subject, equal_to("outdoor-north : température à -25,5 °C"))
+    assert_that(body, contains_string("Votre alerte : outdoor-north : température en dessous de -20,5 °C"))
+
+
+async def test_retries_when_sending_fails(alert_store, notifier):
+    alert_store.create(_alert())
+    notifier.send.side_effect = [OSError("smtp down"), None]
+
+    await _check(alert_store, notifier, temperature=-25.0)
+    await _check(alert_store, notifier, temperature=-25.0)
+    await _check(alert_store, notifier, temperature=-25.0)
+
+    assert_that(notifier.send.call_count, equal_to(2))

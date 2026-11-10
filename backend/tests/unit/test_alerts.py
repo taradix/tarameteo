@@ -1,10 +1,11 @@
 """Tests for tarameteo.alerts."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from hamcrest import (
     assert_that,
+    equal_to,
     has_length,
     has_properties,
     is_,
@@ -77,8 +78,28 @@ def test_list_by_sensor_only_confirmed(alert_store):
     assert_that(results[0], has_properties(id="a2"))
 
 
-def test_update_last_triggered(alert_store):
+def test_set_triggered(alert_store):
     alert_store.create(_make_alert())
     now = datetime.now(UTC)
-    alert_store.update_last_triggered("test-1", now)
-    assert_that(alert_store.get("test-1").last_triggered_at, not_none())
+    alert_store.set_triggered("test-1", True, now)
+    assert_that(alert_store.get("test-1"), has_properties(triggered=True, last_triggered_at=not_none()))
+    alert_store.set_triggered("test-1", False, now)
+    assert_that(alert_store.get("test-1"), has_properties(triggered=False, last_triggered_at=not_none()))
+
+
+def test_delete_unconfirmed_keeps_recent_and_confirmed(alert_store):
+    alert_store.create(_make_alert(id="pending"))
+    alert_store.create(_make_alert(id="confirmed", confirmed=True))
+    alert_store.delete_unconfirmed(datetime.now(UTC) - timedelta(days=1))
+    assert_that(alert_store.count_by_email("user@example.com"), equal_to(2))
+    alert_store.delete_unconfirmed(datetime.now(UTC) + timedelta(minutes=1))
+    assert_that(alert_store.get("pending"), none())
+    assert_that(alert_store.get("confirmed"), not_none())
+
+
+def test_count_by_email(alert_store):
+    alert_store.create(_make_alert(id="a1"))
+    alert_store.create(_make_alert(id="a2", confirmed=True))
+    alert_store.create(_make_alert(id="a3", email="other@example.com"))
+    assert_that(alert_store.count_by_email("user@example.com"), equal_to(2))
+    assert_that(alert_store.count_by_email("user@example.com", confirmed=False), equal_to(1))

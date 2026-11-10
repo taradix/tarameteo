@@ -570,8 +570,8 @@
     },
     "/api/alerts/confirm/{token}": {
       "get": {
-        "summary": "Confirm Alert",
-        "operationId": "confirm_alert_api_alerts_confirm__token__get",
+        "summary": "Confirm Alert Page",
+        "operationId": "confirm_alert_page_api_alerts_confirm__token__get",
         "parameters": [
           {
             "name": "token",
@@ -587,13 +587,46 @@
           "200": {
             "description": "Successful Response",
             "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Confirm Alert Api Alerts Confirm  Token  Get"
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Confirm Alert",
+        "operationId": "confirm_alert_api_alerts_confirm__token__post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -613,8 +646,8 @@
     },
     "/api/alerts/unsubscribe/{token}": {
       "get": {
-        "summary": "Unsubscribe Alert",
-        "operationId": "unsubscribe_alert_api_alerts_unsubscribe__token__get",
+        "summary": "Unsubscribe Alert Page",
+        "operationId": "unsubscribe_alert_page_api_alerts_unsubscribe__token__get",
         "parameters": [
           {
             "name": "token",
@@ -630,13 +663,46 @@
           "200": {
             "description": "Successful Response",
             "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Unsubscribe Alert Api Alerts Unsubscribe  Token  Get"
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Unsubscribe Alert",
+        "operationId": "unsubscribe_alert_api_alerts_unsubscribe__token__post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -826,6 +892,15 @@
           "threshold": {
             "type": "number",
             "title": "Threshold"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "fr"
+            ],
+            "title": "Language",
+            "default": "en"
           }
         },
         "type": "object",

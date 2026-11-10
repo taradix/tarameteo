@@ -10,5 +10,6 @@ export type SensorRef = Pick<SensorEntry, "name" | "kind">;
 export type WeatherReading = Schemas["WeatherReading"];
 export type AggregateReading = Schemas["AggregateReading"];
 export type SensorList = Schemas["SensorList"];
+export type AlertCreate = Schemas["AlertCreate"];
 
 export type WeatherField = "temperature" | "humidity" | "pressure" | "altitude" | "rain" | "snow" | "rssi";

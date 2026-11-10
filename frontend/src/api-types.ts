@@ -147,10 +147,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Confirm Alert */
-        get: operations["confirm_alert_api_alerts_confirm__token__get"];
+        /** Confirm Alert Page */
+        get: operations["confirm_alert_page_api_alerts_confirm__token__get"];
         put?: never;
-        post?: never;
+        /** Confirm Alert */
+        post: operations["confirm_alert_api_alerts_confirm__token__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -164,10 +165,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Unsubscribe Alert */
-        get: operations["unsubscribe_alert_api_alerts_unsubscribe__token__get"];
+        /** Unsubscribe Alert Page */
+        get: operations["unsubscribe_alert_page_api_alerts_unsubscribe__token__get"];
         put?: never;
-        post?: never;
+        /** Unsubscribe Alert */
+        post: operations["unsubscribe_alert_api_alerts_unsubscribe__token__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -233,6 +235,12 @@ export interface components {
             condition: components["schemas"]["Condition"];
             /** Threshold */
             threshold: number;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "fr";
         };
         /**
          * CertificateMaterial
@@ -748,7 +756,7 @@ export interface operations {
             };
         };
     };
-    confirm_alert_api_alerts_confirm__token__get: {
+    confirm_alert_page_api_alerts_confirm__token__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -765,9 +773,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "text/html": string;
                 };
             };
             /** @description Validation Error */
@@ -781,7 +787,7 @@ export interface operations {
             };
         };
     };
-    unsubscribe_alert_api_alerts_unsubscribe__token__get: {
+    confirm_alert_api_alerts_confirm__token__post: {
         parameters: {
             query?: never;
             header?: never;
@@ -798,9 +804,69 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_alert_page_api_alerts_unsubscribe__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_alert_api_alerts_unsubscribe__token__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
                 };
             };
             /** @description Validation Error */
