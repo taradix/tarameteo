@@ -110,12 +110,20 @@ test("asks to choose sensors until some are shown", async () => {
   expect(globalThis.fetch).not.toHaveBeenCalled();
 });
 
-test("the picker lists sensors near the rounded position and toggles them", async () => {
+const near = { name: "near", kind: "timeseries", latitude: 45.5, longitude: -73.6, distance_km: 1.43 };
+// 100 km around the rounded position (45.5, -73.62): zoom log2(360 / 0.9) ≈ 9.
+const AROUND = "bbox=-74.07%2C45.05%2C-73.17%2C45.95";
+
+test("the picker lists and pins the sensors in view, nearest first, and toggles them", async () => {
   stubFetch({
     [`${BASE}/api/sensors`]: {
-      sensors: [
-        { name: "near", kind: "timeseries", latitude: 45.5, longitude: -73.6, distance_km: 1.43 },
-        { name: "far", kind: "aggregate", latitude: 46.8, longitude: -71.2, distance_km: 42.4 },
+      sensors: [near, { name: "far", kind: "aggregate", latitude: 46.8, longitude: -71.2, distance_km: 42.4 }],
+    },
+    [`${BASE}/api/sensors/clusters`]: {
+      clusters: [
+        { latitude: 45.5, longitude: -73.6, count: 1, sensor: near },
+        { latitude: 46, longitude: -72, count: 3, sensor: null },
+        { latitude: 0, longitude: 0, count: 1, sensor: { name: "future", kind: "forecast", latitude: 0, longitude: 0 } },
       ],
     },
   });
@@ -123,24 +131,44 @@ test("the picker lists sensors near the rounded position and toggles them", asyn
 
   expect(await screen.findByText("1.4 km")).toBeOnTheScreen();
   expect(screen.getByText("42 km")).toBeOnTheScreen();
-  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?latitude=45.5&longitude=-73.62&radius=50&limit=50`);
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?${AROUND}&latitude=45.5&longitude=-73.62&limit=50`);
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors/clusters?${AROUND}&zoom=9`);
+  expect(screen.queryByLabelText("future")).not.toBeOnTheScreen();
 
   await act(() => fireEvent(screen.getByLabelText("Toggle far"), "valueChange", true));
   expect(screen.getByLabelText("Toggle far").props.value).toBe(true);
   expect(Storage.getItemSync("shown")).toBe('["far"]');
 
-  await act(() => fireEvent.changeText(screen.getByPlaceholderText("Search by name…"), " né "));
-  await waitFor(() =>
-    expect(globalThis.fetch).toHaveBeenLastCalledWith(`${BASE}/api/sensors?q=n%C3%A9&latitude=45.5&longitude=-73.62&radius=50&limit=50`),
-  );
+  // A cluster zooms in two levels around itself.
+  await act(() => fireEvent.press(screen.getByLabelText("3 sensors")));
+  // log2(360 / 0.225) ≈ 11.
+  expect(globalThis.fetch).toHaveBeenLastCalledWith(expect.stringMatching(/\/clusters\?bbox=-72\.11\d%2C45\.88\d%2C-71\.88\d%2C46\.11\d&zoom=11$/));
 
-  await act(() => fireEvent.press(screen.getByRole("tab", { name: "All" })));
+  // A pin opens its card over the map; tapping the map closes it, but not the tap iOS reports for the pin.
+  await act(() => fireEvent.press(screen.getByLabelText("near")));
+  const map = screen.getByTestId("map");
+  await act(() => fireEvent.press(map, { nativeEvent: { action: "marker-press" } }));
+  expect(screen.getAllByLabelText("Toggle near")).toHaveLength(2);
+  await act(() => fireEvent.press(map, { nativeEvent: {} }));
+  expect(screen.getAllByLabelText("Toggle near")).toHaveLength(1);
+
+  // A row centres the map on its sensor, 20 km across.
+  await act(() => fireEvent.press(screen.getByText("far")));
+  await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors/clusters?bbox=-71.3%2C46.7%2C-71.1%2C46.9&zoom=11`));
+  expect(screen.getAllByLabelText("Toggle far")).toHaveLength(2);
+
+  // Searching looks everywhere, still nearest first.
+  await act(() => fireEvent.changeText(screen.getByPlaceholderText("Search by name…"), " né "));
   await waitFor(() =>
     expect(globalThis.fetch).toHaveBeenLastCalledWith(`${BASE}/api/sensors?q=n%C3%A9&latitude=45.5&longitude=-73.62&limit=50`),
   );
+
+  // Panning across the antimeridian sends west > east.
+  await act(() => fireEvent(map, "regionChangeComplete", { latitude: 0, longitude: 179, latitudeDelta: 10, longitudeDelta: 10 }));
+  await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors/clusters?bbox=174%2C-5%2C-176%2C5&zoom=5`));
 });
 
-test("the picker lists sensors by name without location, and says when it cut the list", async () => {
+test("the picker shows the world by name without location, and says when it cut the list", async () => {
   mockGranted = false;
   stubFetch({
     [`${BASE}/api/sensors`]: {
@@ -151,24 +179,25 @@ test("the picker lists sensors by name without location, and says when it cut th
       ],
       truncated: true,
     },
+    [`${BASE}/api/sensors/clusters`]: { clusters: [] },
   });
   await render(<SensorsScreen />, { wrapper });
 
   expect(await screen.findByText("Location unavailable: sensors by name.")).toBeOnTheScreen();
   await screen.findByText("a");
   expect(screen.getAllByLabelText(/^Toggle /).map((s) => s.props.accessibilityLabel)).toEqual(["Toggle a", "Toggle b"]);
-  expect(screen.queryByRole("tab")).not.toBeOnTheScreen();
-  expect(screen.getByText("Showing the first 50. Search to narrow.")).toBeOnTheScreen();
-  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?limit=50`);
+  expect(screen.getByText("Showing the first 50. Zoom in or search to narrow.")).toBeOnTheScreen();
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors?bbox=-180%2C-50%2C180%2C90&limit=50`);
+  expect(globalThis.fetch).toHaveBeenCalledWith(`${BASE}/api/sensors/clusters?bbox=-180%2C-50%2C180%2C90&zoom=0`);
 });
 
-test("the picker says when nothing matches, and shows list errors", async () => {
-  stubFetch({ [`${BASE}/api/sensors`]: { sensors: [] } });
+test("the picker says when nothing is in view, and shows list errors", async () => {
+  stubFetch({ [`${BASE}/api/sensors`]: { sensors: [] }, [`${BASE}/api/sensors/clusters`]: { clusters: [] } });
   await render(<SensorsScreen />, { wrapper });
   expect(await screen.findByText("No sensors.")).toBeOnTheScreen();
 
   stubFetch({});
-  await act(() => fireEvent.press(screen.getByRole("tab", { name: "10 km" })));
+  await act(() => fireEvent(screen.getByTestId("map"), "regionChangeComplete", { latitude: 1, longitude: 1, latitudeDelta: 1, longitudeDelta: 1 }));
   expect(await screen.findByText("ApiError: 404 Not Found")).toBeOnTheScreen();
 });
 

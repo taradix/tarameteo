@@ -57,10 +57,10 @@
     "toggle": "Toggle {{name}}",
     "choose": "Choose sensors",
     "search": "Search by name…",
-    "all": "All",
     "noLocation": "Location unavailable: sensors by name.",
-    "truncated": "Showing the first {{count}}. Search to narrow.",
-    "truncatedNear": "Showing the {{count}} nearest. Search or pick a smaller radius to narrow."
+    "truncated": "Showing the first {{count}}. Zoom in or search to narrow.",
+    "truncatedNear": "Showing the {{count}} nearest. Zoom in or search to narrow.",
+    "cluster": "{{count}} sensors"
   },
   "alerts": {
     "create": "Set alert",

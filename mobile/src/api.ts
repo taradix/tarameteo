@@ -5,6 +5,7 @@ type Schemas = components["schemas"];
 export type SensorEntry = Schemas["SensorEntry"];
 export type WeatherReading = Schemas["WeatherReading"];
 export type AggregateReading = Schemas["AggregateReading"];
+export type Cluster = Schemas["Cluster"];
 
 // Inlined at build time; override in .env.local to point at a dev backend.
 const BASE = process.env.EXPO_PUBLIC_API_BASE ?? "https://meteo.taram.ca";
@@ -33,9 +34,11 @@ const weather = (name: string, suffix: string, start: string) =>
 export const KINDS: readonly string[] = ["timeseries", "aggregate"];
 
 // Filters for GET /api/sensors; latitude/longitude sort nearest first, within radius km when given.
+// bbox is "west,south,east,north" in degrees.
 export type SensorFilter = {
   names?: string[];
   q?: string;
+  bbox?: string;
   latitude?: number;
   longitude?: number;
   radius?: number;
@@ -43,7 +46,7 @@ export type SensorFilter = {
 };
 
 // Arrays repeat the key (names=a&names=b), as FastAPI expects; undefined values are left out.
-const query = (filter: SensorFilter) => {
+const query = (filter: Record<string, string | number | string[] | undefined>) => {
   const pairs = Object.entries(filter).flatMap(([key, value]) =>
     value === undefined ? [] : [value].flat().map((v) => `${key}=${encodeURIComponent(v)}`),
   );
@@ -52,6 +55,8 @@ const query = (filter: SensorFilter) => {
 
 export const api = {
   listSensors: (filter: SensorFilter = {}) => get<Schemas["SensorList"]>(`/api/sensors${query(filter)}`),
+  listClusters: (bbox: string, zoom: number) =>
+    get<Schemas["ClusterList"]>(`/api/sensors/clusters${query({ bbox, zoom })}`),
   getWeather: (name: string, start: string) => get<WeatherReading[]>(weather(name, "", start)),
   getWeatherAggregate: (name: string, start: string) =>
     get<AggregateReading[]>(weather(name, "/aggregate", start)),

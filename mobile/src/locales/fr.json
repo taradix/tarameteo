@@ -57,10 +57,10 @@
     "toggle": "Basculer {{name}}",
     "choose": "Choisir les capteurs",
     "search": "Chercher par nom…",
-    "all": "Tous",
     "noLocation": "Position indisponible : capteurs par nom.",
-    "truncated": "Les {{count}} premiers. Cherchez pour affiner.",
-    "truncatedNear": "Les {{count}} plus proches. Cherchez ou choisissez un rayon plus petit pour affiner."
+    "truncated": "Les {{count}} premiers. Zoomez ou cherchez pour affiner.",
+    "truncatedNear": "Les {{count}} plus proches. Zoomez ou cherchez pour affiner.",
+    "cluster": "{{count}} capteurs"
   },
   "alerts": {
     "create": "Créer une alerte",
