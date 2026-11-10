@@ -11,10 +11,11 @@ import "./i18n";
 
 // expo-router/testing-library would replace our reanimated mock with an empty one, so the detail screen
 // renders without a router: Link is declarative, and the route params are stubbed.
+let mockParams: { name: string; kind: string };
 jest.mock("expo-router", () => ({
   ...jest.requireActual("expo-router"),
   Stack: { Screen: () => null },
-  useLocalSearchParams: () => ({ name: "s1" }),
+  useLocalSearchParams: () => mockParams,
 }));
 
 const BASE = "https://meteo.taram.ca";
@@ -52,6 +53,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(async () => {
+  mockParams = { name: "s1", kind: "timeseries" };
   await i18n.changeLanguage("en");
 });
 
@@ -127,6 +129,19 @@ test("the detail screen charts the latest values, and switching range refetches"
   await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
   const start = new URL(jest.mocked(globalThis.fetch).mock.calls[0][0] as string).searchParams.get("start")!;
   expect(Date.now() - Date.parse(start)).toBeGreaterThan(6 * 24 * 3600_000);
+});
+
+test("the aggregate detail screen charts daily temperature and precipitation over longer ranges", async () => {
+  mockParams = { name: "agg", kind: "aggregate" };
+  stubFetch({ [`${BASE}/api/sensors/agg/weather/aggregate`]: [aggregate] });
+  await render(<SensorScreen />, { wrapper });
+
+  expect(await screen.findByText(/^min -1\.0 · avg 3\.5 · max 8\.1 °C · /)).toBeOnTheScreen();
+  expect(screen.getByText(/^rain 4\.2 mm · snow – mm · /)).toBeOnTheScreen();
+  expect(screen.getByText("Precipitation")).toBeOnTheScreen();
+  expect(screen.getAllByRole("tab").map((tab) => tab.props.accessibilityState.selected)).toEqual([true, false, false]);
+  expect(screen.getByRole("tab", { name: "90 d" })).toBeOnTheScreen();
+  expect(screen.queryByRole("tab", { name: "24 h" })).not.toBeOnTheScreen();
 });
 
 test("the detail screen says when a range is empty", async () => {

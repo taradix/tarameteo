@@ -59,17 +59,14 @@ function SensorCard({ sensor, data, fetchedAt }: { sensor: SensorEntry; data?: W
     ) : (
       <AggregateBody reading={(data as AggregateReading[]).at(-1)!} />
     );
-  const card = (
-    <View style={styles.row}>
-      <Text style={styles.name}>{sensor.name}</Text>
-      {body}
-    </View>
-  );
-  // ponytail: aggregate sensors get a detail screen with their own charts in the next phase.
-  if (sensor.kind !== "timeseries") return card;
   return (
-    <Link href={{ pathname: "/sensor/[name]", params: { name: sensor.name } }} asChild>
-      <Pressable accessibilityRole="button">{card}</Pressable>
+    <Link href={{ pathname: "/sensor/[name]", params: { name: sensor.name, kind: sensor.kind } }} asChild>
+      <Pressable accessibilityRole="button">
+        <View style={styles.row}>
+          <Text style={styles.name}>{sensor.name}</Text>
+          {body}
+        </View>
+      </Pressable>
     </Link>
   );
 }
@@ -98,12 +95,11 @@ function TimeseriesBody({ readings, now }: { readings: WeatherReading[]; now: nu
 }
 
 function AggregateBody({ reading }: { reading: AggregateReading }) {
-  const { t, i18n, num } = useFormat();
-  // Daily readings: the day matters, not the time.
-  const day = new Date(reading.timestamp).toLocaleDateString(i18n.language, { day: "numeric", month: "short" });
+  const { t, num, day } = useFormat();
   return (
     <>
-      <Text style={styles.time}>{day}</Text>
+      {/* Daily readings: the day matters, not the time. */}
+      <Text style={styles.time}>{day(Date.parse(reading.timestamp))}</Text>
       <Text style={styles.value}>
         {t("card.aggregate", {
           min: num(reading.temperature_min, 1),
