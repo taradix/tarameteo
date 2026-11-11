@@ -1,7 +1,7 @@
 """Threshold checking for weather alerts."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from tarameteo import alert_text
 from tarameteo.alerts import Alert, AlertStore, Condition
@@ -32,6 +32,17 @@ def unsubscribe_url(alert: Alert, secret: str, base_url: str) -> str:
     return f"{base_url}/api/alerts/unsubscribe/{token}"
 
 
+def manage_url(email: str, language: str, secret: str, base_url: str, expires_in: timedelta) -> str:
+    token = sign_token(
+        {"email": email.lower(), "language": language, "action": "manage"}, secret, expires_in=expires_in.total_seconds()
+    )
+    return f"{base_url}/api/alerts/manage/{token}"
+
+
+# The manage link in alert emails lasts longer than a requested one: the email may be read days later.
+ALERT_MANAGE_EXPIRY = timedelta(days=7)
+
+
 async def check_alerts(
     reading: WeatherReading,
     alert_store: AlertStore,
@@ -53,7 +64,8 @@ async def check_alerts(
             continue
 
         url = unsubscribe_url(alert, secret, base_url)
-        subject, body = alert_text.email(alert, key, url, value)
+        manage = manage_url(alert.email, alert.language, secret, base_url, ALERT_MANAGE_EXPIRY)
+        subject, body = alert_text.email(alert, key, url, value, manage)
         # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
         headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
         try:

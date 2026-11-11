@@ -51,6 +51,18 @@ class AlertCreate(BaseModel):
     language: Language = "en"
 
 
+class ManageRequest(BaseModel):
+    """Payload for emailing a link to manage an address's alerts."""
+
+    email: EmailStr
+    language: Language = "en"
+
+
+def _same_email(email: str):
+    # People don't type their address the same way twice.
+    return func.lower(AlertRow.email) == email.lower()
+
+
 @define(frozen=True)
 class AlertStore:
     """SQLAlchemy-backed alert persistence."""
@@ -95,10 +107,25 @@ class AlertStore:
         self.db.commit()
 
     def count_by_email(self, email: str, *, confirmed: bool | None = None) -> int:
-        query = select(func.count()).select_from(AlertRow).where(AlertRow.email == email)
+        query = select(func.count()).select_from(AlertRow).where(_same_email(email))
         if confirmed is not None:
             query = query.where(AlertRow.confirmed == confirmed)
         return self.db.execute(query).scalar_one()
+
+    def list_by_email(self, email: str) -> list[Alert]:
+        rows = self.db.execute(
+            select(AlertRow).where(_same_email(email)).order_by(AlertRow.sensor, AlertRow.created_at)
+        ).scalars().all()
+        return [self._row_to_alert(row) for row in rows]
+
+    def delete_by_email(self, email: str, alert_id: str | None = None) -> int:
+        """Delete one of the email's alerts, or all of them."""
+        query = delete(AlertRow).where(_same_email(email))
+        if alert_id is not None:
+            query = query.where(AlertRow.id == alert_id)
+        result = self.db.execute(query)
+        self.db.commit()
+        return result.rowcount
 
     def get(self, alert_id: str) -> Alert | None:
         row = self.db.execute(

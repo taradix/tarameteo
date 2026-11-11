@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from hamcrest import (
+    all_of,
     assert_that,
     contains_exactly,
     contains_string,
@@ -125,7 +126,10 @@ async def test_email_has_one_click_unsubscribe(alert_store, notifier):
         **{"List-Unsubscribe": starts_with("<http://localhost/api/alerts/unsubscribe/")},
         **{"List-Unsubscribe-Post": "List-Unsubscribe=One-Click"},
     ))
-    assert_that(body, contains_string(headers["List-Unsubscribe"][1:-1]))
+    assert_that(body, all_of(
+        contains_string(headers["List-Unsubscribe"][1:-1]),
+        contains_string("All your alerts:\nhttp://localhost/api/alerts/manage/"),
+    ))
 
 
 async def test_writes_in_the_alert_language(alert_store, notifier):

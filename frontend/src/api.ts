@@ -1,4 +1,4 @@
-import type { AggregateReading, AlertCreate, SensorList, WeatherReading } from "./types";
+import type { AggregateReading, AlertCreate, ManageRequest, SensorList, WeatherReading } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -56,6 +56,8 @@ export const api = {
       `/api/sensors/${encodeURIComponent(name)}/weather/aggregate`,
       { start, end, limit },
     ),
+  manageAlerts: (request: ManageRequest) =>
+    post<{ status: string }>("/api/alerts/manage", request),
   createAlert: (alert: AlertCreate) =>
     post<{ status: string }>("/api/alerts", alert),
 };

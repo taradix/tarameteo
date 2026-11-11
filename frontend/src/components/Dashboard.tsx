@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useDashboardState } from "../hooks/useDashboardState";
 import { useSensorList, useWeather } from "../hooks/useSensors";
 import type { SensorRef, WeatherField } from "../types";
-import { AlertForm } from "./AlertForm";
+import { AlertForm, ManageAlerts } from "./AlertForm";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
 import { WeatherChart } from "./WeatherChart";
@@ -93,7 +93,10 @@ export function Dashboard() {
         </div>
       )}
 
-      {sensors.length > 0 && <AlertForm sensors={sensors} />}
+      <div className="flex flex-wrap items-start gap-4">
+        {sensors.length > 0 && <AlertForm sensors={sensors} />}
+        <ManageAlerts />
+      </div>
     </div>
   );
 }

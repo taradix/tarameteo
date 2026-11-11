@@ -17,11 +17,12 @@ from fastapi import (
     Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from taraqueue import Queue, QueueEmpty
 
 from tarameteo import alert_text
-from tarameteo.alerts import Alert, AlertCreate, AlertStore
+from tarameteo.alert_checker import manage_url
+from tarameteo.alerts import Alert, AlertCreate, AlertStore, ManageRequest
 from tarameteo.ca_client import (
     CAClient,
     IssueCertificateRequest,
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
     alert_secret = os.environ.get("ALERT_SECRET", "")
     app.state.alert_secret = alert_secret
     app.state.alert_base_url = os.environ.get("ALERT_BASE_URL", "")
+    app.state.manage_sent = {}
 
     # Notifier.
     notifier = None
@@ -300,10 +302,15 @@ async def post_alert(body: AlertCreate, request: Request, alert_store: AlertStor
     return {"status": "confirmation_sent"}
 
 
-def _token_alert_id(token: str, action: str, request: Request) -> str | None:
+def _token_payload(token: str, action: str, request: Request) -> dict | None:
     secret = request.app.state.alert_secret
     payload = verify_token(token, secret) if secret else None
-    return payload["alert_id"] if payload and payload.get("action") == action else None
+    return payload if payload and payload.get("action") == action else None
+
+
+def _token_alert_id(token: str, action: str, request: Request) -> str | None:
+    payload = _token_payload(token, action, request)
+    return payload and payload["alert_id"]
 
 
 def _html(content: str, status_code: int = 200) -> HTMLResponse:
@@ -366,6 +373,53 @@ def unsubscribe_alert(token: str, request: Request, alert_store: AlertStoreDep) 
         return _html(GONE_PAGE, 404)
     alert_store.delete(alert_id)
     return _html(alert_text.page(alert.language, alert_text.TEXT[alert.language]["removed"]))
+
+
+MANAGE_EXPIRY = timedelta(hours=1)
+# One manage email per address this often, so the form can't flood an inbox.
+MANAGE_EVERY = timedelta(minutes=5)
+
+
+@app.post("/api/alerts/manage", status_code=202)
+async def post_alert_manage(body: ManageRequest, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
+    """Email a link to see and stop the address's alerts; the answer is the same whether or not it has any."""
+    state = request.app.state
+    if not state.alert_secret or not state.notifier:
+        raise HTTPException(status_code=503, detail="Alert service not configured")
+
+    email, now = body.email.lower(), datetime.now(UTC)
+    # ponytail: in-memory and per process, so a restart forgets it; fine for one API process.
+    sent = state.manage_sent
+    if alert_store.count_by_email(email) and now - sent.get(email, datetime.min.replace(tzinfo=UTC)) >= MANAGE_EVERY:
+        sent[email] = now
+        url = manage_url(email, body.language, state.alert_secret, state.alert_base_url, MANAGE_EXPIRY)
+        text = alert_text.TEXT[body.language]
+        await state.notifier.send(body.email, text["manage_subject"], text["manage_body"].format(url=url))
+    return {"status": "sent"}
+
+
+@app.get("/api/alerts/manage/{token}", response_class=HTMLResponse)
+def alert_manage_page(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
+    payload = _token_payload(token, "manage", request)
+    if payload is None:
+        return _html(INVALID_PAGE, 400)
+    email = payload["email"]
+    return _html(alert_text.manage_page(payload["language"], email, alert_store.list_by_email(email)))
+
+
+@app.post("/api/alerts/manage/{token}")
+def alert_manage(
+    token: str,
+    request: Request,
+    alert_store: AlertStoreDep,
+    alert: Annotated[str | None, Query(description="The alert to stop; all of them when left out")] = None,
+) -> Response:
+    payload = _token_payload(token, "manage", request)
+    if payload is None:
+        return _html(INVALID_PAGE, 400)
+    alert_store.delete_by_email(payload["email"], alert)
+    # Back to the list, as a GET, so reloading doesn't post again.
+    return RedirectResponse(request.url.path, status_code=303)
 
 
 @app.exception_handler(Exception)

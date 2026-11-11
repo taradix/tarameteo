@@ -12,6 +12,9 @@ interface AlertFormProps {
   sensors: string[];
 }
 
+// Emails come in the language of the page they were asked from.
+const emailLanguage = (language?: string) => (language === "fr" ? "fr" : "en");
+
 export function AlertForm({ sensors }: AlertFormProps) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -32,8 +35,7 @@ export function AlertForm({ sensors }: AlertFormProps) {
         field,
         condition,
         threshold: Number(threshold),
-        // Emails come in the language of the page they were asked from.
-        language: i18n.resolvedLanguage === "fr" ? "fr" : "en",
+        language: emailLanguage(i18n.resolvedLanguage),
       });
       setStatus("sent");
     } catch {
@@ -125,6 +127,74 @@ export function AlertForm({ sensors }: AlertFormProps) {
       {status === "error" && (
         <p className="text-red-600">{t("alerts.error")}</p>
       )}
+    </form>
+  );
+}
+
+// No accounts: the link to see and stop your alerts comes by email.
+export function ManageAlerts() {
+  const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setStatus("sending");
+    try {
+      await api.manageAlerts({ email, language: emailLanguage(i18n.resolvedLanguage) });
+      setStatus("sent");
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  const close = () => { setStatus("idle"); setOpen(false); };
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-sm text-blue-600 hover:text-blue-800 underline">
+        {t("alerts.manage")}
+      </button>
+    );
+  }
+
+  if (status === "sent") {
+    return (
+      <div className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+        {t("alerts.manageSent")}
+        <button type="button" onClick={close} className="ml-2 underline">
+          {t("alerts.close")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded border border-zinc-200 p-4 space-y-3 text-sm">
+      <h3 className="font-semibold">{t("alerts.manage")}</h3>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder={t("alerts.email")}
+        aria-label={t("alerts.email")}
+        required
+        className="border rounded px-2 py-1 w-full"
+      />
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={status === "sending"}
+          className="bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+        >
+          {status === "sending" ? t("alerts.sending") : t("alerts.manageSubmit")}
+        </button>
+        <button type="button" onClick={close} className="text-zinc-500 hover:text-zinc-700 underline">
+          {t("alerts.cancel")}
+        </button>
+      </div>
+      {status === "error" && <p className="text-red-600">{t("alerts.manageError")}</p>}
     </form>
   );
 }

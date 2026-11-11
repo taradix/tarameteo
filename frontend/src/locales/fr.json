@@ -57,6 +57,10 @@
     "confirmationSent": "Vérifiez votre courriel pour confirmer l'alerte.",
     "error": "Échec de la création. Veuillez réessayer.",
     "cancel": "Annuler",
-    "close": "Fermer"
+    "close": "Fermer",
+    "manage": "Gérer mes alertes",
+    "manageSubmit": "M'envoyer un lien",
+    "manageSent": "Si cette adresse a des alertes, un lien pour les gérer est en route. Il fonctionne pendant une heure.",
+    "manageError": "Échec de l'envoi du lien. Veuillez réessayer."
   }
 }

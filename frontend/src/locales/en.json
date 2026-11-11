@@ -57,6 +57,10 @@
     "confirmationSent": "Check your email to confirm the alert.",
     "error": "Failed to create alert. Please try again.",
     "cancel": "Cancel",
-    "close": "Close"
+    "close": "Close",
+    "manage": "Manage my alerts",
+    "manageSubmit": "Email me a link",
+    "manageSent": "If this address has alerts, a link to manage them is on its way. It works for an hour.",
+    "manageError": "Failed to send the link. Please try again."
   }
 }

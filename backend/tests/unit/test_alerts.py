@@ -97,6 +97,16 @@ def test_delete_unconfirmed_keeps_recent_and_confirmed(alert_store):
     assert_that(alert_store.get("confirmed"), not_none())
 
 
+def test_delete_by_email_ignores_case_and_other_addresses(alert_store):
+    alert_store.create(_make_alert(id="a1", email="User@Example.com"))
+    alert_store.create(_make_alert(id="a2"))
+    alert_store.create(_make_alert(id="a3", email="other@example.com"))
+    assert_that(alert_store.delete_by_email("user@example.com", "a3"), equal_to(0))
+    assert_that(alert_store.delete_by_email("USER@example.com", "a1"), equal_to(1))
+    assert_that(alert_store.delete_by_email("user@example.com"), equal_to(1))
+    assert_that([a.id for a in alert_store.list_by_email("other@example.com")], equal_to(["a3"]))
+
+
 def test_count_by_email(alert_store):
     alert_store.create(_make_alert(id="a1"))
     alert_store.create(_make_alert(id="a2", confirmed=True))

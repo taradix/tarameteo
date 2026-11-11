@@ -535,6 +535,8 @@ def test_alert_unsubscribe_needs_a_post(alert_api):
     "/api/alerts/unsubscribe/" + sign_token({"alert_id": "a1", "action": "confirm"}, "s"),
     "/api/alerts/confirm/" + sign_token({"alert_id": "a1", "action": "confirm"}, "s", expires_in=-1),
     "/api/alerts/confirm/" + sign_token({"alert_id": "a1", "action": "confirm"}, "other"),
+    "/api/alerts/manage/" + sign_token({"alert_id": "a1", "action": "unsubscribe"}, "s"),
+    "/api/alerts/manage/" + sign_token({"email": "user@example.com", "language": "en", "action": "manage"}, "s", expires_in=-1),
 ])
 def test_alert_links_reject_bad_tokens(alert_api, path):
     client, _, _ = alert_api
@@ -558,3 +560,55 @@ def test_alert_create_caps_alerts_per_email(alert_api):
         store.create(Alert(id=f"a{i}", confirmed=True, **NEW_ALERT))
 
     assert_that(client.post("/api/alerts", json=NEW_ALERT).status_code, equal_to(409))
+
+
+def test_alert_manage_lists_and_stops_the_address_alerts(alert_api):
+    client, store, notifier = alert_api
+    store.create(Alert(id="a1", confirmed=True, **NEW_ALERT))
+    store.create(Alert(id="a2", **{**NEW_ALERT, "email": "User@Example.com", "sensor": "porch"}))
+    store.create(Alert(id="a3", confirmed=True, **{**NEW_ALERT, "email": "other@example.com"}))
+
+    response = client.post("/api/alerts/manage", json={"email": "USER@example.com", "language": "fr"})
+    assert_that(response.status_code, equal_to(202))
+    assert_that(notifier.send.call_args.args[1], equal_to("Vos alertes météo"))
+    link = _link(notifier)
+
+    page = client.get(link).text
+    assert_that(page, all_of(
+        contains_string("outdoor : température en dessous de -20 °C"),
+        contains_string("porch : température en dessous de -20 °C (non confirmée)"),
+        contains_string('action="?alert=a1"'),
+        is_not(contains_string("a3")),
+    ))
+    assert_that(store.count_by_email("user@example.com", confirmed=True), equal_to(1))
+
+    # Stopping one comes back to the list, as a GET.
+    response = client.post(link, params={"alert": "a1"})
+    assert_that(response.history[0].status_code, equal_to(303))
+    assert_that(response.text, all_of(contains_string("porch"), is_not(contains_string("outdoor"))))
+
+    # Another address's alert id does nothing.
+    client.post(link, params={"alert": "a3"})
+    assert_that(store.get("a3"), not_none())
+
+    assert_that(client.post(link).text, contains_string("Aucune alerte n&#x27;est envoyée à cette adresse."))
+    assert_that(store.get("a3"), not_none())
+
+
+def test_alert_manage_only_emails_addresses_with_alerts(alert_api):
+    client, _, notifier = alert_api
+
+    response = client.post("/api/alerts/manage", json={"email": "nobody@example.com"})
+
+    assert_that(response.json(), has_entries(status="sent"))
+    notifier.send.assert_not_called()
+
+
+def test_alert_manage_emails_an_address_once_per_5_minutes(alert_api):
+    client, store, notifier = alert_api
+    store.create(Alert(id="a1", confirmed=True, **NEW_ALERT))
+
+    for _ in range(3):
+        client.post("/api/alerts/manage", json={"email": "user@example.com"})
+
+    assert_that(notifier.send.call_count, equal_to(1))
