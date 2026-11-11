@@ -46,7 +46,8 @@ services:
       default:
         aliases:
           - tarameteo-api
-    command: uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.yaml
+    command: >
+      sh -c "alembic upgrade head && exec uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.yaml"
     restart: always
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]

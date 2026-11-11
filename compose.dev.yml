@@ -4,7 +4,9 @@ services:
   api:
     volumes:
       - ./backend/tarameteo:/app/tarameteo
-    command: uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.dev.yaml --reload --reload-exclude='.*'
+      - ./backend/alembic:/app/alembic
+    command: >
+      sh -c "alembic upgrade head && exec uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.dev.yaml --reload --reload-exclude='.*'"
 
   ca:
     volumes:
