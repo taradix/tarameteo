@@ -7,8 +7,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
-from taraqueue import Queue
 
+from tarameteo.sensors import AggregateReading, WeatherReading
 from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,8 @@ class Source(ABC):
         self,
         client: httpx.AsyncClient,
         ts_writer: TSWriter,
-        queue: Queue,
-    ) -> None:
-        """Fetch and store the current data for all sensors."""
+    ) -> list[WeatherReading | AggregateReading]:
+        """Fetch and store the current data for all sensors, and return each sensor's latest reading."""
 
     @property
     def _sensors(self) -> list[Any]:

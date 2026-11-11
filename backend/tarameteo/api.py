@@ -85,7 +85,7 @@ async def lifespan(app: FastAPI):
 
         tasks.append(
             asyncio.create_task(
-                run_sync(app.state.ts_writer, app.state.queue),
+                run_sync(app.state.ts_writer, app.state.queue, notifier=notifier, alert_secret=alert_secret, alert_base_url=app.state.alert_base_url),
                 name="sources-sync",
             ),
         )

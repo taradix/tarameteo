@@ -6,7 +6,6 @@ from datetime import UTC, date, datetime
 
 import httpx
 from bs4 import BeautifulSoup
-from taraqueue import Queue
 
 from tarameteo.sensors import (
     AGGREGATE_MEASUREMENT,
@@ -258,10 +257,11 @@ class MelccfpSource(Source):
         return SENSORS
 
     async def run_once(
-        self, client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
-    ) -> None:
+        self, client: httpx.AsyncClient, ts_writer: TSWriter
+    ) -> list[AggregateReading]:
         """Fetch current month data for all MELCCFP sensors."""
         now = datetime.now(UTC)
+        latest_readings = []
         for sensor in SENSORS:
             month_data = await fetch_month(client, sensor, now.year, now.month)
             readings = month_data.readings
@@ -272,10 +272,7 @@ class MelccfpSource(Source):
                 )
                 continue
             write_readings(readings, sensor, month_data.latitude, month_data.longitude, ts_writer)
-            await queue.publish(
-                f"weather:{sensor.device_id}",
-                _to_aggregate(readings[-1], sensor.device_id).model_dump_json(),
-            )
+            latest_readings.append(_to_aggregate(readings[-1], sensor.device_id))
             latest = readings[-1]
             logger.info(
                 "MELCCFP %s: stored %d readings for %d-%02d; "
@@ -285,6 +282,7 @@ class MelccfpSource(Source):
                 latest.temperature_max, latest.temperature_avg, latest.temperature_min,
                 latest.rain, latest.snow,
             )
+        return latest_readings
 
     async def _backfill_month(
         self,

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
-from taraqueue import Queue
 
 from tarameteo.sensors import (
     MEASUREMENT,
@@ -153,10 +152,11 @@ class MetarSource(Source):
         return "MetarSource"
 
     async def run_once(
-        self, client: httpx.AsyncClient, ts_writer: TSWriter, queue: Queue
-    ) -> None:
+        self, client: httpx.AsyncClient, ts_writer: TSWriter
+    ) -> list[WeatherReading]:
         """Fetch recent METAR observations for all sensors."""
         readings = await fetch_recent(client)
+        latest_readings = []
         by_icao: dict[str, list[MetarReading]] = {}
         for r in readings:
             by_icao.setdefault(r.icao_id, []).append(r)
@@ -167,10 +167,7 @@ class MetarSource(Source):
                 logger.warning("No METAR readings for %s", sensor.device_id)
                 continue
             write_readings(station_readings, sensor.device_id, ts_writer)
-            await queue.publish(
-                f"weather:{sensor.device_id}",
-                _to_weather_reading(station_readings[-1], sensor.device_id).model_dump_json(),
-            )
+            latest_readings.append(_to_weather_reading(station_readings[-1], sensor.device_id))
             latest = station_readings[-1]
             logger.info(
                 "METAR %s: stored %d readings; latest %s: T=%s H=%s P=%s",
@@ -178,6 +175,7 @@ class MetarSource(Source):
                 latest.timestamp.isoformat(),
                 latest.temperature, latest.humidity, latest.pressure,
             )
+        return latest_readings
 
     async def backfill_run(
         self,

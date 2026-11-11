@@ -5,8 +5,9 @@ from datetime import UTC, datetime, timedelta
 
 from tarameteo import alert_text
 from tarameteo.alerts import Alert, AlertStore, Condition
+from tarameteo.db import SessionLocal
 from tarameteo.notifier import Notifier
-from tarameteo.sensors import WeatherReading
+from tarameteo.sensors import AggregateReading, WeatherReading
 from tarameteo.tokens import sign_token
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,13 @@ MARGINS = {"temperature": 1.0, "humidity": 5.0, "pressure": 1.0, "rain": 1.0, "s
 
 def _crossed(value: float, alert: Alert) -> bool:
     return value > alert.threshold if alert.condition == Condition.above else value < alert.threshold
+
+
+def _value(reading: WeatherReading | AggregateReading, alert: Alert) -> float | None:
+    # A daily aggregate crosses "above" with its maximum and "below" with its minimum; rain and snow are totals.
+    if isinstance(reading, AggregateReading) and alert.field not in ("rain", "snow"):
+        return getattr(reading, f"{alert.field}_{'max' if alert.condition == Condition.above else 'min'}")
+    return getattr(reading, alert.field, None)
 
 
 def _cleared(value: float, alert: Alert) -> bool:
@@ -44,7 +52,7 @@ ALERT_MANAGE_EXPIRY = timedelta(days=7)
 
 
 async def check_alerts(
-    reading: WeatherReading,
+    reading: WeatherReading | AggregateReading,
     alert_store: AlertStore,
     notifier: Notifier,
     *,
@@ -53,7 +61,7 @@ async def check_alerts(
 ) -> None:
     """Email once when a value crosses its threshold, and once when it's back to normal."""
     for alert in alert_store.list_by_sensor(reading.sensor):
-        value = getattr(reading, alert.field, None)
+        value = _value(reading, alert)
         if value is None:
             continue
         if not alert.triggered and _crossed(value, alert):
@@ -76,3 +84,12 @@ async def check_alerts(
             continue
         alert_store.set_triggered(alert.id, key == "alert", datetime.now(UTC))
         logger.info(f"Alert {alert.id} sent {key} to {alert.email}")
+
+
+async def check_reading(reading: WeatherReading | AggregateReading, notifier: Notifier, *, secret: str, base_url: str) -> None:
+    """Check a reading against its sensor's alerts in a session of its own."""
+    db = SessionLocal()
+    try:
+        await check_alerts(reading, AlertStore(db), notifier, secret=secret, base_url=base_url)
+    finally:
+        db.close()

@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from taraqueue import Queue
 
+from tarameteo.alert_checker import check_reading
 from tarameteo.logger import (
     LoggerHandlerAction,
     LoggerLevelAction,
@@ -18,6 +19,7 @@ from tarameteo.logger import (
 from tarameteo.melccfp import source as melccfp_source
 from tarameteo.metar import source as metar_source
 from tarameteo.msc import source as msc_source
+from tarameteo.notifier import Notifier
 from tarameteo.source import Source
 from tarameteo.ts import InfluxWriter
 
@@ -47,11 +49,29 @@ def _next_fetch_time() -> datetime:
     return target
 
 
-async def _run_source_once(source: Source, client: httpx.AsyncClient, ts_writer: InfluxWriter, queue: Queue) -> None:
+async def _run_source_once(
+    source: Source,
+    client: httpx.AsyncClient,
+    ts_writer: InfluxWriter,
+    queue: Queue,
+    *,
+    notifier: Notifier | None = None,
+    alert_secret: str = "",
+    alert_base_url: str = "",
+) -> None:
     try:
-        await source.run_once(client, ts_writer, queue)
+        readings = await source.run_once(client, ts_writer)
     except source.RECOVERABLE_ERRORS:
         logger.exception("Recoverable error while fetching source %s", source.name)
+        return
+    for reading in readings:
+        await queue.publish(f"weather:{reading.sensor}", reading.model_dump_json())
+        if notifier and alert_secret:
+            try:
+                await check_reading(reading, notifier, secret=alert_secret, base_url=alert_base_url)
+            except Exception:
+                # Keep fetching the other sensors and the next hours.
+                logger.exception("Failed to check alerts for %s", reading.sensor)
 
 
 async def _run_source_backfill(
@@ -71,7 +91,15 @@ async def _run_source_backfill(
         logger.exception("Recoverable error backfilling source %s", source.name)
 
 
-async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | None = None) -> None:
+async def run_sync(
+    ts_writer: InfluxWriter,
+    queue: Queue,
+    names: list[str] | None = None,
+    *,
+    notifier: Notifier | None = None,
+    alert_secret: str = "",
+    alert_base_url: str = "",
+) -> None:
     """Run the periodic sources sync loop as a long-lived coroutine.
 
     Intended to be launched as an :mod:`asyncio` background task from the
@@ -82,10 +110,11 @@ async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | Non
         "Sources runner started with %d source(s).",
         len(sources),
     )
+    alerts = {"notifier": notifier, "alert_secret": alert_secret, "alert_base_url": alert_base_url}
 
     async with httpx.AsyncClient(timeout=30) as client:
         for source in sources:
-            await _run_source_once(source, client, ts_writer, queue)
+            await _run_source_once(source, client, ts_writer, queue, **alerts)
 
         while True:
             next_run = _next_fetch_time()
@@ -97,7 +126,7 @@ async def run_sync(ts_writer: InfluxWriter, queue: Queue, names: list[str] | Non
                 logger.info("Sources runner stopping.")
                 return
             for source in sources:
-                await _run_source_once(source, client, ts_writer, queue)
+                await _run_source_once(source, client, ts_writer, queue, **alerts)
 
 
 async def _run_backfill(

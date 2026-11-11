@@ -9,9 +9,7 @@ from contextlib import suppress
 from pydantic import ValidationError
 from taraqueue import Queue
 
-from tarameteo.alert_checker import check_alerts
-from tarameteo.alerts import AlertStore
-from tarameteo.db import SessionLocal
+from tarameteo.alert_checker import check_reading
 from tarameteo.logger import (
     LoggerHandlerAction,
     LoggerLevelAction,
@@ -75,18 +73,7 @@ async def weather_handler(
 
     # Check weather alerts.
     if notifier and alert_secret:
-        db = SessionLocal()
-        try:
-            alert_store = AlertStore(db)
-            await check_alerts(
-                reading,
-                alert_store,
-                notifier,
-                secret=alert_secret,
-                base_url=alert_base_url,
-            )
-        finally:
-            db.close()
+        await check_reading(reading, notifier, secret=alert_secret, base_url=alert_base_url)
 
     logger.info(
         f"Stored weather data for sensor {device_id}: "

@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from tarameteo.alert_checker import check_alerts
 from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.models import SQLModel
-from tarameteo.sensors import WeatherReading
+from tarameteo.sensors import AggregateReading, WeatherReading
 
 
 @pytest.fixture
@@ -140,6 +140,24 @@ async def test_writes_in_the_alert_language(alert_store, notifier):
     _, subject, body, _ = notifier.send.call_args.args
     assert_that(subject, equal_to("outdoor-north : température à -25,5 °C"))
     assert_that(body, contains_string("Votre alerte : outdoor-north : température en dessous de -20,5 °C"))
+
+
+async def test_daily_aggregates_compare_the_day_max_or_min(alert_store, notifier):
+    alert_store.create(_alert(id="cold", sensor="station"))
+    alert_store.create(_alert(id="hot", sensor="station", condition=Condition.above, threshold=30.0))
+    alert_store.create(_alert(id="wet", sensor="station", field="rain", condition=Condition.above, threshold=10.0))
+    alert_store.create(_alert(id="humid", sensor="station", field="humidity", condition=Condition.above, threshold=0.0))
+
+    day = AggregateReading(
+        sensor="station", timestamp=datetime.now(UTC), temperature_min=-21.0, temperature_max=31.0, rain=12.0,
+    )
+    await check_alerts(day, alert_store, notifier, secret="s", base_url="http://localhost")
+
+    assert_that(_subjects(notifier), contains_exactly(
+        "station: temperature is -21 °C",
+        "station: temperature is 31 °C",
+        "station: rain is 12 mm",
+    ))
 
 
 async def test_retries_when_sending_fails(alert_store, notifier):
