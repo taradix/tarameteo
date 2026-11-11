@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import type { AlertCreate } from "../types";
@@ -8,16 +8,59 @@ type AlertField = AlertCreate["field"];
 const ALERT_FIELDS: AlertField[] = ["temperature", "humidity", "pressure", "rain", "snow"];
 const CONDITIONS = ["below", "above"] as const;
 
-interface AlertFormProps {
-  sensors: string[];
-}
-
 // Emails come in the language of the page they were asked from.
 const emailLanguage = (language?: string) => (language === "fr" ? "fr" : "en");
 
-export function AlertForm({ sensors }: AlertFormProps) {
+// One header button for every screen size; on phones the dialog is a bottom
+// sheet so the form isn't buried under the charts.
+export function AlertsDialog({ sensors }: { sensors: string[] }) {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLDialogElement>(null);
+  const [view, setView] = useState<"create" | "manage" | null>(null);
+
+  const open = () => { setView("create"); ref.current?.showModal(); };
+  const close = () => ref.current?.close();
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={open}
+        className="rounded border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+      >
+        🔔 {t("alerts.create")}
+      </button>
+      <dialog
+        ref={ref}
+        onClose={() => setView(null)}
+        // Clicks on the backdrop land on the dialog itself; the content is wrapped.
+        onClick={(e) => e.target === e.currentTarget && close()}
+        className="mb-0 mt-auto w-full max-w-none rounded-t-lg bg-white text-zinc-900 backdrop:bg-black/40 sm:m-auto sm:max-w-md sm:rounded-lg dark:bg-zinc-950 dark:text-zinc-100"
+      >
+        <div className="space-y-4 p-4">
+          {view === "create" && (
+            <>
+              {sensors.length > 0
+                ? <AlertForm sensors={sensors} onClose={close} />
+                : <p className="text-sm text-zinc-500">{t("alerts.noSensors")}</p>}
+              <button
+                type="button"
+                onClick={() => setView("manage")}
+                className="text-sm text-blue-600 hover:text-blue-800 underline"
+              >
+                {t("alerts.manage")}
+              </button>
+            </>
+          )}
+          {view === "manage" && <ManageAlerts onClose={close} />}
+        </div>
+      </dialog>
+    </>
+  );
+}
+
+function AlertForm({ sensors, onClose }: { sensors: string[]; onClose: () => void }) {
   const { t, i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
   const [sensor, setSensor] = useState(sensors[0] ?? "");
   const [field, setField] = useState<AlertField>("temperature");
   const [condition, setCondition] = useState<"above" | "below">("below");
@@ -43,27 +86,11 @@ export function AlertForm({ sensors }: AlertFormProps) {
     }
   };
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-sm text-blue-600 hover:text-blue-800 underline"
-      >
-        🔔 {t("alerts.create")}
-      </button>
-    );
-  }
-
   if (status === "sent") {
     return (
       <div className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800">
         {t("alerts.confirmationSent")}
-        <button
-          type="button"
-          onClick={() => { setStatus("idle"); setOpen(false); }}
-          className="ml-2 underline"
-        >
+        <button type="button" onClick={onClose} className="ml-2 underline">
           {t("alerts.close")}
         </button>
       </div>
@@ -71,7 +98,7 @@ export function AlertForm({ sensors }: AlertFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded border border-zinc-200 p-4 space-y-3 text-sm">
+    <form onSubmit={handleSubmit} className="space-y-3 text-sm">
       <h3 className="font-semibold">{t("alerts.title")}</h3>
 
       <div className="flex flex-wrap gap-2">
@@ -117,7 +144,7 @@ export function AlertForm({ sensors }: AlertFormProps) {
         </button>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={onClose}
           className="text-zinc-500 hover:text-zinc-700 underline"
         >
           {t("alerts.cancel")}
@@ -132,9 +159,8 @@ export function AlertForm({ sensors }: AlertFormProps) {
 }
 
 // No accounts: the link to see and stop your alerts comes by email.
-export function ManageAlerts() {
+function ManageAlerts({ onClose }: { onClose: () => void }) {
   const { t, i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
@@ -149,21 +175,11 @@ export function ManageAlerts() {
     }
   };
 
-  const close = () => { setStatus("idle"); setOpen(false); };
-
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className="text-sm text-blue-600 hover:text-blue-800 underline">
-        {t("alerts.manage")}
-      </button>
-    );
-  }
-
   if (status === "sent") {
     return (
       <div className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800">
         {t("alerts.manageSent")}
-        <button type="button" onClick={close} className="ml-2 underline">
+        <button type="button" onClick={onClose} className="ml-2 underline">
           {t("alerts.close")}
         </button>
       </div>
@@ -171,7 +187,7 @@ export function ManageAlerts() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded border border-zinc-200 p-4 space-y-3 text-sm">
+    <form onSubmit={handleSubmit} className="space-y-3 text-sm">
       <h3 className="font-semibold">{t("alerts.manage")}</h3>
       <input
         type="email"
@@ -190,7 +206,7 @@ export function ManageAlerts() {
         >
           {status === "sending" ? t("alerts.sending") : t("alerts.manageSubmit")}
         </button>
-        <button type="button" onClick={close} className="text-zinc-500 hover:text-zinc-700 underline">
+        <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-700 underline">
           {t("alerts.cancel")}
         </button>
       </div>

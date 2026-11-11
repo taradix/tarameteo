@@ -3,18 +3,30 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import i18n from "../i18n";
 import { stubFetch } from "../test/utils";
-import { ManageAlerts } from "./AlertForm";
+import { AlertsDialog } from "./AlertForm";
 
 afterEach(async () => {
   await i18n.changeLanguage("en");
 });
 
-describe("ManageAlerts", () => {
+describe("AlertsDialog", () => {
+  it("opens the create form and closes on cancel", async () => {
+    render(<AlertsDialog sensors={["garden"]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Set alert/ }));
+    expect(screen.getByText("New weather alert")).toBeTruthy();
+    expect(screen.getByRole("dialog").hasAttribute("open")).toBe(true);
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText("New weather alert")).toBeNull();
+  });
+
   it("asks for a link in the page's language", async () => {
     await i18n.changeLanguage("fr");
     const fetch = stubFetch({ "/api/alerts/manage": { status: "sent" } });
-    render(<ManageAlerts />);
+    render(<AlertsDialog sensors={[]} />);
 
+    await userEvent.click(screen.getByRole("button", { name: /Créer une alerte/ }));
     await userEvent.click(screen.getByRole("button", { name: "Gérer mes alertes" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Adresse courriel" }), "a@b.c");
     await userEvent.click(screen.getByRole("button", { name: "M'envoyer un lien" }));
@@ -27,8 +39,9 @@ describe("ManageAlerts", () => {
 
   it("shows an error when sending fails", async () => {
     stubFetch({});
-    render(<ManageAlerts />);
+    render(<AlertsDialog sensors={[]} />);
 
+    await userEvent.click(screen.getByRole("button", { name: /Set alert/ }));
     await userEvent.click(screen.getByRole("button", { name: "Manage my alerts" }));
     await userEvent.type(screen.getByRole("textbox", { name: "Email address" }), "a@b.c");
     await userEvent.click(screen.getByRole("button", { name: "Email me a link" }));

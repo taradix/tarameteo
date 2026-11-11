@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useDashboardState } from "../hooks/useDashboardState";
 import { useSensorList, useWeather } from "../hooks/useSensors";
 import type { SensorRef, WeatherField } from "../types";
-import { AlertForm, ManageAlerts } from "./AlertForm";
+import { AlertsDialog } from "./AlertForm";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
 import { WeatherChart } from "./WeatherChart";
@@ -49,7 +49,10 @@ export function Dashboard() {
             {t("dashboard.timezone", { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
           </p>
         </div>
-        <LanguageToggle />
+        <div className="flex items-center gap-2">
+          <AlertsDialog sensors={sensors} />
+          <LanguageToggle />
+        </div>
       </header>
 
       <SensorPicker
@@ -92,11 +95,6 @@ export function Dashboard() {
           ))}
         </div>
       )}
-
-      <div className="flex flex-wrap items-start gap-4">
-        {sensors.length > 0 && <AlertForm sensors={sensors} />}
-        <ManageAlerts />
-      </div>
     </div>
   );
 }

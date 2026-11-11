@@ -58,6 +58,7 @@
     "error": "Échec de la création. Veuillez réessayer.",
     "cancel": "Annuler",
     "close": "Fermer",
+    "noSensors": "Ajoutez d'abord un capteur pour y mettre une alerte.",
     "manage": "Gérer mes alertes",
     "manageSubmit": "M'envoyer un lien",
     "manageSent": "Si cette adresse a des alertes, un lien pour les gérer est en route. Il fonctionne pendant une heure.",

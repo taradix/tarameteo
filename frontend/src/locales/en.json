@@ -58,6 +58,7 @@
     "error": "Failed to create alert. Please try again.",
     "cancel": "Cancel",
     "close": "Close",
+    "noSensors": "Add a sensor first to set an alert on it.",
     "manage": "Manage my alerts",
     "manageSubmit": "Email me a link",
     "manageSent": "If this address has alerts, a link to manage them is on its way. It works for an hour.",
