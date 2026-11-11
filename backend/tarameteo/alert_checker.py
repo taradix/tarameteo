@@ -1,20 +1,27 @@
-"""Threshold checking for weather alerts."""
+"""Alert emails: threshold checks on readings, and the links in every alert email."""
 
 import logging
 from datetime import UTC, datetime, timedelta
+
+from attrs import define
 
 from tarameteo import alert_text
 from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.db import SessionLocal
 from tarameteo.notifier import Notifier
 from tarameteo.sensors import AggregateReading, WeatherReading
-from tarameteo.tokens import sign_token
+from tarameteo.tokens import sign_token, verify_token
 
 logger = logging.getLogger(__name__)
 
 # How far back past the threshold a value must go to count as normal again, so a reading
 # wobbling around the threshold doesn't send an email each time it crosses.
 MARGINS = {"temperature": 1.0, "humidity": 5.0, "pressure": 1.0, "rain": 1.0, "snow": 1.0}
+
+CONFIRM_EXPIRY = timedelta(days=1)
+# The manage link in alert emails lasts longer than a requested one: the email may be read days later.
+ALERT_MANAGE_EXPIRY = timedelta(days=7)
+MANAGE_EXPIRY = timedelta(hours=1)
 
 
 def _crossed(value: float, alert: Alert) -> bool:
@@ -35,61 +42,63 @@ def _cleared(value: float, alert: Alert) -> bool:
     return value >= alert.threshold + margin
 
 
-def unsubscribe_url(alert: Alert, secret: str, base_url: str) -> str:
-    token = sign_token({"alert_id": alert.id, "action": "unsubscribe"}, secret)
-    return f"{base_url}/api/alerts/unsubscribe/{token}"
+@define(frozen=True)
+class AlertService:
+    """Sends every alert email, and signs and verifies the links in them."""
 
+    notifier: Notifier
+    secret: str
+    base_url: str
 
-def manage_url(email: str, language: str, secret: str, base_url: str, expires_in: timedelta) -> str:
-    token = sign_token(
-        {"email": email.lower(), "language": language, "action": "manage"}, secret, expires_in=expires_in.total_seconds()
-    )
-    return f"{base_url}/api/alerts/manage/{token}"
+    def _url(self, action: str, payload: dict, expires_in: timedelta | None = None) -> str:
+        token = sign_token({**payload, "action": action}, self.secret, expires_in=expires_in and expires_in.total_seconds())
+        return f"{self.base_url}/api/alerts/{action}/{token}"
 
+    def verify(self, token: str, action: str) -> dict | None:
+        """The token's payload, if it's valid and signed for this action."""
+        payload = verify_token(token, self.secret)
+        return payload if payload and payload.get("action") == action else None
 
-# The manage link in alert emails lasts longer than a requested one: the email may be read days later.
-ALERT_MANAGE_EXPIRY = timedelta(days=7)
+    async def send_confirm(self, alert: Alert) -> None:
+        url = self._url("confirm", {"alert_id": alert.id}, CONFIRM_EXPIRY)
+        await self.notifier.send(alert.email, *alert_text.email(alert, "confirm", url))
 
+    async def send_manage(self, email: str, language: str) -> None:
+        url = self._url("manage", {"email": email.lower(), "language": language}, MANAGE_EXPIRY)
+        text = alert_text.TEXT[language]
+        await self.notifier.send(email, text["manage_subject"], text["manage_body"].format(url=url))
 
-async def check_alerts(
-    reading: WeatherReading | AggregateReading,
-    alert_store: AlertStore,
-    notifier: Notifier,
-    *,
-    secret: str,
-    base_url: str,
-) -> None:
-    """Email once when a value crosses its threshold, and once when it's back to normal."""
-    for alert in alert_store.list_by_sensor(reading.sensor):
-        value = _value(reading, alert)
-        if value is None:
-            continue
-        if not alert.triggered and _crossed(value, alert):
-            key = "alert"
-        elif alert.triggered and _cleared(value, alert):
-            key = "normal"
-        else:
-            continue
+    async def check(self, reading: WeatherReading | AggregateReading, alert_store: AlertStore) -> None:
+        """Email once when a value crosses its threshold, and once when it's back to normal."""
+        for alert in alert_store.list_by_sensor(reading.sensor):
+            value = _value(reading, alert)
+            if value is None:
+                continue
+            if not alert.triggered and _crossed(value, alert):
+                key = "alert"
+            elif alert.triggered and _cleared(value, alert):
+                key = "normal"
+            else:
+                continue
 
-        url = unsubscribe_url(alert, secret, base_url)
-        manage = manage_url(alert.email, alert.language, secret, base_url, ALERT_MANAGE_EXPIRY)
-        subject, body = alert_text.email(alert, key, url, value, manage)
-        # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
-        headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+            url = self._url("unsubscribe", {"alert_id": alert.id})
+            manage = self._url("manage", {"email": alert.email.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
+            subject, body = alert_text.email(alert, key, url, value, manage)
+            # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
+            headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+            try:
+                await self.notifier.send(alert.email, subject, body, headers)
+            except Exception:
+                # The state stays, so the next reading tries again.
+                logger.exception(f"Failed to send alert {alert.id} to {alert.email}")
+                continue
+            alert_store.set_triggered(alert.id, key == "alert", datetime.now(UTC))
+            logger.info(f"Alert {alert.id} sent {key} to {alert.email}")
+
+    async def check_reading(self, reading: WeatherReading | AggregateReading) -> None:
+        """Check a reading against its sensor's alerts in a session of its own."""
+        db = SessionLocal()
         try:
-            await notifier.send(alert.email, subject, body, headers)
-        except Exception:
-            # The state stays, so the next reading tries again.
-            logger.exception(f"Failed to send alert {alert.id} to {alert.email}")
-            continue
-        alert_store.set_triggered(alert.id, key == "alert", datetime.now(UTC))
-        logger.info(f"Alert {alert.id} sent {key} to {alert.email}")
-
-
-async def check_reading(reading: WeatherReading | AggregateReading, notifier: Notifier, *, secret: str, base_url: str) -> None:
-    """Check a reading against its sensor's alerts in a session of its own."""
-    db = SessionLocal()
-    try:
-        await check_alerts(reading, AlertStore(db), notifier, secret=secret, base_url=base_url)
-    finally:
-        db.close()
+            await self.check(reading, AlertStore(db))
+        finally:
+            db.close()

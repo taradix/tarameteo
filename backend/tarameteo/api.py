@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from taraqueue import Queue, QueueEmpty
 
 from tarameteo import alert_text
-from tarameteo.alert_checker import manage_url
+from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertService
 from tarameteo.alerts import Alert, AlertCreate, AlertStore, ManageRequest
 from tarameteo.ca_client import (
     CAClient,
@@ -43,7 +43,6 @@ from tarameteo.sensors import (
     WeatherReading,
 )
 from tarameteo.sources import run_sync
-from tarameteo.tokens import sign_token, verify_token
 from tarameteo.ts import (
     InfluxReader,
     InfluxWriter,
@@ -61,15 +60,9 @@ async def lifespan(app: FastAPI):
     app.state.ts_reader = None
     app.state.ts_writer = None
 
-    # Alert infrastructure.
-    alert_secret = os.environ.get("ALERT_SECRET", "")
-    app.state.alert_secret = alert_secret
-    app.state.alert_base_url = os.environ.get("ALERT_BASE_URL", "")
-    app.state.manage_sent = {}
-
-    # Notifier.
-    notifier = None
-    if os.environ.get("SMTP_HOST"):
+    # Alerts need both a secret to sign links and SMTP to send them.
+    alerts = None
+    if os.environ.get("ALERT_SECRET") and os.environ.get("SMTP_HOST"):
         notifier = SmtpNotifier(
             host=os.environ["SMTP_HOST"],
             port=int(os.environ.get("SMTP_PORT", "587")),
@@ -77,24 +70,20 @@ async def lifespan(app: FastAPI):
             password=os.environ.get("SMTP_PASSWORD", ""),
             from_address=os.environ.get("SMTP_FROM", "noreply@taram.ca"),
         )
-    app.state.notifier = notifier
+        alerts = AlertService(notifier, os.environ["ALERT_SECRET"], os.environ.get("ALERT_BASE_URL", ""))
+    app.state.alerts = alerts
+    app.state.manage_sent = {}
 
     if os.environ.get("INFLUX_URL"):
         app.state.ts_reader = InfluxReader.from_env()
         app.state.ts_writer = InfluxWriter.from_env()
 
         tasks.append(
-            asyncio.create_task(
-                run_sync(app.state.ts_writer, app.state.queue, notifier=notifier, alert_secret=alert_secret, alert_base_url=app.state.alert_base_url),
-                name="sources-sync",
-            ),
+            asyncio.create_task(run_sync(app.state.ts_writer, app.state.queue, alerts=alerts), name="sources-sync"),
         )
 
         tasks.append(
-            asyncio.create_task(
-                run_consumer(app.state.ts_writer, app.state.queue, notifier=notifier, alert_secret=alert_secret, alert_base_url=app.state.alert_base_url),
-                name="mqtt-consumer",
-            ),
+            asyncio.create_task(run_consumer(app.state.ts_writer, app.state.queue, alerts=alerts), name="mqtt-consumer"),
         )
 
     try:
@@ -270,7 +259,15 @@ def get_alert_store() -> Iterator[AlertStore]:
 
 AlertStoreDep = Annotated[AlertStore, Depends(get_alert_store)]
 
-CONFIRM_EXPIRY = timedelta(days=1)
+
+def get_alert_service(request: Request) -> AlertService:
+    if request.app.state.alerts is None:
+        raise HTTPException(status_code=503, detail="Alert service not configured")
+    return request.app.state.alerts
+
+
+AlertServiceDep = Annotated[AlertService, Depends(get_alert_service)]
+
 MAX_ALERTS = 20
 # Confirm emails an address can be sent per day, so the form can't flood a stranger's inbox.
 # ponytail: no per-IP limit; add one (at the proxy) if someone sprays many addresses.
@@ -279,14 +276,8 @@ MAX_PENDING = 3
 
 @app.post("/api/alerts", status_code=201)
 async def post_alert(
-    body: AlertCreate, request: Request, alert_store: AlertStoreDep, service: SensorServiceDep,
+    body: AlertCreate, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> dict[str, str]:
-    secret = request.app.state.alert_secret
-    notifier = request.app.state.notifier
-    base_url = request.app.state.alert_base_url
-
-    if not secret or not notifier:
-        raise HTTPException(status_code=503, detail="Alert service not configured")
     # The sensor name goes into an email to an unconfirmed address, so only send names we know.
     if not service.list_sensors(names=[body.sensor]).sensors:
         raise HTTPException(status_code=422, detail=f"Unknown sensor {body.sensor!r}")
@@ -299,22 +290,14 @@ async def post_alert(
         return {"status": "confirmation_sent"}
 
     alert = Alert(id=uuid.uuid4().hex, **body.model_dump())
-    token = sign_token({"alert_id": alert.id, "action": "confirm"}, secret, expires_in=CONFIRM_EXPIRY.total_seconds())
-    subject, email_body = alert_text.email(alert, "confirm", f"{base_url}/api/alerts/confirm/{token}")
     # Saved only once sent, so a failed send doesn't leave a pending alert that counts against MAX_PENDING.
-    await notifier.send(alert.email, subject, email_body)
+    await alerts.send_confirm(alert)
     alert_store.create(alert)
     return {"status": "confirmation_sent"}
 
 
-def _token_payload(token: str, action: str, request: Request) -> dict | None:
-    secret = request.app.state.alert_secret
-    payload = verify_token(token, secret) if secret else None
-    return payload if payload and payload.get("action") == action else None
-
-
-def _token_alert_id(token: str, action: str, request: Request) -> str | None:
-    payload = _token_payload(token, action, request)
+def _token_alert_id(token: str, action: str, alerts: AlertService) -> str | None:
+    payload = alerts.verify(token, action)
     return payload and payload["alert_id"]
 
 
@@ -329,8 +312,8 @@ GONE_PAGE = alert_text.page("fr", alert_text.GONE)
 
 
 @app.get("/api/alerts/confirm/{token}", response_class=HTMLResponse)
-def confirm_alert_page(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "confirm", request)
+def confirm_alert_page(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "confirm", alerts)
     if alert_id is None:
         return _html(INVALID_PAGE, 400)
     alert = alert_store.get(alert_id)
@@ -343,8 +326,8 @@ def confirm_alert_page(token: str, request: Request, alert_store: AlertStoreDep)
 
 
 @app.post("/api/alerts/confirm/{token}", response_class=HTMLResponse)
-def confirm_alert(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "confirm", request)
+def confirm_alert(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "confirm", alerts)
     if alert_id is None:
         return _html(INVALID_PAGE, 400)
     alert_store.confirm(alert_id)
@@ -356,8 +339,8 @@ def confirm_alert(token: str, request: Request, alert_store: AlertStoreDep) -> H
 
 
 @app.get("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
-def unsubscribe_alert_page(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "unsubscribe", request)
+def unsubscribe_alert_page(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "unsubscribe", alerts)
     if alert_id is None:
         return _html(INVALID_PAGE, 400)
     alert = alert_store.get(alert_id)
@@ -369,8 +352,8 @@ def unsubscribe_alert_page(token: str, request: Request, alert_store: AlertStore
 
 # Also the one-click unsubscribe target for the List-Unsubscribe-Post header.
 @app.post("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
-def unsubscribe_alert(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "unsubscribe", request)
+def unsubscribe_alert(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+    alert_id = _token_alert_id(token, "unsubscribe", alerts)
     if alert_id is None:
         return _html(INVALID_PAGE, 400)
     alert = alert_store.get(alert_id)
@@ -380,32 +363,27 @@ def unsubscribe_alert(token: str, request: Request, alert_store: AlertStoreDep) 
     return _html(alert_text.page(alert.language, alert_text.TEXT[alert.language]["removed"]))
 
 
-MANAGE_EXPIRY = timedelta(hours=1)
 # One manage email per address this often, so the form can't flood an inbox.
 MANAGE_EVERY = timedelta(minutes=5)
 
 
 @app.post("/api/alerts/manage", status_code=202)
-async def post_alert_manage(body: ManageRequest, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
+async def post_alert_manage(
+    body: ManageRequest, request: Request, alerts: AlertServiceDep, alert_store: AlertStoreDep,
+) -> dict[str, str]:
     """Email a link to see and stop the address's alerts; the answer is the same whether or not it has any."""
-    state = request.app.state
-    if not state.alert_secret or not state.notifier:
-        raise HTTPException(status_code=503, detail="Alert service not configured")
-
     email, now = body.email.lower(), datetime.now(UTC)
     # ponytail: in-memory and per process, so a restart forgets it; fine for one API process.
-    sent = state.manage_sent
+    sent = request.app.state.manage_sent
     if alert_store.count_by_email(email) and now - sent.get(email, datetime.min.replace(tzinfo=UTC)) >= MANAGE_EVERY:
         sent[email] = now
-        url = manage_url(email, body.language, state.alert_secret, state.alert_base_url, MANAGE_EXPIRY)
-        text = alert_text.TEXT[body.language]
-        await state.notifier.send(body.email, text["manage_subject"], text["manage_body"].format(url=url))
+        await alerts.send_manage(body.email, body.language)
     return {"status": "sent"}
 
 
 @app.get("/api/alerts/manage/{token}", response_class=HTMLResponse)
-def alert_manage_page(token: str, request: Request, alert_store: AlertStoreDep) -> HTMLResponse:
-    payload = _token_payload(token, "manage", request)
+def alert_manage_page(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+    payload = alerts.verify(token, "manage")
     if payload is None:
         return _html(INVALID_PAGE, 400)
     email = payload["email"]
@@ -416,10 +394,11 @@ def alert_manage_page(token: str, request: Request, alert_store: AlertStoreDep) 
 def alert_manage(
     token: str,
     request: Request,
+    alerts: AlertServiceDep,
     alert_store: AlertStoreDep,
     alert: Annotated[str | None, Query(description="The alert to stop; all of them when left out")] = None,
 ) -> Response:
-    payload = _token_payload(token, "manage", request)
+    payload = alerts.verify(token, "manage")
     if payload is None:
         return _html(INVALID_PAGE, 400)
     alert_store.delete_by_email(payload["email"], alert)

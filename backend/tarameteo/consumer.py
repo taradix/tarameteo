@@ -9,6 +9,7 @@ from contextlib import suppress
 from pydantic import ValidationError
 from taraqueue import Queue
 
+from tarameteo.alert_checker import AlertService
 from tarameteo.ingest import ingest
 from tarameteo.logger import (
     LoggerHandlerAction,
@@ -19,7 +20,6 @@ from tarameteo.mqtt import (
     MQTTConsumer,
     MQTTMessage,
 )
-from tarameteo.notifier import Notifier
 from tarameteo.sensors import WeatherReading
 from tarameteo.ts import (
     InfluxWriter,
@@ -34,9 +34,7 @@ async def weather_handler(
     ts_writer: TSWriter,
     queue: Queue,
     *,
-    notifier: Notifier | None = None,
-    alert_secret: str = "",
-    alert_base_url: str = "",
+    alerts: AlertService | None = None,
 ):
     try:
         domain, device_id, category = message.topic.split("/")
@@ -55,10 +53,7 @@ async def weather_handler(
         return
 
     try:
-        await ingest(
-            [reading], ts_writer, queue,
-            notifier=notifier, alert_secret=alert_secret, alert_base_url=alert_base_url,
-        )
+        await ingest([reading], ts_writer, queue, alerts=alerts)
     except ValueError:
         logger.exception("Error storing weather data")
         return
@@ -78,9 +73,7 @@ async def run(
     client_id: str = "weather-consumer",
     topic: str = "weather/+/event",
     *,
-    notifier: Notifier | None = None,
-    alert_secret: str = "",
-    alert_base_url: str = "",
+    alerts: AlertService | None = None,
 ) -> None:
     """Run the MQTT consumer as a long-lived coroutine.
 
@@ -94,9 +87,7 @@ async def run(
             message,
             ts_writer=ts_writer,
             queue=queue,
-            notifier=notifier,
-            alert_secret=alert_secret,
-            alert_base_url=alert_base_url,
+            alerts=alerts,
         )
 
     def _log_handler_failure(future) -> None:

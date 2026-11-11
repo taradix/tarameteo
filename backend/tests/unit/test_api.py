@@ -30,6 +30,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from tarameteo.alert_checker import AlertService
 from tarameteo.alerts import Alert, AlertStore
 from tarameteo.api import app, get_alert_store, stream_sensor_weather
 from tarameteo.ca_client import (
@@ -480,10 +481,10 @@ def alert_api(api_app, memory_writer):
     db = Session(engine)
     store = AlertStore(db)
     app.dependency_overrides[get_alert_store] = lambda: store
-    state = api_app.app.state
-    state.alert_secret, state.alert_base_url, state.notifier = "s", "http://test", AsyncMock()
+    notifier = AsyncMock()
+    api_app.app.state.alerts = AlertService(notifier, "s", "http://test")
     try:
-        yield api_app, store, state.notifier
+        yield api_app, store, notifier
     finally:
         app.dependency_overrides.pop(get_alert_store, None)
         db.close()

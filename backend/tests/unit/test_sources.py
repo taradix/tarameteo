@@ -60,15 +60,15 @@ class _AggregateSource(Source):
         return [AggregateReading(sensor="station", timestamp=datetime.now(UTC), rain=12.0)]
 
 
-async def test_run_source_once_publishes_and_checks_alerts(memory_writer, memory_queue, monkeypatch):
-    check = AsyncMock(side_effect=[OSError("db down"), None])
-    monkeypatch.setattr("tarameteo.ingest.check_reading", check)
+async def test_run_source_once_publishes_and_checks_alerts(memory_writer, memory_queue):
+    alerts = AsyncMock()
+    alerts.check_reading.side_effect = [OSError("db down"), None]
     async with memory_queue.connect("weather:station") as q, httpx.AsyncClient(timeout=1) as client:
         # A failing check is logged, not raised, so the sync loop keeps going.
         for _ in range(2):
-            await _run_source_once(_AggregateSource(), client, memory_writer, q, notifier=AsyncMock(), alert_secret="s")
+            await _run_source_once(_AggregateSource(), client, memory_writer, q, alerts=alerts)
         assert_that(AggregateReading.model_validate_json(await q.receive(1)).rain, equal_to(12.0))
-    assert_that(check.call_count, equal_to(2))
+    assert_that(alerts.check_reading.call_count, equal_to(2))
 
 
 class _TwoDaySource(Source):

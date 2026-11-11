@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from taraqueue import Queue
 
+from tarameteo.alert_checker import AlertService
 from tarameteo.ingest import ingest
 from tarameteo.logger import (
     LoggerHandlerAction,
@@ -19,7 +20,6 @@ from tarameteo.logger import (
 from tarameteo.melccfp import source as melccfp_source
 from tarameteo.metar import source as metar_source
 from tarameteo.msc import source as msc_source
-from tarameteo.notifier import Notifier
 from tarameteo.source import Source
 from tarameteo.ts import InfluxWriter
 
@@ -55,16 +55,11 @@ async def _run_source_once(
     ts_writer: InfluxWriter,
     queue: Queue,
     *,
-    notifier: Notifier | None = None,
-    alert_secret: str = "",
-    alert_base_url: str = "",
+    alerts: AlertService | None = None,
 ) -> None:
     try:
         readings = await source.run_once(client)
-        await ingest(
-            readings, ts_writer, queue,
-            notifier=notifier, alert_secret=alert_secret, alert_base_url=alert_base_url,
-        )
+        await ingest(readings, ts_writer, queue, alerts=alerts)
     except source.RECOVERABLE_ERRORS:
         logger.exception("Recoverable error while fetching source %s", source.name)
 
@@ -91,9 +86,7 @@ async def run_sync(
     queue: Queue,
     names: list[str] | None = None,
     *,
-    notifier: Notifier | None = None,
-    alert_secret: str = "",
-    alert_base_url: str = "",
+    alerts: AlertService | None = None,
 ) -> None:
     """Run the periodic sources sync loop as a long-lived coroutine.
 
@@ -105,11 +98,10 @@ async def run_sync(
         "Sources runner started with %d source(s).",
         len(sources),
     )
-    alerts = {"notifier": notifier, "alert_secret": alert_secret, "alert_base_url": alert_base_url}
 
     async with httpx.AsyncClient(timeout=30) as client:
         for source in sources:
-            await _run_source_once(source, client, ts_writer, queue, **alerts)
+            await _run_source_once(source, client, ts_writer, queue, alerts=alerts)
 
         while True:
             next_run = _next_fetch_time()
@@ -121,7 +113,7 @@ async def run_sync(
                 logger.info("Sources runner stopping.")
                 return
             for source in sources:
-                await _run_source_once(source, client, ts_writer, queue, **alerts)
+                await _run_source_once(source, client, ts_writer, queue, alerts=alerts)
 
 
 async def _run_backfill(

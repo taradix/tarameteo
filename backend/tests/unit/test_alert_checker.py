@@ -16,7 +16,7 @@ from hamcrest import (
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from tarameteo.alert_checker import check_alerts
+from tarameteo.alert_checker import AlertService
 from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.models import SQLModel
 from tarameteo.sensors import AggregateReading, WeatherReading
@@ -66,7 +66,7 @@ def _reading(**kwargs) -> WeatherReading:
 
 
 async def _check(alert_store, notifier, **reading):
-    await check_alerts(_reading(**reading), alert_store, notifier, secret="s", base_url="http://localhost")
+    await AlertService(notifier, "s", "http://localhost").check(_reading(**reading), alert_store)
 
 
 def _subjects(notifier):
@@ -151,7 +151,7 @@ async def test_daily_aggregates_compare_the_day_max_or_min(alert_store, notifier
     day = AggregateReading(
         sensor="station", timestamp=datetime.now(UTC), temperature_min=-21.0, temperature_max=31.0, rain=12.0,
     )
-    await check_alerts(day, alert_store, notifier, secret="s", base_url="http://localhost")
+    await AlertService(notifier, "s", "http://localhost").check(day, alert_store)
 
     assert_that(_subjects(notifier), contains_exactly(
         "station: temperature is -21 °C",

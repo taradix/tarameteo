@@ -6,8 +6,7 @@ from collections.abc import Sequence
 
 from taraqueue import Queue
 
-from tarameteo.alert_checker import check_reading
-from tarameteo.notifier import Notifier
+from tarameteo.alert_checker import AlertService
 from tarameteo.sensors import (
     AGGREGATE_MEASUREMENT,
     MEASUREMENT,
@@ -46,9 +45,7 @@ async def ingest(
     ts_writer: TSWriter,
     queue: Queue,
     *,
-    notifier: Notifier | None = None,
-    alert_secret: str = "",
-    alert_base_url: str = "",
+    alerts: AlertService | None = None,
 ) -> None:
     """Store readings, then publish and check alerts on each sensor's latest one (readings oldest first)."""
     # The write blocks (HTTP, retries with sleep), so keep it off the loop that also serves the API.
@@ -56,9 +53,9 @@ async def ingest(
     latest = {r.sensor: r for r in readings}
     for reading in latest.values():
         await queue.publish(f"weather:{reading.sensor}", reading.model_dump_json())
-        if notifier and alert_secret:
+        if alerts:
             try:
-                await check_reading(reading, notifier, secret=alert_secret, base_url=alert_base_url)
+                await alerts.check_reading(reading)
             except Exception:
                 # Keep ingesting the other sensors and the next readings.
                 logger.exception("Failed to check alerts for %s", reading.sensor)
