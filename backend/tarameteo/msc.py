@@ -1,5 +1,6 @@
 """MSC (Meteorological Service of Canada) hourly climate station fetcher."""
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -180,7 +181,7 @@ class MscSource(Source):
                     sensor.device_id, now.year, now.month,
                 )
                 continue
-            write_readings(readings, sensor.device_id, ts_writer)
+            await asyncio.to_thread(write_readings, readings, sensor.device_id, ts_writer)
             latest_readings.append(_to_weather_reading(readings[-1], sensor.device_id))
             latest = readings[-1]
             logger.info(
@@ -201,7 +202,7 @@ class MscSource(Source):
         ts_writer: TSWriter,
     ) -> None:
         readings = await fetch_month(client, sensor, year, month)
-        write_readings(readings, sensor.device_id, ts_writer)
+        await asyncio.to_thread(write_readings, readings, sensor.device_id, ts_writer)
         logger.info("  Wrote %d readings", len(readings))
 
 

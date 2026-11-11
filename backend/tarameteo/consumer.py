@@ -55,7 +55,9 @@ async def weather_handler(
         return
 
     try:
-        ts_writer.write_point(
+        # The write blocks (HTTP, retries with sleep), so keep it off the loop that also serves the API.
+        await asyncio.to_thread(
+            ts_writer.write_point,
             "weather",
             fields=reading.model_dump(exclude={"sensor", "timestamp", "latitude", "longitude"}, exclude_none=True),
             tags={

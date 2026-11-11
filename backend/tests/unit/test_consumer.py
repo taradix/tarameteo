@@ -1,6 +1,7 @@
 """Unit tests for the consumer module."""
 
 import json
+import threading
 from datetime import UTC, datetime
 
 import pytest
@@ -10,6 +11,7 @@ from hamcrest import (
     empty,
     has_entries,
     has_properties,
+    is_not,
 )
 from taraqueue import QueueEmpty
 
@@ -151,6 +153,19 @@ async def test_weather_handler_raises_unexpected_write_errors(memory_queue):
 
     with pytest.raises(RuntimeError, match="write failure"):
         await weather_handler(make_message(), ts_writer=BrokenWriter(), queue=memory_queue)
+
+
+async def test_weather_handler_writes_off_the_event_loop(memory_queue):
+    """The blocking write should run in a worker thread, so it doesn't freeze the API."""
+    threads = []
+
+    class ThreadWriter:
+        def write_point(self, *args, **kwargs):
+            threads.append(threading.get_ident())
+
+    await weather_handler(make_message(), ts_writer=ThreadWriter(), queue=memory_queue)
+
+    assert_that(threads, contains_exactly(is_not(threading.get_ident())))
 
 
 async def test_weather_handler_raises_publish_errors(memory_writer):

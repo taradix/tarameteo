@@ -1,5 +1,6 @@
 """METAR weather observation fetcher (Aviation Weather Center)."""
 
+import asyncio
 import logging
 import math
 from dataclasses import dataclass
@@ -166,7 +167,7 @@ class MetarSource(Source):
             if not station_readings:
                 logger.warning("No METAR readings for %s", sensor.device_id)
                 continue
-            write_readings(station_readings, sensor.device_id, ts_writer)
+            await asyncio.to_thread(write_readings, station_readings, sensor.device_id, ts_writer)
             latest_readings.append(_to_weather_reading(station_readings[-1], sensor.device_id))
             latest = station_readings[-1]
             logger.info(
