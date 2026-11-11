@@ -44,13 +44,15 @@
       "humidity": "Humidity",
       "pressure": "Pressure",
       "rain": "Rain",
-      "snow": "Snow"
+      "snow": "Snow",
+      "offline": "No readings for"
     },
     "conditions": {
       "above": "above",
       "below": "below"
     },
     "threshold": "Value",
+    "hours": "Hours",
     "email": "Email address",
     "submit": "Create alert",
     "sending": "Sending…",

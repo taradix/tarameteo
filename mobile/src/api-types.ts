@@ -273,9 +273,12 @@ export interface components {
              * Field
              * @enum {string}
              */
-            field: "temperature" | "humidity" | "pressure" | "rain" | "snow";
+            field: "temperature" | "humidity" | "pressure" | "rain" | "snow" | "offline";
             condition: components["schemas"]["Condition"];
-            /** Threshold */
+            /**
+             * Threshold
+             * @description For "offline", hours without a reading; the condition must be "above"
+             */
             threshold: number;
             /**
              * Language

@@ -1,6 +1,6 @@
 """Tests for tarameteo.alert_checker."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -16,6 +16,7 @@ from hamcrest import (
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from tarameteo import alert_text
 from tarameteo.alert_checker import AlertService
 from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.models import SQLModel
@@ -158,6 +159,30 @@ async def test_daily_aggregates_compare_the_day_max_or_min(alert_store, notifier
         "station: temperature is 31 °C",
         "station: rain is 12 mm",
     ))
+
+
+async def test_offline_emails_once_then_when_readings_are_back(alert_store, notifier):
+    alert_store.create(_alert(field="offline", condition=Condition.above, threshold=3.0))
+    alert_store.create(_alert(id="gone", sensor="gone", field="offline", condition=Condition.above, threshold=3.0))
+    alerts, now = AlertService(notifier, "s", "http://localhost"), datetime.now(UTC)
+
+    await alerts.check_offline({"outdoor-north": now - timedelta(hours=2)}, alert_store)
+    for _ in range(2):
+        await alerts.check_offline({"outdoor-north": now - timedelta(hours=4)}, alert_store)
+    # A source re-sending an old reading on startup isn't the sensor coming back.
+    await _check(alert_store, notifier, timestamp=now - timedelta(hours=4))
+    await _check(alert_store, notifier)
+
+    assert_that(_subjects(notifier), contains_exactly(
+        "gone: no reading for 3 h",
+        "outdoor-north: no reading for 4 h",
+        "outdoor-north: readings are back",
+    ))
+
+
+def test_offline_rule_in_french():
+    alert = _alert(field="offline", condition=Condition.above, threshold=6.0, language="fr")
+    assert_that(alert_text.rule(alert), equal_to("outdoor-north : aucune donnée depuis 6 h"))
 
 
 async def test_retries_when_sending_fails(alert_store, notifier):

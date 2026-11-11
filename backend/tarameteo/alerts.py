@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Literal
 
 from attrs import define
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session as DBSession
 
@@ -17,9 +17,13 @@ class Condition(StrEnum):
     below = "below"
 
 
-AlertField = Literal["temperature", "humidity", "pressure", "rain", "snow"]
+# "offline": no reading for more than threshold hours.
+AlertField = Literal["temperature", "humidity", "pressure", "rain", "snow", "offline"]
 
-ALERT_FIELDS: list[AlertField] = ["temperature", "humidity", "pressure", "rain", "snow"]
+ALERT_FIELDS: list[AlertField] = ["temperature", "humidity", "pressure", "rain", "snow", "offline"]
+
+# Sensor readings are only looked this far back, so an offline alert can't wait longer.
+OFFLINE_MAX_HOURS = 30 * 24
 
 Language = Literal["en", "fr"]
 
@@ -47,8 +51,14 @@ class AlertCreate(BaseModel):
     sensor: str
     field: AlertField
     condition: Condition
-    threshold: float
+    threshold: float = Field(description='For "offline", hours without a reading; the condition must be "above"')
     language: Language = "en"
+
+    @model_validator(mode="after")
+    def _check_offline(self) -> "AlertCreate":
+        if self.field == "offline" and (self.condition != Condition.above or not 1 <= self.threshold <= OFFLINE_MAX_HOURS):
+            raise ValueError(f'An offline alert needs condition "above" and 1 to {OFFLINE_MAX_HOURS} hours')
+        return self
 
 
 class ManageRequest(BaseModel):
@@ -136,6 +146,15 @@ class AlertStore:
     def list_by_sensor(self, sensor: str) -> list[Alert]:
         rows = self.db.execute(
             select(AlertRow).where(AlertRow.sensor == sensor, AlertRow.confirmed == True)  # noqa: E712
+        ).scalars().all()
+        return [self._row_to_alert(row) for row in rows]
+
+    def list_offline(self) -> list[Alert]:
+        """Confirmed offline alerts that haven't fired yet."""
+        rows = self.db.execute(
+            select(AlertRow).where(
+                AlertRow.field == "offline", AlertRow.confirmed == True, AlertRow.triggered == False  # noqa: E712
+            )
         ).scalars().all()
         return [self._row_to_alert(row) for row in rows]
 

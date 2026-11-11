@@ -21,6 +21,23 @@ describe("AlertsDialog", () => {
     expect(screen.queryByText("New weather alert")).toBeNull();
   });
 
+  it("asks hours, not above or below, for an offline alert", async () => {
+    const fetch = stubFetch({ "/api/alerts": { status: "confirmation_sent" } });
+    render(<AlertsDialog sensors={["garden"]} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Set alert/ }));
+    await userEvent.selectOptions(screen.getByDisplayValue("Temperature"), "offline");
+    expect(screen.queryByDisplayValue("below")).toBeNull();
+    await userEvent.type(screen.getByRole("spinbutton", { name: "Hours" }), "6");
+    await userEvent.type(screen.getByPlaceholderText("Email address"), "a@b.c");
+    await userEvent.click(screen.getByRole("button", { name: "Create alert" }));
+
+    expect(await screen.findByText("Check your email to confirm the alert.")).toBeTruthy();
+    expect(fetch).toHaveBeenCalledWith("/api/alerts", expect.objectContaining({
+      body: JSON.stringify({ email: "a@b.c", sensor: "garden", field: "offline", condition: "above", threshold: 6, language: "en" }),
+    }));
+  });
+
   it("asks for a link in the page's language", async () => {
     await i18n.changeLanguage("fr");
     const fetch = stubFetch({ "/api/alerts/manage": { status: "sent" } });

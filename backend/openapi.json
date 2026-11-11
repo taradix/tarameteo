@@ -1057,7 +1057,8 @@
               "humidity",
               "pressure",
               "rain",
-              "snow"
+              "snow",
+              "offline"
             ],
             "title": "Field"
           },
@@ -1066,7 +1067,8 @@
           },
           "threshold": {
             "type": "number",
-            "title": "Threshold"
+            "title": "Threshold",
+            "description": "For \"offline\", hours without a reading; the condition must be \"above\""
           },
           "language": {
             "type": "string",

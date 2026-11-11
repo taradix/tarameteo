@@ -4,13 +4,21 @@ from html import escape
 
 from tarameteo.alerts import Alert
 
-UNITS = {"temperature": "°C", "humidity": "%", "pressure": "hPa", "rain": "mm", "snow": "mm"}
+UNITS = {"temperature": "°C", "humidity": "%", "pressure": "hPa", "rain": "mm", "snow": "mm", "offline": "h"}
 
 TEXT = {
     "en": {
         "colon": ":",
-        "fields": {"temperature": "temperature", "humidity": "humidity", "pressure": "pressure", "rain": "rain", "snow": "snow"},
+        "fields": {
+            "temperature": "temperature", "humidity": "humidity", "pressure": "pressure", "rain": "rain", "snow": "snow",
+            "offline": "readings",
+        },
         "conditions": {"above": "above", "below": "below"},
+        "offline_rule": "no reading for {value}",
+        "offline_subject": "{sensor}: no reading for {value}",
+        "offline_body": "{sensor} hasn't sent a reading for {value}.\n\nYour alert: {rule}\nYou'll get one more email when readings are back.\n\nTo stop this alert:\n{url}\n\nAll your alerts:\n{manage_url}\n",
+        "online_subject": "{sensor}: readings are back",
+        "online_body": "{sensor} is sending readings again.\n\nYour alert: {rule}\n\nTo stop this alert:\n{url}\n\nAll your alerts:\n{manage_url}\n",
         "confirm_subject": "Confirm your weather alert",
         "confirm_body": "Someone asked for this alert to be sent to this address:\n\n{rule}\n\nTo start it, open this link and press Confirm:\n{url}\n\nOtherwise, ignore this email; nothing will be sent.\n",
         "alert_subject": "{sensor}: {field} is {value}",
@@ -32,8 +40,16 @@ TEXT = {
     },
     "fr": {
         "colon": " :",
-        "fields": {"temperature": "température", "humidity": "humidité", "pressure": "pression", "rain": "pluie", "snow": "neige"},
+        "fields": {
+            "temperature": "température", "humidity": "humidité", "pressure": "pression", "rain": "pluie", "snow": "neige",
+            "offline": "données",
+        },
         "conditions": {"above": "au-dessus de", "below": "en dessous de"},
+        "offline_rule": "aucune donnée depuis {value}",
+        "offline_subject": "{sensor} : aucune donnée depuis {value}",
+        "offline_body": "{sensor} n'a envoyé aucune donnée depuis {value}.\n\nVotre alerte : {rule}\nVous recevrez un dernier courriel quand les données reviendront.\n\nPour arrêter cette alerte :\n{url}\n\nToutes vos alertes :\n{manage_url}\n",
+        "online_subject": "{sensor} : les données sont revenues",
+        "online_body": "{sensor} envoie de nouveau des données.\n\nVotre alerte : {rule}\n\nPour arrêter cette alerte :\n{url}\n\nToutes vos alertes :\n{manage_url}\n",
         "confirm_subject": "Confirmez votre alerte météo",
         "confirm_body": "Quelqu'un a demandé que cette alerte soit envoyée à cette adresse :\n\n{rule}\n\nPour l'activer, ouvrez ce lien et appuyez sur Confirmer :\n{url}\n\nSinon, ignorez ce courriel ; rien ne sera envoyé.\n",
         "alert_subject": "{sensor} : {field} à {value}",
@@ -69,12 +85,14 @@ def rule(alert: Alert, language: str | None = None) -> str:
     """'outdoor: temperature below -20 °C', in the alert's language unless given another."""
     language = language or alert.language
     text = TEXT[language]
+    if alert.field == "offline":
+        return f"{alert.sensor}{text['colon']} {text['offline_rule'].format(value=value(alert, alert.threshold, language))}"
     field, condition = text["fields"][alert.field], text["conditions"][alert.condition]
     return f"{alert.sensor}{text['colon']} {field} {condition} {value(alert, alert.threshold, language)}"
 
 
 def email(alert: Alert, key: str, url: str, reading: float | None = None, manage_url: str = "") -> tuple[str, str]:
-    """Subject and body for confirm, alert or normal."""
+    """Subject and body for confirm, alert, normal, offline or online."""
     text = TEXT[alert.language]
     args = {
         "sensor": alert.sensor,

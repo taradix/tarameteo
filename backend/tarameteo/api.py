@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from taraqueue import Queue, QueueEmpty
 
 from tarameteo import alert_text
-from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertService
+from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertService, run_offline_checks
 from tarameteo.alerts import Alert, AlertCreate, AlertStore, ManageRequest
 from tarameteo.ca_client import (
     CAClient,
@@ -85,6 +85,9 @@ async def lifespan(app: FastAPI):
         tasks.append(
             asyncio.create_task(run_consumer(app.state.ts_writer, app.state.queue, alerts=alerts), name="mqtt-consumer"),
         )
+
+        if alerts:
+            tasks.append(asyncio.create_task(run_offline_checks(alerts, app.state.ts_reader), name="offline-checks"))
 
     try:
         yield

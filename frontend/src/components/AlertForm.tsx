@@ -5,7 +5,7 @@ import type { AlertCreate } from "../types";
 
 type AlertField = AlertCreate["field"];
 
-const ALERT_FIELDS: AlertField[] = ["temperature", "humidity", "pressure", "rain", "snow"];
+const ALERT_FIELDS: AlertField[] = ["temperature", "humidity", "pressure", "rain", "snow", "offline"];
 const CONDITIONS = ["below", "above"] as const;
 
 // Emails come in the language of the page they were asked from.
@@ -67,6 +67,8 @@ function AlertForm({ sensors, onClose }: { sensors: string[]; onClose: () => voi
   const [threshold, setThreshold] = useState("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  // Offline: "no reading for more than N hours".
+  const offline = field === "offline";
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -76,7 +78,7 @@ function AlertForm({ sensors, onClose }: { sensors: string[]; onClose: () => voi
         email,
         sensor,
         field,
-        condition,
+        condition: offline ? "above" : condition,
         threshold: Number(threshold),
         language: emailLanguage(i18n.resolvedLanguage),
       });
@@ -110,16 +112,21 @@ function AlertForm({ sensors, onClose }: { sensors: string[]; onClose: () => voi
           {ALERT_FIELDS.map((f) => <option key={f} value={f}>{t(`alerts.fields.${f}`)}</option>)}
         </select>
 
-        <select value={condition} onChange={(e) => setCondition(e.target.value as "above" | "below")} className="border rounded px-2 py-1">
-          {CONDITIONS.map((c) => <option key={c} value={c}>{t(`alerts.conditions.${c}`)}</option>)}
-        </select>
+        {!offline && (
+          <select value={condition} onChange={(e) => setCondition(e.target.value as "above" | "below")} className="border rounded px-2 py-1">
+            {CONDITIONS.map((c) => <option key={c} value={c}>{t(`alerts.conditions.${c}`)}</option>)}
+          </select>
+        )}
 
         <input
           type="number"
           step="any"
+          min={offline ? 1 : undefined}
+          max={offline ? 720 : undefined}
           value={threshold}
           onChange={(e) => setThreshold(e.target.value)}
-          placeholder={t("alerts.threshold")}
+          placeholder={offline ? t("alerts.hours") : t("alerts.threshold")}
+          aria-label={offline ? t("alerts.hours") : t("alerts.threshold")}
           required
           className="border rounded px-2 py-1 w-24"
         />

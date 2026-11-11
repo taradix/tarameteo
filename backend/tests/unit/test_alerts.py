@@ -12,10 +12,11 @@ from hamcrest import (
     none,
     not_none,
 )
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from tarameteo.alerts import Alert, AlertStore, Condition
+from tarameteo.alerts import Alert, AlertCreate, AlertStore, Condition
 from tarameteo.models import SQLModel
 
 
@@ -113,3 +114,9 @@ def test_count_by_email(alert_store):
     alert_store.create(_make_alert(id="a3", email="other@example.com"))
     assert_that(alert_store.count_by_email("user@example.com"), equal_to(2))
     assert_that(alert_store.count_by_email("user@example.com", confirmed=False), equal_to(1))
+
+
+@pytest.mark.parametrize("condition, threshold", [("below", 3), ("above", 0.5), ("above", 721)])
+def test_offline_alert_needs_above_and_sane_hours(condition, threshold):
+    with pytest.raises(ValidationError, match="offline"):
+        AlertCreate(email="a@b.c", sensor="s", field="offline", condition=condition, threshold=threshold)
