@@ -27,6 +27,7 @@ from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
     get_ca_client,
+    require_token,
 )
 from tarameteo.consumer import run as run_consumer
 from tarameteo.db import SessionLocal
@@ -147,11 +148,14 @@ def get_queue(request: Request) -> Queue:
 QueueDep = Annotated[Queue, Depends(get_queue)]
 
 
-@app.post("/api/certs", response_model=IssueCertificateResponse)
+@app.post("/api/certs", response_model=IssueCertificateResponse, dependencies=[Depends(require_token)])
 def post_cert(
     request: IssueCertificateRequest,
     ca_client: Annotated[CAClient, Depends(get_ca_client)],
 ) -> IssueCertificateResponse:
+    # Server certificates are issued on the internal network only (mosquitto-init calls the CA directly).
+    if request.server_auth:
+        raise HTTPException(status_code=403, detail="Server certificates are not issued through the public API")
     return ca_client.issue_certificate(request)
 
 

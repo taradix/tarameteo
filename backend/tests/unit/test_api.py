@@ -66,7 +66,33 @@ def test_healthz_get(api_app):
     assert_that(result.json(), has_entries(status="ok"))
 
 
-def test_certs_post(api_app, unique):
+@pytest.fixture
+def ca_token(monkeypatch, unique):
+    token = unique("text")
+    monkeypatch.setenv("CA_TOKEN", token)
+    return token
+
+
+def test_certs_post_without_token(api_app, ca_token):
+    """Posting a CSR without the bearer token should be rejected."""
+    response = api_app.post("/api/certs", json={"csr_pem": "csr"})
+
+    assert_that(response.status_code, equal_to(401))
+
+
+def test_certs_post_server_auth(api_app, ca_token):
+    """Server certificates should not be issued through the public API."""
+    app.dependency_overrides[get_ca_client] = lambda: None
+    response = api_app.post(
+        "/api/certs",
+        json={"csr_pem": "csr", "server_auth": True},
+        headers={"Authorization": f"Bearer {ca_token}"},
+    )
+
+    assert_that(response.status_code, equal_to(403))
+
+
+def test_certs_post(api_app, ca_token, unique):
     csr_pem, cert_pem, ca_pem = unique("text"), unique("text"), unique("text")
     serial_number, subject, issuer = unique("integer"), unique("text"), unique("text")
     now = datetime.now(UTC)
@@ -90,7 +116,7 @@ def test_certs_post(api_app, unique):
 
     response = api_app.post("/api/certs", json={
         "csr_pem": csr_pem,
-    })
+    }, headers={"Authorization": f"Bearer {ca_token}"})
     assert_that(response.json(), has_entries(
         cert_pem=cert_pem,
         chain_pem=[ca_pem],

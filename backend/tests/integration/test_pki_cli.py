@@ -9,7 +9,8 @@ def test_main(api_service, tmp_path, unique):
     """The main function should generate a private key, a signed cert, and a CA cert."""
     device_id = unique("text")
     api_url = f"http://{api_service.ip}/api/certs"
-    ret = main(["--output-dir", str(tmp_path), "issue", "--api-url", api_url, device_id])
+    api_token = api_service.env["CA_TOKEN"]
+    ret = main(["--output-dir", str(tmp_path), "issue", "--api-url", api_url, "--api-token", api_token, device_id])
     assert ret == 0
 
     key_path = tmp_path / f"{device_id}.key"

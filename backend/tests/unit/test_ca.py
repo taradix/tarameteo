@@ -8,7 +8,7 @@ from hamcrest import (
     has_properties,
 )
 
-from tarameteo.ca import require_token
+from tarameteo.ca_client import require_token
 
 
 def test_require_valid_token(unique):
@@ -31,6 +31,14 @@ def test_require_invalid_token():
         require_token("Bearer a", {"CA_TOKEN": "b"})
 
     assert_that(e.value, has_properties(status_code=403))
+
+
+def test_require_unconfigured_token():
+    """Requiring a token when CA_TOKEN is unset should raise a 503 exception, not let everyone in."""
+    with pytest.raises(HTTPException) as e:
+        require_token("Bearer ", {"CA_TOKEN": ""})
+
+    assert_that(e.value, has_properties(status_code=503))
 
 
 def test_healthz_get(ca_app):

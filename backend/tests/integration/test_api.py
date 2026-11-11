@@ -23,13 +23,13 @@ from tarameteo.ts import TSPoint
 
 
 @pytest.mark.asyncio
-async def test_api_certs_post(api_client, unique):
+async def test_api_certs_post(api_client, api_service, unique):
     device_id = unique("text")
     key_pem = generate_key_pem()
     csr_pem = create_csr_pem(key_pem, device_id)
     response = await api_client.post("/api/certs", json={
         "csr_pem": csr_pem,
-    })
+    }, headers={"Authorization": f"Bearer {api_service.env['CA_TOKEN']}"})
     assert_that(response.json(), has_entries(
         cert_pem=contains_string("-----BEGIN CERTIFICATE-----"),
         chain_pem=contains_exactly(contains_string("-----BEGIN CERTIFICATE-----")),

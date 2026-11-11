@@ -1,6 +1,7 @@
 """Certificate Authority (CA) client."""
 
 import os
+import secrets
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from json import JSONDecodeError
@@ -8,7 +9,7 @@ from typing import Annotated
 
 import httpx
 from attrs import define
-from fastapi import Depends
+from fastapi import Depends, Header, HTTPException
 from pydantic import (
     BaseModel,
     Field,
@@ -140,6 +141,20 @@ class CAClient:
                 status_code=response.status_code,
                 reason=str(e),
             ) from e
+
+
+def require_token(
+    authorization: str | None = Header(default=None),
+    env: Annotated[Mapping[str, str], Depends(lambda: os.environ)] = os.environ,
+) -> None:
+    expected = env.get("CA_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="CA_TOKEN is not configured")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not secrets.compare_digest(token, expected):
+        raise HTTPException(status_code=403, detail="Invalid token")
 
 
 def get_ca_client(

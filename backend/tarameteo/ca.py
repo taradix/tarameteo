@@ -1,21 +1,18 @@
 """Certificate Authority (CA) service."""
 
 import os
-import secrets
-from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated
 
 from fastapi import (
     Depends,
     FastAPI,
-    Header,
     HTTPException,
 )
 
 from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
+    require_token,
 )
 from tarameteo.pki import sign_csr_pem
 
@@ -25,20 +22,6 @@ app = FastAPI(
 
 CA_KEY = Path(os.getenv("CA_KEY", "/tls/ca.key"))
 CA_CERT = Path(os.getenv("CA_CERT", "/tls/ca.pem"))
-
-
-def require_token(
-    authorization: str | None = Header(default=None),
-    env: Annotated[Mapping[str, str], Depends(lambda: os.environ)] = os.environ,
-) -> None:
-    expected = env.get("CA_TOKEN", "")
-    if not expected:
-        return
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing bearer token")
-    token = authorization.removeprefix("Bearer ").strip()
-    if not secrets.compare_digest(token, expected):
-        raise HTTPException(status_code=403, detail="Invalid token")
 
 
 @app.post("/v1/certs", response_model=IssueCertificateResponse, dependencies=[Depends(require_token)])
