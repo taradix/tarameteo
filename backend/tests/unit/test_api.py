@@ -472,8 +472,9 @@ async def test_stream_sensor_weather(memory_queue, unique):
 
 
 @pytest.fixture
-def alert_api(api_app):
-    """api_app with alerts configured: an in-memory store, and a notifier mock to read emails from."""
+def alert_api(api_app, memory_writer):
+    """api_app with alerts configured: an in-memory store, a notifier mock to read emails from, and an outdoor sensor."""
+    memory_writer.write_point("weather", make_weather(), tags=located("outdoor"), timestamp=datetime.now(UTC))
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     SQLModel.metadata.create_all(engine)
     db = Session(engine)
@@ -552,6 +553,26 @@ def test_alert_create_limits_pending_confirmations_silently(alert_api):
 
     assert_that([r.json() for r in responses], only_contains(has_entries(status="confirmation_sent")))
     assert_that(notifier.send.call_count, equal_to(3))
+
+
+def test_alert_create_rejects_unknown_sensor(alert_api):
+    """The sensor name is emailed to an unconfirmed address, so it can't be any text."""
+    client, _, notifier = alert_api
+
+    response = client.post("/api/alerts", json={**NEW_ALERT, "sensor": "Win a prize at http://spam.example"})
+
+    assert_that(response.status_code, equal_to(422))
+    notifier.send.assert_not_called()
+
+
+def test_alert_create_saves_nothing_when_the_email_fails(alert_api):
+    client, store, notifier = alert_api
+    notifier.send.side_effect = OSError("smtp down")
+
+    with pytest.raises(OSError):
+        client.post("/api/alerts", json=NEW_ALERT)
+
+    assert_that(store.count_by_email(NEW_ALERT["email"], confirmed=False), equal_to(0))
 
 
 def test_alert_create_caps_alerts_per_email(alert_api):

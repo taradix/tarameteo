@@ -278,13 +278,18 @@ MAX_PENDING = 3
 
 
 @app.post("/api/alerts", status_code=201)
-async def post_alert(body: AlertCreate, request: Request, alert_store: AlertStoreDep) -> dict[str, str]:
+async def post_alert(
+    body: AlertCreate, request: Request, alert_store: AlertStoreDep, service: SensorServiceDep,
+) -> dict[str, str]:
     secret = request.app.state.alert_secret
     notifier = request.app.state.notifier
     base_url = request.app.state.alert_base_url
 
     if not secret or not notifier:
         raise HTTPException(status_code=503, detail="Alert service not configured")
+    # The sensor name goes into an email to an unconfirmed address, so only send names we know.
+    if not service.list_sensors(names=[body.sensor]).sensors:
+        raise HTTPException(status_code=422, detail=f"Unknown sensor {body.sensor!r}")
 
     alert_store.delete_unconfirmed(datetime.now(UTC) - CONFIRM_EXPIRY)
     if alert_store.count_by_email(body.email) >= MAX_ALERTS:
@@ -294,11 +299,11 @@ async def post_alert(body: AlertCreate, request: Request, alert_store: AlertStor
         return {"status": "confirmation_sent"}
 
     alert = Alert(id=uuid.uuid4().hex, **body.model_dump())
-    alert_store.create(alert)
-
     token = sign_token({"alert_id": alert.id, "action": "confirm"}, secret, expires_in=CONFIRM_EXPIRY.total_seconds())
     subject, email_body = alert_text.email(alert, "confirm", f"{base_url}/api/alerts/confirm/{token}")
+    # Saved only once sent, so a failed send doesn't leave a pending alert that counts against MAX_PENDING.
     await notifier.send(alert.email, subject, email_body)
+    alert_store.create(alert)
     return {"status": "confirmation_sent"}
 
 
