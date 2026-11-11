@@ -230,6 +230,10 @@ export interface components {
              * Format: date-time
              */
             timestamp: string;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
             /** Temperature Min */
             temperature_min?: number | null;
             /** Temperature Avg */

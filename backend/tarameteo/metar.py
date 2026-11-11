@@ -1,6 +1,5 @@
 """METAR weather observation fetcher (Aviation Weather Center)."""
 
-import asyncio
 import logging
 import math
 from dataclasses import dataclass
@@ -8,11 +7,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-from tarameteo.sensors import (
-    MEASUREMENT,
-    SENSOR_TAG,
-    WeatherReading,
-)
+from tarameteo.sensors import WeatherReading
 from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 
@@ -110,28 +105,6 @@ async def fetch_recent(
     return _parse_observations(response.json())
 
 
-def write_readings(
-    readings: list[MetarReading], device_id: str, ts_writer: TSWriter
-) -> None:
-    """Write METAR readings to the weather InfluxDB measurement."""
-    for r in readings:
-        ts_writer.write_point(
-            MEASUREMENT,
-            fields={
-                "temperature": r.temperature,
-                "humidity": r.humidity,
-                "pressure": r.pressure,
-                "altitude": r.altitude,
-            },
-            tags={
-                SENSOR_TAG: device_id,
-                "latitude": f"{r.latitude:.6f}",
-                "longitude": f"{r.longitude:.6f}",
-            },
-            timestamp=r.timestamp,
-        )
-
-
 def _to_weather_reading(reading: MetarReading, device_id: str) -> WeatherReading:
     return WeatherReading(
         sensor=device_id,
@@ -152,12 +125,10 @@ class MetarSource(Source):
     def name(self) -> str:
         return "MetarSource"
 
-    async def run_once(
-        self, client: httpx.AsyncClient, ts_writer: TSWriter
-    ) -> list[WeatherReading]:
+    async def run_once(self, client: httpx.AsyncClient) -> list[WeatherReading]:
         """Fetch recent METAR observations for all sensors."""
         readings = await fetch_recent(client)
-        latest_readings = []
+        weather_readings = []
         by_icao: dict[str, list[MetarReading]] = {}
         for r in readings:
             by_icao.setdefault(r.icao_id, []).append(r)
@@ -167,16 +138,15 @@ class MetarSource(Source):
             if not station_readings:
                 logger.warning("No METAR readings for %s", sensor.device_id)
                 continue
-            await asyncio.to_thread(write_readings, station_readings, sensor.device_id, ts_writer)
-            latest_readings.append(_to_weather_reading(station_readings[-1], sensor.device_id))
+            weather_readings.extend(_to_weather_reading(r, sensor.device_id) for r in station_readings)
             latest = station_readings[-1]
             logger.info(
-                "METAR %s: stored %d readings; latest %s: T=%s H=%s P=%s",
+                "METAR %s: fetched %d readings; latest %s: T=%s H=%s P=%s",
                 sensor.device_id, len(station_readings),
                 latest.timestamp.isoformat(),
                 latest.temperature, latest.humidity, latest.pressure,
             )
-        return latest_readings
+        return weather_readings
 
     async def backfill_run(
         self,

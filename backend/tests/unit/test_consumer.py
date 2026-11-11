@@ -148,7 +148,7 @@ async def test_weather_handler_does_not_publish_on_invalid_topic(memory_writer, 
 
 async def test_weather_handler_raises_unexpected_write_errors(memory_queue):
     class BrokenWriter:
-        def write_point(self, *args, **kwargs):
+        def write_points(self, points):
             raise RuntimeError("write failure")
 
     with pytest.raises(RuntimeError, match="write failure"):
@@ -160,7 +160,7 @@ async def test_weather_handler_writes_off_the_event_loop(memory_queue):
     threads = []
 
     class ThreadWriter:
-        def write_point(self, *args, **kwargs):
+        def write_points(self, points):
             threads.append(threading.get_ident())
 
     await weather_handler(make_message(), ts_writer=ThreadWriter(), queue=memory_queue)

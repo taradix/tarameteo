@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from hamcrest import assert_that, equal_to
+from hamcrest import assert_that, contains_exactly, equal_to, has_properties
 
 from tarameteo.sensors import AggregateReading
 from tarameteo.source import Source
@@ -26,7 +26,7 @@ class _RecoverableSource(Source):
     def _sensors(self) -> list[_Sensor]:
         return [_Sensor()]
 
-    async def run_once(self, client, ts_writer):
+    async def run_once(self, client):
         raise httpx.ConnectError("down")
 
 
@@ -35,7 +35,7 @@ class _UnexpectedSource(Source):
     def _sensors(self) -> list[_Sensor]:
         return [_Sensor()]
 
-    async def run_once(self, client, ts_writer):
+    async def run_once(self, client):
         raise RuntimeError("boom")
 
     async def backfill_run(self, client, ts_writer, from_year, from_month, to_year, to_month) -> None:
@@ -56,19 +56,40 @@ async def test_run_source_once_raises_unexpected(memory_writer, memory_queue):
 
 
 class _AggregateSource(Source):
-    async def run_once(self, client, ts_writer):
+    async def run_once(self, client):
         return [AggregateReading(sensor="station", timestamp=datetime.now(UTC), rain=12.0)]
 
 
 async def test_run_source_once_publishes_and_checks_alerts(memory_writer, memory_queue, monkeypatch):
     check = AsyncMock(side_effect=[OSError("db down"), None])
-    monkeypatch.setattr("tarameteo.sources.check_reading", check)
+    monkeypatch.setattr("tarameteo.ingest.check_reading", check)
     async with memory_queue.connect("weather:station") as q, httpx.AsyncClient(timeout=1) as client:
         # A failing check is logged, not raised, so the sync loop keeps going.
         for _ in range(2):
             await _run_source_once(_AggregateSource(), client, memory_writer, q, notifier=AsyncMock(), alert_secret="s")
         assert_that(AggregateReading.model_validate_json(await q.receive(1)).rain, equal_to(12.0))
     assert_that(check.call_count, equal_to(2))
+
+
+class _TwoDaySource(Source):
+    async def run_once(self, client):
+        return [
+            AggregateReading(
+                sensor="station", timestamp=datetime(2026, 1, d, tzinfo=UTC), latitude=45.5, longitude=-73.6, rain=d,
+            )
+            for d in (1, 2)
+        ]
+
+
+async def test_run_source_once_stores_all_and_publishes_latest(memory_store, memory_writer, memory_queue):
+    async with memory_queue.connect("weather:station") as q, httpx.AsyncClient(timeout=1) as client:
+        await _run_source_once(_TwoDaySource(), client, memory_writer, q)
+        assert_that(AggregateReading.model_validate_json(await q.receive(1)).rain, equal_to(2.0))
+    assert_that(memory_store.points, contains_exactly(
+        has_properties(measurement="weather_aggregate", tags=equal_to({"device_id": "station", "latitude": "45.500000", "longitude": "-73.600000"}),
+            fields={"rain": 1.0}),
+        has_properties(fields={"rain": 2.0}),
+    ))
 
 
 async def test_run_source_backfill_raises_unexpected(memory_writer):

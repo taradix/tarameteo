@@ -9,7 +9,7 @@ from contextlib import suppress
 from pydantic import ValidationError
 from taraqueue import Queue
 
-from tarameteo.alert_checker import check_reading
+from tarameteo.ingest import ingest
 from tarameteo.logger import (
     LoggerHandlerAction,
     LoggerLevelAction,
@@ -55,27 +55,13 @@ async def weather_handler(
         return
 
     try:
-        # The write blocks (HTTP, retries with sleep), so keep it off the loop that also serves the API.
-        await asyncio.to_thread(
-            ts_writer.write_point,
-            "weather",
-            fields=reading.model_dump(exclude={"sensor", "timestamp", "latitude", "longitude"}, exclude_none=True),
-            tags={
-                "device_id": device_id,
-                "latitude": f"{reading.latitude:.6f}",
-                "longitude": f"{reading.longitude:.6f}",
-            },
-            timestamp=reading.timestamp,
+        await ingest(
+            [reading], ts_writer, queue,
+            notifier=notifier, alert_secret=alert_secret, alert_base_url=alert_base_url,
         )
     except ValueError:
         logger.exception("Error storing weather data")
         return
-
-    await queue.publish(f"weather:{device_id}", reading.model_dump_json())
-
-    # Check weather alerts.
-    if notifier and alert_secret:
-        await check_reading(reading, notifier, secret=alert_secret, base_url=alert_base_url)
 
     logger.info(
         f"Stored weather data for sensor {device_id}: "

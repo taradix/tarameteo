@@ -7,11 +7,8 @@ from datetime import UTC, date, datetime
 
 import httpx
 
-from tarameteo.sensors import (
-    MEASUREMENT,
-    SENSOR_TAG,
-    WeatherReading,
-)
+from tarameteo.ingest import write_readings
+from tarameteo.sensors import WeatherReading
 from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 
@@ -123,30 +120,6 @@ async def fetch_month(
     return _parse_features(data.get("features", []), year, month)
 
 
-def write_readings(
-    readings: list[MscReading], device_id: str, ts_writer: TSWriter
-) -> None:
-    """Write MSC hourly readings to the weather InfluxDB measurement."""
-    for r in readings:
-        fields: dict[str, object] = {
-            "temperature": r.temperature,
-            "humidity": r.humidity,
-            "pressure": r.pressure,
-        }
-        if r.rain is not None:
-            fields["rain"] = r.rain
-        ts_writer.write_point(
-            MEASUREMENT,
-            fields=fields,
-            tags={
-                SENSOR_TAG: device_id,
-                "latitude": f"{r.latitude:.6f}",
-                "longitude": f"{r.longitude:.6f}",
-            },
-            timestamp=r.utc_timestamp,
-        )
-
-
 def _to_weather_reading(reading: MscReading, device_id: str) -> WeatherReading:
     return WeatherReading(
         sensor=device_id,
@@ -167,12 +140,10 @@ class MscSource(Source):
     def _sensors(self) -> list[MscSensor]:
         return SENSORS
 
-    async def run_once(
-        self, client: httpx.AsyncClient, ts_writer: TSWriter
-    ) -> list[WeatherReading]:
+    async def run_once(self, client: httpx.AsyncClient) -> list[WeatherReading]:
         """Fetch current month hourly data for all MSC sensors."""
         now = datetime.now(UTC)
-        latest_readings = []
+        weather_readings = []
         for sensor in SENSORS:
             readings = await fetch_month(client, sensor, now.year, now.month)
             if not readings:
@@ -181,17 +152,16 @@ class MscSource(Source):
                     sensor.device_id, now.year, now.month,
                 )
                 continue
-            await asyncio.to_thread(write_readings, readings, sensor.device_id, ts_writer)
-            latest_readings.append(_to_weather_reading(readings[-1], sensor.device_id))
+            weather_readings.extend(_to_weather_reading(r, sensor.device_id) for r in readings)
             latest = readings[-1]
             logger.info(
-                "MSC %s: stored %d readings for %d-%02d; "
+                "MSC %s: fetched %d readings for %d-%02d; "
                 "latest %s: T=%s H=%s P=%s rain=%s",
                 sensor.device_id, len(readings), now.year, now.month,
                 latest.utc_timestamp.isoformat(),
                 latest.temperature, latest.humidity, latest.pressure, latest.rain,
             )
-        return latest_readings
+        return weather_readings
 
     async def _backfill_month(
         self,
@@ -202,7 +172,9 @@ class MscSource(Source):
         ts_writer: TSWriter,
     ) -> None:
         readings = await fetch_month(client, sensor, year, month)
-        await asyncio.to_thread(write_readings, readings, sensor.device_id, ts_writer)
+        await asyncio.to_thread(
+            write_readings, ts_writer, [_to_weather_reading(r, sensor.device_id) for r in readings],
+        )
         logger.info("  Wrote %d readings", len(readings))
 
 

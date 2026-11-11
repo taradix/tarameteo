@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from taraqueue import Queue
 
-from tarameteo.alert_checker import check_reading
+from tarameteo.ingest import ingest
 from tarameteo.logger import (
     LoggerHandlerAction,
     LoggerLevelAction,
@@ -60,18 +60,13 @@ async def _run_source_once(
     alert_base_url: str = "",
 ) -> None:
     try:
-        readings = await source.run_once(client, ts_writer)
+        readings = await source.run_once(client)
+        await ingest(
+            readings, ts_writer, queue,
+            notifier=notifier, alert_secret=alert_secret, alert_base_url=alert_base_url,
+        )
     except source.RECOVERABLE_ERRORS:
         logger.exception("Recoverable error while fetching source %s", source.name)
-        return
-    for reading in readings:
-        await queue.publish(f"weather:{reading.sensor}", reading.model_dump_json())
-        if notifier and alert_secret:
-            try:
-                await check_reading(reading, notifier, secret=alert_secret, base_url=alert_base_url)
-            except Exception:
-                # Keep fetching the other sensors and the next hours.
-                logger.exception("Failed to check alerts for %s", reading.sensor)
 
 
 async def _run_source_backfill(

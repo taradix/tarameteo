@@ -24,7 +24,7 @@ class _MonthBackfillSource(Source):
     def _sensors(self) -> list[_Sensor]:
         return self._mock_sensors
 
-    async def run_once(self, client, ts_writer):
+    async def run_once(self, client):
         return []
 
     async def _backfill_month(self, client, sensor, year, month, ts_writer) -> None:

@@ -29,12 +29,8 @@ class Source(ABC):
         return type(self).__name__
 
     @abstractmethod
-    async def run_once(
-        self,
-        client: httpx.AsyncClient,
-        ts_writer: TSWriter,
-    ) -> list[WeatherReading | AggregateReading]:
-        """Fetch and store the current data for all sensors, and return each sensor's latest reading."""
+    async def run_once(self, client: httpx.AsyncClient) -> list[WeatherReading | AggregateReading]:
+        """Fetch the current data for all sensors, oldest first per sensor."""
 
     @property
     def _sensors(self) -> list[Any]:

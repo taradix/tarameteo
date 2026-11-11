@@ -118,6 +118,8 @@ class AggregateReading(BaseModel):
 
     sensor: str
     timestamp: datetime
+    latitude: float | None = None
+    longitude: float | None = None
     temperature_min: float | None = None
     temperature_avg: float | None = None
     temperature_max: float | None = None
@@ -353,6 +355,8 @@ class SensorService:
         return AggregateReading(
             sensor=sensor,
             timestamp=point.timestamp,
+            latitude=_opt_float(point.tags.get("latitude")),
+            longitude=_opt_float(point.tags.get("longitude")),
             temperature_min=_opt_float(f.get("temperature_min")),
             temperature_avg=_opt_float(f.get("temperature_avg")),
             temperature_max=_opt_float(f.get("temperature_max")),

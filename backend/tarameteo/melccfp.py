@@ -8,11 +8,8 @@ from datetime import UTC, date, datetime
 import httpx
 from bs4 import BeautifulSoup
 
-from tarameteo.sensors import (
-    AGGREGATE_MEASUREMENT,
-    SENSOR_TAG,
-    AggregateReading,
-)
+from tarameteo.ingest import write_readings
+from tarameteo.sensors import AggregateReading
 from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 
@@ -204,44 +201,16 @@ def _reading_timestamp(reading: MelccfpReading) -> datetime:
     return datetime(reading.year, reading.month, reading.day, 12, 0, 0, tzinfo=UTC)
 
 
-def write_readings(
-    readings: list[MelccfpReading],
-    sensor: MelccfpSensor,
-    latitude: float,
-    longitude: float,
-    ts_writer: TSWriter,
-) -> None:
-    """Write MELCCFP readings to the aggregate InfluxDB measurement."""
-    for r in readings:
-        fields: dict[str, object] = {}
-        if r.temperature_max is not None:
-            fields["temperature_max"] = r.temperature_max
-        if r.temperature_avg is not None:
-            fields["temperature_avg"] = r.temperature_avg
-        if r.temperature_min is not None:
-            fields["temperature_min"] = r.temperature_min
-        if r.rain is not None:
-            fields["rain"] = r.rain
-        if r.snow is not None:
-            fields["snow"] = r.snow
-        if not fields:
-            continue
-        ts_writer.write_point(
-            AGGREGATE_MEASUREMENT,
-            fields=fields,
-            tags={
-                SENSOR_TAG: sensor.device_id,
-                "latitude": f"{latitude:.6f}",
-                "longitude": f"{longitude:.6f}",
-            },
-            timestamp=_reading_timestamp(r),
-        )
+def _to_aggregates(month_data: MelccfpMonthData, device_id: str) -> list[AggregateReading]:
+    return [_to_aggregate(r, device_id, month_data.latitude, month_data.longitude) for r in month_data.readings]
 
 
-def _to_aggregate(reading: MelccfpReading, device_id: str) -> AggregateReading:
+def _to_aggregate(reading: MelccfpReading, device_id: str, latitude: float, longitude: float) -> AggregateReading:
     return AggregateReading(
         sensor=device_id,
         timestamp=_reading_timestamp(reading),
+        latitude=latitude,
+        longitude=longitude,
         temperature_min=reading.temperature_min,
         temperature_avg=reading.temperature_avg,
         temperature_max=reading.temperature_max,
@@ -257,12 +226,10 @@ class MelccfpSource(Source):
     def _sensors(self) -> list[MelccfpSensor]:
         return SENSORS
 
-    async def run_once(
-        self, client: httpx.AsyncClient, ts_writer: TSWriter
-    ) -> list[AggregateReading]:
+    async def run_once(self, client: httpx.AsyncClient) -> list[AggregateReading]:
         """Fetch current month data for all MELCCFP sensors."""
         now = datetime.now(UTC)
-        latest_readings = []
+        aggregates = []
         for sensor in SENSORS:
             month_data = await fetch_month(client, sensor, now.year, now.month)
             readings = month_data.readings
@@ -272,20 +239,17 @@ class MelccfpSource(Source):
                     sensor.device_id, now.year, now.month,
                 )
                 continue
-            await asyncio.to_thread(
-                write_readings, readings, sensor, month_data.latitude, month_data.longitude, ts_writer,
-            )
-            latest_readings.append(_to_aggregate(readings[-1], sensor.device_id))
+            aggregates.extend(_to_aggregates(month_data, sensor.device_id))
             latest = readings[-1]
             logger.info(
-                "MELCCFP %s: stored %d readings for %d-%02d; "
+                "MELCCFP %s: fetched %d readings for %d-%02d; "
                 "latest day %d: Tmax=%s Tavg=%s Tmin=%s rain=%s snow=%s",
                 sensor.device_id, len(readings), now.year, now.month,
                 latest.day,
                 latest.temperature_max, latest.temperature_avg, latest.temperature_min,
                 latest.rain, latest.snow,
             )
-        return latest_readings
+        return aggregates
 
     async def _backfill_month(
         self,
@@ -296,14 +260,7 @@ class MelccfpSource(Source):
         ts_writer: TSWriter,
     ) -> None:
         month_data = await fetch_month(client, sensor, year, month)
-        await asyncio.to_thread(
-            write_readings,
-            month_data.readings,
-            sensor,
-            month_data.latitude,
-            month_data.longitude,
-            ts_writer,
-        )
+        await asyncio.to_thread(write_readings, ts_writer, _to_aggregates(month_data, sensor.device_id))
         logger.info("  Wrote %d readings", len(month_data.readings))
 
 
