@@ -23,6 +23,12 @@ jobs:
         with:
           node-version: 26
 
+      - name: Set up Java environment
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
       - name: Set up backend environment
         uses: ./.github/actions/setup-uv-env
         with:
@@ -188,6 +194,26 @@ jobs:
 
       - name: Run test target
         working-directory: frontend
+        run: make test
+
+  # The runner image ships the Android SDK; Gradle fetches missing platforms itself.
+  android-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Java environment
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run test target
+        working-directory: android
         run: make test
 
   mobile-test:
