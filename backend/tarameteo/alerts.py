@@ -32,7 +32,9 @@ class Alert(BaseModel):
     """A weather alert (API representation)."""
 
     id: str
-    email: EmailStr
+    # Exactly one recipient: an address to email, or an FCM token to push to.
+    email: EmailStr | None = None
+    push_token: str | None = None
     sensor: str
     field: AlertField
     condition: Condition
@@ -42,6 +44,12 @@ class Alert(BaseModel):
     triggered: bool = False
     created_at: datetime | None = None
     last_triggered_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _one_recipient(self) -> "Alert":
+        if bool(self.email) == bool(self.push_token):
+            raise ValueError("An alert needs either an email or a push token, not both")
+        return self
 
 
 class AlertCreate(BaseModel):
@@ -83,6 +91,7 @@ class AlertStore:
         row = AlertRow(
             id=alert.id,
             email=alert.email,
+            push_token=alert.push_token,
             sensor=alert.sensor,
             field=alert.field,
             condition=alert.condition,
@@ -137,6 +146,27 @@ class AlertStore:
         self.db.commit()
         return result.rowcount
 
+    # An email alert's push_token is NULL, which never equals a token, so these can't touch one.
+    def count_by_token(self, token: str) -> int:
+        return self.db.execute(
+            select(func.count()).select_from(AlertRow).where(AlertRow.push_token == token)
+        ).scalar_one()
+
+    def list_by_token(self, token: str) -> list[Alert]:
+        rows = self.db.execute(
+            select(AlertRow).where(AlertRow.push_token == token).order_by(AlertRow.sensor, AlertRow.created_at)
+        ).scalars().all()
+        return [self._row_to_alert(row) for row in rows]
+
+    def delete_by_token(self, token: str, alert_id: str | None = None) -> int:
+        """Delete one of the token's alerts, or all of them (the install is gone)."""
+        query = delete(AlertRow).where(AlertRow.push_token == token)
+        if alert_id is not None:
+            query = query.where(AlertRow.id == alert_id)
+        result = self.db.execute(query)
+        self.db.commit()
+        return result.rowcount
+
     def get(self, alert_id: str) -> Alert | None:
         row = self.db.execute(
             select(AlertRow).where(AlertRow.id == alert_id)
@@ -170,6 +200,7 @@ class AlertStore:
         return Alert(
             id=row.id,
             email=row.email,
+            push_token=row.push_token,
             sensor=row.sensor,
             field=row.field,
             condition=Condition(row.condition),

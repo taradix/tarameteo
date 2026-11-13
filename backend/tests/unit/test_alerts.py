@@ -116,6 +116,37 @@ def test_count_by_email(alert_store):
     assert_that(alert_store.count_by_email("user@example.com", confirmed=False), equal_to(1))
 
 
+def _push_alert(**kwargs) -> Alert:
+    kwargs.setdefault("push_token", "tok-1")
+    return _make_alert(email=None, confirmed=True, **kwargs)
+
+
+# Neither recipient, then both.
+@pytest.mark.parametrize("kwargs", [{"email": None}, {"push_token": "tok-1"}])
+def test_alert_needs_exactly_one_recipient(kwargs):
+    with pytest.raises(ValidationError, match="either an email or a push token"):
+        _make_alert(**kwargs)
+
+
+def test_token_alerts_are_checked_like_email_ones(alert_store):
+    alert_store.create(_push_alert())
+    assert_that(alert_store.list_by_sensor("outdoor-north"), has_length(1))
+    assert_that(alert_store.get("test-1"), has_properties(email=none(), push_token="tok-1"))
+
+
+def test_by_token_ignores_other_tokens_and_email_alerts(alert_store):
+    alert_store.create(_push_alert(id="p1"))
+    alert_store.create(_push_alert(id="p2"))
+    alert_store.create(_push_alert(id="p3", push_token="tok-2"))
+    alert_store.create(_make_alert(id="e1"))
+    assert_that(alert_store.count_by_token("tok-1"), equal_to(2))
+    assert_that([a.id for a in alert_store.list_by_token("tok-1")], equal_to(["p1", "p2"]))
+    assert_that(alert_store.delete_by_token("tok-1", "p3"), equal_to(0))
+    assert_that(alert_store.delete_by_token("tok-1", "p1"), equal_to(1))
+    assert_that(alert_store.delete_by_token("tok-1"), equal_to(1))
+    assert_that(alert_store.count_by_email("user@example.com"), equal_to(1))
+
+
 @pytest.mark.parametrize("condition, threshold", [("below", 3), ("above", 0.5), ("above", 721)])
 def test_offline_alert_needs_above_and_sane_hours(condition, threshold):
     with pytest.raises(ValidationError, match="offline"):

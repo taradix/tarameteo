@@ -23,7 +23,9 @@ class Alert(SQLModel):
     __tablename__ = "alerts"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Exactly one recipient: an email address, or an FCM token for an app install.
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    push_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     sensor: Mapped[str] = mapped_column(String(255), nullable=False)
     field: Mapped[str] = mapped_column(String(50), nullable=False)
     condition: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -38,6 +40,7 @@ class Alert(SQLModel):
     __table_args__ = (
         Index("idx_alerts_sensor_confirmed", "sensor", "confirmed"),
         Index("idx_alerts_email", "email"),
+        Index("idx_alerts_push_token", "push_token"),
     )
 
     def __repr__(self) -> str:

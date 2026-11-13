@@ -46,11 +46,13 @@ def _cleared(value: float, alert: Alert) -> bool:
 
 @define(frozen=True)
 class AlertService:
-    """Sends every alert email, and signs and verifies the links in them."""
+    """Sends every alert email or push, and signs and verifies the links in the emails."""
 
     notifier: Notifier
     secret: str
     base_url: str
+    # Alerts with a push token go here instead; without it they can't be sent.
+    push: Notifier | None = None
 
     def _url(self, action: str, payload: dict, expires_in: timedelta | None = None) -> str:
         token = sign_token({**payload, "action": action}, self.secret, expires_in=expires_in and expires_in.total_seconds())
@@ -71,19 +73,29 @@ class AlertService:
         await self.notifier.send(email, text["manage_subject"], text["manage_body"].format(url=url))
 
     async def _notify(self, alert: Alert, key: str, value: float | None, alert_store: AlertStore) -> None:
-        url = self._url("unsubscribe", {"alert_id": alert.id})
-        manage = self._url("manage", {"email": alert.email.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
-        subject, body = alert_text.email(alert, key, url, value, manage)
-        # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
-        headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+        # The token is a secret, so it stays out of the logs; the app unsubscribes in-app, not by link.
+        who = alert.email or "push"
+        if alert.push_token:
+            notifier, recipient, headers = self.push, alert.push_token, None
+            subject, body = alert_text.push(alert, key, value)
+        else:
+            notifier, recipient = self.notifier, alert.email
+            url = self._url("unsubscribe", {"alert_id": alert.id})
+            manage = self._url("manage", {"email": who.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
+            subject, body = alert_text.email(alert, key, url, value, manage)
+            # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
+            headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+        if notifier is None:
+            logger.error(f"Alert {alert.id} needs a push notifier, which isn't configured")
+            return
         try:
-            await self.notifier.send(alert.email, subject, body, headers)
+            await notifier.send(recipient, subject, body, headers)
         except Exception:
             # The state stays, so the next check tries again.
-            logger.exception(f"Failed to send alert {alert.id} to {alert.email}")
+            logger.exception(f"Failed to send alert {alert.id} to {who}")
             return
         alert_store.set_triggered(alert.id, key in ("alert", "offline"), datetime.now(UTC))
-        logger.info(f"Alert {alert.id} sent {key} to {alert.email}")
+        logger.info(f"Alert {alert.id} sent {key} to {who}")
 
     async def check(self, reading: WeatherReading | AggregateReading, alert_store: AlertStore) -> None:
         """Email once when a value crosses its threshold, and once when it's back to normal."""

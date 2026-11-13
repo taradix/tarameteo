@@ -105,6 +105,12 @@ def email(alert: Alert, key: str, url: str, reading: float | None = None, manage
     return text[f"{key}_subject"].format(**args), text[f"{key}_body"].format(**args)
 
 
+def push(alert: Alert, key: str, reading: float | None = None) -> tuple[str, str]:
+    """Title and body for a push notification: the email's subject, then the rule it came from."""
+    title, _ = email(alert, key, "", reading)
+    return title, rule(alert)
+
+
 def _document(language: str, body: str) -> str:
     return (
         f'<!doctype html><html lang="{language}"><meta charset="utf-8">'

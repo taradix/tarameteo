@@ -185,6 +185,28 @@ def test_offline_rule_in_french():
     assert_that(alert_text.rule(alert), equal_to("outdoor-north : aucune donnée depuis 6 h"))
 
 
+async def test_pushes_to_the_token_with_no_links(alert_store, notifier):
+    alert_store.create(_alert(email=None, push_token="tok-1", language="fr"))
+    push = AsyncMock()
+
+    await AlertService(notifier, "s", "http://localhost", push=push).check(_reading(), alert_store)
+
+    notifier.send.assert_not_called()
+    recipient, title, body, headers = push.send.call_args.args
+    assert_that(recipient, equal_to("tok-1"))
+    assert_that(title, equal_to("outdoor-north : température à -25 °C"))
+    assert_that(body, equal_to("outdoor-north : température en dessous de -20 °C"))
+    assert_that(headers, equal_to(None))
+
+
+async def test_push_without_a_notifier_stays_untriggered(alert_store, notifier):
+    alert_store.create(_alert(email=None, push_token="tok-1"))
+
+    await _check(alert_store, notifier)
+
+    assert_that(alert_store.get("a1").triggered, equal_to(False))
+
+
 async def test_retries_when_sending_fails(alert_store, notifier):
     alert_store.create(_alert())
     notifier.send.side_effect = [OSError("smtp down"), None]
