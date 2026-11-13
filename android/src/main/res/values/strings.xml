@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Copied from mobile/src/locales/en.json; values-fr/ has the French. -->
 <resources>
     <string name="app_name" translatable="false">TaraMeteo</string>
+    <string name="dashboard_empty">No sensors.</string>
+    <string name="sensors_choose">Choose sensors</string>
+    <string name="card_range">min %1$s · max %2$s</string>
+    <string name="card_aggregate">min %1$s · avg %2$s · max %3$s °C</string>
+    <string name="card_precipitation">rain %1$s mm · snow %2$s mm</string>
+    <string name="card_rising">rising</string>
+    <string name="card_falling">falling</string>
+    <string name="card_no_data">No data in the last 24 h.</string>
+    <string name="card_ago_minutes">%d min ago</string>
+    <string name="card_ago_hours">%d h ago</string>
+    <string name="card_ago_days">%d d ago</string>
 </resources>
