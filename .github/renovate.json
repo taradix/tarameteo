@@ -26,34 +26,6 @@
       "matchPackageNames": ["typescript"],
       "matchUpdateTypes": ["major"],
       "dependencyDashboardApproval": true
-    },
-    {
-      "description": "Expo SDK pins these; upgrade with `npx expo install expo@<next> --fix`.",
-      "matchFileNames": ["mobile/package.json"],
-      "matchPackageNames": [
-        "expo",
-        "expo-*",
-        "@expo/*",
-        "react",
-        "react-dom",
-        "react-native",
-        "react-native-*",
-        "@shopify/react-native-skia",
-        "@types/react",
-        "jest",
-        "jest-expo",
-        "@types/jest",
-        "eslint",
-        "eslint-config-expo",
-        "typescript"
-      ],
-      "enabled": false
-    },
-    {
-      "description": "victory-native 43 needs the renamed react-native-skia; stay on 42 until the Expo SDK ships it.",
-      "matchFileNames": ["mobile/package.json"],
-      "matchPackageNames": ["victory-native"],
-      "allowedVersions": "<43"
     }
   ]
 }

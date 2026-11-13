@@ -187,9 +187,10 @@ schema and the client types, and commit both:
 
     > make -C backend openapi
     > npm --prefix frontend run openapi
-    > npm --prefix mobile run openapi
 
-``make check`` fails when either file is stale.
+``make check`` fails when either file is stale. The Android app's models
+are written by hand in ``android/src/main/java/ca/taram/meteo/Api.kt``;
+``make -C android test`` checks them against the schema.
 
 Keep ``/api`` changes additive: new endpoints and new optional fields
 are fine, but removing or renaming a field or endpoint breaks installed

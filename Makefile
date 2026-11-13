@@ -1,5 +1,5 @@
 ENV := .env
-SUBDIRS := android backend firmware frontend mobile
+SUBDIRS := android backend firmware frontend
 TARGETS := setup check test coverage
 
 -include $(ENV)
