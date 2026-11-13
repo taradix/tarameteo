@@ -2,6 +2,17 @@
 <resources>
     <string name="dashboard_empty">Aucun capteur.</string>
     <string name="sensors_choose">Choisir les capteurs</string>
+    <string name="sensors_title">Capteurs</string>
+    <string name="sensors_search">Chercher par nom…</string>
+    <string name="sensors_toggle">Basculer %1$s</string>
+    <string name="sensors_no_location">Position indisponible : capteurs par nom.</string>
+    <string name="sensors_truncated">Les %d premiers. Zoomez ou cherchez pour affiner.</string>
+    <string name="sensors_truncated_near">Les %d plus proches. Zoomez ou cherchez pour affiner.</string>
+    <plurals name="sensors_cluster">
+        <item quantity="one">%d capteur</item>
+        <item quantity="many">%d capteurs</item>
+        <item quantity="other">%d capteurs</item>
+    </plurals>
     <string name="card_range">min %1$s · max %2$s</string>
     <string name="card_aggregate">min %1$s · moy %2$s · max %3$s °C</string>
     <string name="card_precipitation">pluie %1$s mm · neige %2$s mm</string>

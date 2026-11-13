@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Copied from mobile/src/locales/en.json; values-fr/ has the French. -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">TaraMeteo</string>
     <string name="dashboard_empty">No sensors.</string>
     <string name="sensors_choose">Choose sensors</string>
+    <string name="sensors_title">Sensors</string>
+    <string name="sensors_search">Search by name…</string>
+    <string name="sensors_toggle">Toggle %1$s</string>
+    <string name="sensors_no_location">Location unavailable: sensors by name.</string>
+    <string name="sensors_truncated">Showing the first %d. Zoom in or search to narrow.</string>
+    <!-- The count is always the list limit, 50. -->
+    <string name="sensors_truncated_near" tools:ignore="PluralsCandidate">Showing the %d nearest. Zoom in or search to narrow.</string>
+    <plurals name="sensors_cluster">
+        <item quantity="one">%d sensor</item>
+        <item quantity="other">%d sensors</item>
+    </plurals>
     <string name="card_range">min %1$s · max %2$s</string>
     <string name="card_aggregate">min %1$s · avg %2$s · max %3$s °C</string>
     <string name="card_precipitation">rain %1$s mm · snow %2$s mm</string>

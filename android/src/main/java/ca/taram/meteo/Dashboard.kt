@@ -1,7 +1,5 @@
 package ca.taram.meteo
 
-import android.app.Application
-import android.content.Context
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,7 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -38,12 +36,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.text.NumberFormat
@@ -58,6 +54,7 @@ private val REFETCH = 5.minutes
 // Two missed hourly readings.
 private val STALE = Duration.ofHours(3)
 private val GREY = Color(0xFF888888)
+val DIVIDER = Color(0xFFCCCCCC)
 
 // weather for timeseries, daily for aggregates; null while it couldn't be fetched.
 data class Card(
@@ -69,15 +66,13 @@ data class Card(
 
 data class DashboardState(val cards: List<Card> = emptyList(), val error: String? = null, val refreshing: Boolean = false)
 
-class DashboardModel(app: Application) : AndroidViewModel(app) {
-    private val prefs = app.getSharedPreferences("shown", Context.MODE_PRIVATE)
-    val shown = MutableStateFlow(prefs.getStringSet("shown", null).orEmpty().toSet())
+class DashboardModel : ViewModel() {
     private val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private var last = DashboardState(refreshing = true)
 
     // Collected with the lifecycle, so polling stops in the background and refetches on return.
     @OptIn(ExperimentalCoroutinesApi::class)
-    val state = shown.transformLatest { names ->
+    val state = shown.names.transformLatest { names ->
         if (names.isEmpty()) return@transformLatest emit(DashboardState().also { last = it })
         while (true) {
             emit(last.copy(refreshing = true))
@@ -89,19 +84,6 @@ class DashboardModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() {
         refreshes.tryEmit(Unit)
-    }
-
-    // ponytail: stand-in for the phase 3 picker, shows the first few sensors.
-    fun choose() {
-        viewModelScope.launch {
-            try {
-                val names = api.listSensors(limit = 5).sensors.filter { it.kind in KINDS }.map { it.name }.toSet()
-                prefs.edit().putStringSet("shown", names).apply()
-                shown.value = names
-            } catch (e: IOException) {
-                // Tap again.
-            }
-        }
     }
 
     private suspend fun load(names: Set<String>) = try {
@@ -123,9 +105,9 @@ class DashboardModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-private fun IOException.describe() = "${javaClass.simpleName}: $message"
+fun Throwable.describe() = "${javaClass.simpleName}: $message"
 
-private fun num(value: Double?, digits: Int): String = value?.let {
+fun num(value: Double?, digits: Int): String = value?.let {
     NumberFormat.getNumberInstance().apply {
         minimumFractionDigits = digits
         maximumFractionDigits = digits
@@ -144,17 +126,17 @@ private val AGO = mapOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Dashboard(model: DashboardModel = viewModel()) {
+fun Dashboard(onChoose: () -> Unit, model: DashboardModel = viewModel()) {
     val state by model.state.collectAsStateWithLifecycle()
-    val shown by model.shown.collectAsStateWithLifecycle()
+    val names by shown.names.collectAsStateWithLifecycle()
     PullToRefreshBox(state.refreshing, model::refresh, Modifier.fillMaxSize()) {
         // Messages sit in the list too, so they can be pulled to retry.
         LazyColumn(Modifier.fillMaxSize()) {
             state.error?.let { item { Message(it) } }
             items(state.cards, key = { it.sensor.name }) { SensorCard(it) }
-            if (shown.isEmpty()) {
+            if (names.isEmpty()) {
                 item {
-                    Button(model::choose, Modifier.fillMaxWidth().padding(24.dp)) { Text(stringResource(R.string.sensors_choose)) }
+                    Button(onChoose, Modifier.fillMaxWidth().padding(24.dp)) { Text(stringResource(R.string.sensors_choose)) }
                 }
             } else if (state.cards.isEmpty() && state.error == null && !state.refreshing) {
                 item { Message(stringResource(R.string.dashboard_empty)) }
@@ -164,7 +146,7 @@ fun Dashboard(model: DashboardModel = viewModel()) {
 }
 
 @Composable
-private fun Message(text: String) = Text(text, Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
+fun Message(text: String) = Text(text, Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
 
 @Composable
 private fun SensorCard(card: Card) {
@@ -178,11 +160,11 @@ private fun SensorCard(card: Card) {
             else -> AggregateBody(card.daily!!.last())
         }
     }
-    HorizontalDivider(color = Color(0xFFCCCCCC))
+    HorizontalDivider(color = DIVIDER)
 }
 
 @Composable
-private fun Time(text: String, color: Color = GREY) = Text(text, Modifier.padding(top = 2.dp), color = color, fontSize = 13.sp)
+fun Time(text: String, color: Color = GREY) = Text(text, Modifier.padding(top = 2.dp), color = color, fontSize = 13.sp)
 
 @Composable
 private fun Line(content: @Composable RowScope.() -> Unit) =
