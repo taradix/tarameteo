@@ -37,7 +37,7 @@ jobs:
           echo "$ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       # The run number only grows, so every build installs over the previous one.
-      - name: Build release APK
+      - name: Build release APK and bundle
         env:
           ORG_GRADLE_PROJECT_releaseKeystore: ${{ runner.temp }}/release.jks
           ORG_GRADLE_PROJECT_releaseKeystorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -46,13 +46,16 @@ jobs:
           ORG_GRADLE_PROJECT_mapsApiKey: ${{ secrets.MAPS_API_KEY }}
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then version=${GITHUB_REF_NAME#android-v}; else version=0.0.0-${GITHUB_SHA::7}; fi
-          ./gradlew assembleRelease -PversionName="$version" -PversionCode="$GITHUB_RUN_NUMBER"
+          ./gradlew assembleRelease bundleRelease -PversionName="$version" -PversionCode="$GITHUB_RUN_NUMBER"
 
-      - name: Upload APK
+      # The APK is for sideloading, the bundle is what Google Play takes.
+      - name: Upload APK and bundle
         uses: actions/upload-artifact@v7
         with:
-          name: tarameteo-apk
-          path: android/build/outputs/apk/release/tarameteo-release.apk
+          name: tarameteo-release
+          path: |
+            android/build/outputs/apk/release/tarameteo-release.apk
+            android/build/outputs/bundle/release/tarameteo-release.aab
 
       - name: Create release
         if: github.ref_type == 'tag'
