@@ -6,6 +6,8 @@ plugins {
 }
 
 val openapi = file("../backend/openapi.json")
+// Release builds are signed only when releaseKeystore is set, with releaseKeystorePassword, releaseKeyAlias and releaseKeyPassword.
+val keystore = providers.gradleProperty("releaseKeystore").orNull
 
 android {
     namespace = "ca.taram.meteo"
@@ -15,13 +17,31 @@ android {
         applicationId = "ca.taram.meteo"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.0.0"
+        // CI passes the run number and the tag.
+        versionCode = providers.gradleProperty("versionCode").getOrElse("1").toInt()
+        versionName = providers.gradleProperty("versionName").getOrElse("0.0.0")
         // Point at a dev backend with -PapiBase=... or apiBase=... in ~/.gradle/gradle.properties.
         val apiBase = providers.gradleProperty("apiBase").getOrElse("https://meteo.taram.ca")
         buildConfigField("String", "API_BASE", "\"$apiBase\"")
         // mapsApiKey=... in ~/.gradle/gradle.properties; without it the map stays blank but the list works.
         manifestPlaceholders["mapsApiKey"] = providers.gradleProperty("mapsApiKey").getOrElse("none")
+    }
+
+    if (keystore != null) {
+        signingConfigs.create("release") {
+            storeFile = file(keystore)
+            storePassword = providers.gradleProperty("releaseKeystorePassword").get()
+            keyAlias = providers.gradleProperty("releaseKeyAlias").get()
+            keyPassword = providers.gradleProperty("releaseKeyPassword").get()
+        }
+    }
+
+    buildTypes.getByName("release") {
+        // Compose is much slower without R8.
+        isMinifyEnabled = true
+        isShrinkResources = true
+        proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        if (keystore != null) signingConfig = signingConfigs.getByName("release")
     }
 
     // maps-compose inlines Java 17 bytecode.
