@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy · TaraMeteo</title>
+    <link rel="icon" href="/logo.svg" />
+    <style>
+      /* Static page: no build step, so no Tailwind here. */
+      body {
+        margin: 0 auto;
+        max-width: 42rem;
+        padding: 2rem 1rem 4rem;
+        font-family: system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        color: #18181b;
+        background: #fafafa;
+      }
+      h1 { font-size: 1.5rem; }
+      h2 { margin-top: 2.5rem; font-size: 1.125rem; }
+      h3 { margin-top: 1.5rem; font-size: 1rem; }
+      hr { margin: 3rem 0; border: 0; border-top: 1px solid #d4d4d8; }
+      code { background: #e4e4e7; padding: 0.1em 0.3em; border-radius: 0.2em; }
+      @media (prefers-color-scheme: dark) {
+        body { color: #f4f4f5; background: #000; }
+        hr { border-top-color: #27272a; }
+        code { background: #27272a; }
+        a { color: #93c5fd; }
+      }
+    </style>
+  </head>
+  <body>
+    <section lang="en">
+      <h1>TaraMeteo Privacy Policy</h1>
+      <p><em>Last updated: 13 November 2026</em></p>
+
+      <p>
+        TaraMeteo is a weather station network run by one person. There are no user accounts, no
+        advertising, no analytics and no third-party trackers, in either the website or the Android
+        app. This page describes the little data that is handled and why.
+      </p>
+
+      <h2>What is collected</h2>
+
+      <h3>Approximate location (Android app only)</h3>
+      <p>
+        The app asks for coarse location permission only when you open the sensor picker, so it can
+        list the stations nearest you. The position is rounded to two decimal places — roughly one
+        kilometre — before it leaves your device, and it is sent to <code>meteo.taram.ca</code>
+        solely to sort and filter that list. It is not linked to any identifier, and declining the
+        permission leaves the rest of the app fully usable.
+      </p>
+
+      <h3>Alert subscriptions</h3>
+      <p>
+        If you ask for weather alerts by email, your address is stored on the server with the alert
+        rule until you remove it. Every alert message carries an unsubscribe link and a management
+        link. If you enable alerts in the app instead, a notification token identifying that app
+        installation is stored in place of an address; uninstalling the app or clearing its data
+        ends those alerts.
+      </p>
+
+      <h3>Server logs</h3>
+      <p>
+        The web server records each request in its access log: the IP address, the time, and the URL
+        requested — which, for sensor-picker searches, includes the rounded coordinates described
+        above. These logs exist only to operate and debug the service. They are kept no longer than
+        needed for that, are never used to profile anyone, and are not combined with any other data.
+      </p>
+
+      <h3>Stored only on your device</h3>
+      <p>
+        The stations you choose to follow, your language and your display preferences stay on your
+        own device, in app or browser storage. They are never uploaded.
+      </p>
+
+      <h2>Who else receives data</h2>
+      <p>
+        The map in the app is drawn with the Google Maps SDK, so Google receives the map requests it
+        needs to serve tiles, under
+        <a href="https://policies.google.com/privacy">Google's privacy policy</a>. App alerts, when
+        enabled, are delivered through Firebase Cloud Messaging, also operated by Google. Nothing is
+        sold, rented or shared with anyone else.
+      </p>
+
+      <h2>Weather measurements</h2>
+      <p>
+        Readings from the weather stations — temperature, humidity, pressure, precipitation — are
+        public data about places, not people, and are published openly. Station locations are
+        deliberately coarse.
+      </p>
+
+      <h2>Your choices</h2>
+      <p>
+        You can revoke the location permission at any time in Android's app settings, remove alerts
+        with the link in any alert message, and clear on-device data by clearing the app's storage.
+        To ask what is held about you or to have it deleted, write to
+        <a href="mailto:meteo@taram.ca">meteo@taram.ca</a>.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy changes, the date above changes with it. The app is free software; its source
+        code is at <a href="https://github.com/taradix/tarameteo">github.com/taradix/tarameteo</a>.
+      </p>
+    </section>
+
+    <hr />
+
+    <section lang="fr">
+      <h1>Politique de confidentialité de TaraMeteo</h1>
+      <p><em>Dernière mise à jour : 13 novembre 2026</em></p>
+
+      <p>
+        TaraMeteo est un réseau de stations météo exploité par une seule personne. Il n'y a aucun
+        compte d'utilisateur, aucune publicité, aucune statistique de fréquentation et aucun
+        traceur tiers, ni sur le site web ni dans l'application Android. Cette page décrit les
+        quelques données traitées et les raisons de ce traitement.
+      </p>
+
+      <h2>Données recueillies</h2>
+
+      <h3>Position approximative (application Android seulement)</h3>
+      <p>
+        L'application demande l'autorisation de position approximative uniquement à l'ouverture du
+        sélecteur de stations, afin d'afficher les stations les plus proches de vous. La position est
+        arrondie à deux décimales — environ un kilomètre — avant de quitter votre appareil, et elle
+        est transmise à <code>meteo.taram.ca</code> dans le seul but de trier et de filtrer cette
+        liste. Elle n'est associée à aucun identifiant, et refuser l'autorisation laisse le reste de
+        l'application pleinement utilisable.
+      </p>
+
+      <h3>Abonnements aux alertes</h3>
+      <p>
+        Si vous demandez des alertes météo par courriel, votre adresse est conservée sur le serveur
+        avec la règle d'alerte jusqu'à ce que vous la supprimiez. Chaque message d'alerte contient un
+        lien de désabonnement et un lien de gestion. Si vous activez plutôt les alertes dans
+        l'application, un jeton de notification identifiant cette installation est conservé au lieu
+        d'une adresse ; désinstaller l'application ou effacer ses données met fin à ces alertes.
+      </p>
+
+      <h3>Journaux du serveur</h3>
+      <p>
+        Le serveur web consigne chaque requête dans son journal d'accès : l'adresse IP, l'heure et
+        l'adresse demandée — ce qui, pour les recherches du sélecteur de stations, comprend les
+        coordonnées arrondies décrites plus haut. Ces journaux servent uniquement à exploiter et à
+        dépanner le service. Ils ne sont pas conservés plus longtemps que nécessaire à cette fin, ne
+        servent jamais à profiler qui que ce soit et ne sont croisés avec aucune autre donnée.
+      </p>
+
+      <h3>Données qui restent sur votre appareil</h3>
+      <p>
+        Les stations que vous choisissez de suivre, votre langue et vos préférences d'affichage
+        demeurent sur votre appareil, dans le stockage de l'application ou du navigateur. Elles ne
+        sont jamais téléversées.
+      </p>
+
+      <h2>Qui d'autre reçoit des données</h2>
+      <p>
+        La carte de l'application est dessinée au moyen du SDK Google Maps ; Google reçoit donc les
+        requêtes nécessaires à la production des tuiles, selon la
+        <a href="https://policies.google.com/privacy">politique de confidentialité de Google</a>. Les
+        alertes dans l'application, lorsqu'elles sont activées, sont acheminées par Firebase Cloud
+        Messaging, également exploité par Google. Rien n'est vendu, loué ni communiqué à quiconque
+        d'autre.
+      </p>
+
+      <h2>Mesures météorologiques</h2>
+      <p>
+        Les relevés des stations — température, humidité, pression, précipitations — sont des données
+        publiques sur des lieux et non sur des personnes, et sont publiés ouvertement. La position
+        des stations est volontairement imprécise.
+      </p>
+
+      <h2>Vos choix</h2>
+      <p>
+        Vous pouvez révoquer l'autorisation de position à tout moment dans les réglages
+        d'applications d'Android, supprimer vos alertes au moyen du lien figurant dans tout message
+        d'alerte, et effacer les données locales en effaçant le stockage de l'application. Pour
+        savoir ce qui est conservé à votre sujet ou pour en demander la suppression, écrivez à
+        <a href="mailto:meteo@taram.ca">meteo@taram.ca</a>.
+      </p>
+
+      <h2>Modifications</h2>
+      <p>
+        Si cette politique change, la date ci-dessus change aussi. L'application est un logiciel
+        libre ; son code source se trouve à
+        <a href="https://github.com/taradix/tarameteo">github.com/taradix/tarameteo</a>.
+      </p>
+    </section>
+  </body>
+</html>
