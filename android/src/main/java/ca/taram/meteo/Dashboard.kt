@@ -1,6 +1,7 @@
 package ca.taram.meteo
 
 import android.text.format.DateFormat
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -50,7 +51,8 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import kotlin.time.Duration.Companion.minutes
 
-private val REFETCH = 5.minutes
+// Sensors report hourly and MELCCFP daily; pull to refresh covers the impatient.
+val REFETCH = 5.minutes
 // Two missed hourly readings.
 private val STALE = Duration.ofHours(3)
 private val GREY = Color(0xFF888888)
@@ -114,9 +116,14 @@ fun num(value: Double?, digits: Int): String = value?.let {
     }.format(it)
 } ?: "–"
 
-private fun day(timestamp: String): String =
-    DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(java.util.Locale.getDefault(), "dMMM"))
-        .withZone(ZoneId.systemDefault()).format(instant(timestamp))
+// Skeletons for format(): the locale picks the order and punctuation.
+const val DAY = "dMMM"
+const val TIME = "jjmm"
+const val WHEN = "dMMMjjmm"
+
+fun format(at: Instant, skeleton: String): String =
+    DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(java.util.Locale.getDefault(), skeleton))
+        .withZone(ZoneId.systemDefault()).format(at)
 
 private val AGO = mapOf(
     ChronoUnit.MINUTES to R.string.card_ago_minutes,
@@ -126,14 +133,14 @@ private val AGO = mapOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Dashboard(onChoose: () -> Unit, model: DashboardModel = viewModel()) {
+fun Dashboard(onChoose: () -> Unit, onOpen: (SensorEntry) -> Unit, model: DashboardModel = viewModel()) {
     val state by model.state.collectAsStateWithLifecycle()
     val names by shown.names.collectAsStateWithLifecycle()
     PullToRefreshBox(state.refreshing, model::refresh, Modifier.fillMaxSize()) {
         // Messages sit in the list too, so they can be pulled to retry.
         LazyColumn(Modifier.fillMaxSize()) {
             state.error?.let { item { Message(it) } }
-            items(state.cards, key = { it.sensor.name }) { SensorCard(it) }
+            items(state.cards, key = { it.sensor.name }) { SensorCard(it) { onOpen(it.sensor) } }
             if (names.isEmpty()) {
                 item {
                     Button(onChoose, Modifier.fillMaxWidth().padding(24.dp)) { Text(stringResource(R.string.sensors_choose)) }
@@ -149,8 +156,8 @@ fun Dashboard(onChoose: () -> Unit, model: DashboardModel = viewModel()) {
 fun Message(text: String) = Text(text, Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
 
 @Composable
-private fun SensorCard(card: Card) {
-    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+private fun SensorCard(card: Card, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp)) {
         Text(card.sensor.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         val data = if (card.sensor.kind == "timeseries") card.weather else card.daily
         when {
@@ -191,7 +198,7 @@ private fun TimeseriesBody(summary: Summary, now: Instant) {
 @Composable
 private fun AggregateBody(reading: AggregateReading) {
     // Daily readings: the day matters, not the time.
-    Time(day(reading.timestamp))
+    Time(format(instant(reading.timestamp), DAY))
     Line {
         Text(
             stringResource(

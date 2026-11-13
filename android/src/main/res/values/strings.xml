@@ -15,6 +15,15 @@
         <item quantity="one">%d sensor</item>
         <item quantity="other">%d sensors</item>
     </plurals>
+    <string name="range_24">24 h</string>
+    <string name="range_168">7 d</string>
+    <string name="range_720">30 d</string>
+    <string name="range_2160">90 d</string>
+    <string name="chart_temperature">Temperature</string>
+    <string name="chart_humidity">Humidity</string>
+    <string name="chart_pressure">Pressure</string>
+    <string name="chart_precipitation">Precipitation</string>
+    <string name="chart_no_data">No data in range.</string>
     <string name="card_range">min %1$s · max %2$s</string>
     <string name="card_aggregate">min %1$s · avg %2$s · max %3$s °C</string>
     <string name="card_precipitation">rain %1$s mm · snow %2$s mm</string>

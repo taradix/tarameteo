@@ -25,6 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.serialization.Serializable
@@ -53,6 +54,8 @@ class App : Application() {
 
 @Serializable object Home
 @Serializable object Sensors
+// The card passes the kind so the screen doesn't wait on the sensor list.
+@Serializable data class Detail(val name: String, val kind: String)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,19 +73,32 @@ class MainActivity : ComponentActivity() {
 fun Screens() {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
-    val picking = entry?.destination?.hasRoute<Sensors>() == true
+    val destination = entry?.destination
+    val home = destination == null || destination.hasRoute<Home>()
     val pick = { nav.navigate(Sensors) { launchSingleTop = true } }
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(if (picking) R.string.sensors_title else R.string.app_name)) },
-                actions = { if (!picking) TextButton(pick) { Text(stringResource(R.string.sensors_title)) } },
+                title = {
+                    Text(
+                        when {
+                            destination?.hasRoute<Sensors>() == true -> stringResource(R.string.sensors_title)
+                            destination?.hasRoute<Detail>() == true -> entry!!.toRoute<Detail>().name
+                            else -> stringResource(R.string.app_name)
+                        },
+                    )
+                },
+                actions = { if (home) TextButton(pick) { Text(stringResource(R.string.sensors_title)) } },
             )
         },
     ) { padding ->
         NavHost(nav, Home, Modifier.padding(padding)) {
-            composable<Home> { Dashboard(pick) }
+            composable<Home> { Dashboard(pick, { nav.navigate(Detail(it.name, it.kind)) }) }
             composable<Sensors> { Picker() }
+            composable<Detail> {
+                val route = it.toRoute<Detail>()
+                SensorScreen(route.name, route.kind)
+            }
         }
     }
 }
