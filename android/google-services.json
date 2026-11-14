@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "115524025486",
+    "project_id": "tarameteo",
+    "storage_bucket": "tarameteo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:115524025486:android:84075c6191467094ebdddf",
+        "android_client_info": {
+          "package_name": "ca.taram.meteo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmt_SWZS1yRk4v5aLlCD1P8NsbcOWdlxQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
