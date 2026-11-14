@@ -3,6 +3,7 @@ package ca.taram.meteo
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.location.Location
 import android.location.LocationManager
 import android.os.CancellationSignal
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -52,8 +53,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
@@ -75,6 +78,7 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -87,6 +91,10 @@ private const val LIMIT = 50
 // About 100 km across around you, and 20 km around a sensor picked from the list.
 private const val NEARBY = 0.9
 private const val FOCUS = 0.2
+// A network fix can hang indefinitely. Nothing on screen waits for it, so this bound is only a last resort.
+private const val FIX = 15_000L
+// First paint, before any fix: where the sensors are. ponytail: a constant, until the last viewport is remembered.
+private val HOME = CameraPosition.fromLatLngZoom(LatLng(46.8, -71.2), 6f)
 
 // The server takes west > east as crossing the antimeridian. Three decimals (about 100 m) keep requests steady.
 fun bboxOf(west: Double, south: Double, east: Double, north: Double) = listOf(west, south, east, north)
@@ -115,17 +123,26 @@ private fun around(at: LatLng, span: Double) =
 private fun round(x: Double) = Math.round(x * 100) / 100.0
 
 // Two decimals (about 1 km) is enough to sort sensors, and all the server learns about the phone.
+private fun at(location: Location) = LatLng(round(location.latitude), round(location.longitude))
+
 // ponytail: network provider only; GPS-only phones fall back to the world by name.
+private fun locator(context: Context) = context.getSystemService(LocationManager::class.java)
+    ?.takeIf { it.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }
+
+// Whatever the phone already knows: usually instant, and close enough to recentre on.
+@SuppressLint("MissingPermission") // Only called once the permission is granted.
+private fun lastPosition(context: Context) =
+    locator(context)?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let(::at)
+
 @SuppressLint("MissingPermission") // Only called once the permission is granted.
 private suspend fun currentPosition(context: Context): LatLng? {
-    val manager = context.getSystemService(LocationManager::class.java)
-    if (!manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) return null
+    val manager = locator(context) ?: return null
     return suspendCancellableCoroutine { continuation ->
         val signal = CancellationSignal()
         continuation.invokeOnCancellation { signal.cancel() }
         LocationManagerCompat.getCurrentLocation(
             manager, LocationManager.NETWORK_PROVIDER, signal, ContextCompat.getMainExecutor(context),
-        ) { location -> continuation.resume(location?.let { LatLng(round(it.latitude), round(it.longitude)) }) }
+        ) { location -> continuation.resume(location?.let(::at)) }
     }
 }
 
@@ -160,7 +177,12 @@ class PickerModel : ViewModel() {
 
     fun locate(context: Context, granted: Boolean) {
         viewModelScope.launch {
-            here.value = if (granted) currentPosition(context) else null
+            if (granted) {
+                // The stored fix recentres the map at once; a fresh one refines it whenever it lands.
+                here.value = lastPosition(context)
+                here.value = withTimeoutOrNull(FIX) { currentPosition(context) } ?: here.value
+            }
+            // Only now does "no location" mean it, so the message never shows while a fix is still coming.
             located.value = true
         }
     }
@@ -184,14 +206,22 @@ fun Picker(model: PickerModel = viewModel()) {
     val names by shown.names.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf<SensorEntry?>(null) }
     var loaded by remember { mutableStateOf(false) }
-    val camera = rememberCameraPositionState()
+    val camera = rememberCameraPositionState { position = HOME }
     val scope = rememberCoroutineScope()
 
-    // Denied or failed (location off): start on the world, sorted by name. The list follows the map once it settles.
-    LaunchedEffect(loaded, located) {
-        if (!loaded || !located) return@LaunchedEffect
-        here?.let { camera.move(CameraUpdateFactory.newLatLngBounds(around(it, NEARBY), 0)) }
-        snapshotFlow { camera.isMoving }.filter { !it }.collect { model.viewport.value = viewportOf(camera) }
+    // The list follows the map as soon as it is up, so sensors load while the fix is still pending.
+    LaunchedEffect(loaded) {
+        if (!loaded) return@LaunchedEffect
+        // A settled camera emits once, so a viewport lost to a not-yet-ready projection is lost for good.
+        snapshotFlow { camera.isMoving }.filter { !it }.collect { viewportOf(camera)?.let { model.viewport.value = it } }
+    }
+
+    // The fix arrives late, so recentre on it then. Nothing has moved the camera yet at that point, so a
+    // GESTURE reason can only mean the user panned first: the map is theirs, leave it alone.
+    LaunchedEffect(loaded, here) {
+        val at = here ?: return@LaunchedEffect
+        if (!loaded || camera.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) return@LaunchedEffect
+        camera.move(CameraUpdateFactory.newLatLngBounds(around(at, NEARBY), 0))
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -203,44 +233,42 @@ fun Picker(model: PickerModel = viewModel()) {
             singleLine = true,
         )
         Box(Modifier.weight(1f)) {
-            if (located) {
-                GoogleMap(
-                    Modifier.fillMaxSize(),
-                    cameraPositionState = camera,
-                    properties = MapProperties(isMyLocationEnabled = here != null),
-                    onMapLoaded = { loaded = true },
-                    onMapClick = { selected = null },
-                ) {
-                    clusters?.getOrNull()?.clusters?.forEach { cluster ->
-                        val sensor = cluster.sensor
-                        val at = LatLng(cluster.latitude, cluster.longitude)
-                        if (sensor == null) {
-                            key(at) {
-                                val label = pluralStringResource(R.plurals.sensors_cluster, cluster.count, cluster.count)
-                                // Cells are a quarter of the view, so zooming in twice splits the cluster.
-                                // ponytail: sensors sharing a spot stay one cluster at any zoom; spread them out if that happens.
-                                MarkerComposable(
-                                    cluster.count,
-                                    state = rememberUpdatedMarkerState(at),
-                                    contentDescription = label,
-                                    onClick = {
-                                        scope.launch { camera.animate(CameraUpdateFactory.newLatLngZoom(at, camera.position.zoom + 2)) }
-                                        true
-                                    },
-                                ) { ClusterBubble(cluster.count) }
-                            }
-                        } else if (sensor.kind in KINDS) {
-                            key(sensor.kind, sensor.name) {
-                                Marker(
-                                    state = rememberUpdatedMarkerState(LatLng(sensor.latitude, sensor.longitude)),
-                                    contentDescription = sensor.name,
-                                    icon = if (sensor.name in names) BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE) else null,
-                                    onClick = {
-                                        selected = sensor
-                                        true
-                                    },
-                                )
-                            }
+            GoogleMap(
+                Modifier.fillMaxSize(),
+                cameraPositionState = camera,
+                properties = MapProperties(isMyLocationEnabled = here != null),
+                onMapLoaded = { loaded = true },
+                onMapClick = { selected = null },
+            ) {
+                clusters?.getOrNull()?.clusters?.forEach { cluster ->
+                    val sensor = cluster.sensor
+                    val at = LatLng(cluster.latitude, cluster.longitude)
+                    if (sensor == null) {
+                        key(at) {
+                            val label = pluralStringResource(R.plurals.sensors_cluster, cluster.count, cluster.count)
+                            // Cells are a quarter of the view, so zooming in twice splits the cluster.
+                            // ponytail: sensors sharing a spot stay one cluster at any zoom; spread them out if that happens.
+                            MarkerComposable(
+                                cluster.count,
+                                state = rememberUpdatedMarkerState(at),
+                                contentDescription = label,
+                                onClick = {
+                                    scope.launch { camera.animate(CameraUpdateFactory.newLatLngZoom(at, camera.position.zoom + 2)) }
+                                    true
+                                },
+                            ) { ClusterBubble(cluster.count) }
+                        }
+                    } else if (sensor.kind in KINDS) {
+                        key(sensor.kind, sensor.name) {
+                            Marker(
+                                state = rememberUpdatedMarkerState(LatLng(sensor.latitude, sensor.longitude)),
+                                contentDescription = sensor.name,
+                                icon = if (sensor.name in names) BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE) else null,
+                                onClick = {
+                                    selected = sensor
+                                    true
+                                },
+                            )
                         }
                     }
                 }
