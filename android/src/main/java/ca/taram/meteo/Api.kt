@@ -46,6 +46,27 @@ data class AggregateReading(
 @Serializable
 data class PushTokenUpdate(@SerialName("push_token") val pushToken: String)
 
+// What to watch for; the install is named by its token in the header, so the rule says nothing about who.
+@Serializable
+data class AlertRule(
+    val sensor: String,
+    val field: String,
+    val condition: String,
+    val threshold: Double,
+    val language: String = "en",
+)
+
+@Serializable
+data class PushAlert(
+    val id: String,
+    val sensor: String,
+    val field: String,
+    val condition: String,
+    val threshold: Double,
+    val language: String = "en",
+    val triggered: Boolean = false,
+)
+
 @Serializable
 data class Cluster(val latitude: Double, val longitude: Double, val count: Int, val sensor: SensorEntry? = null)
 
@@ -96,8 +117,8 @@ class Api(private val base: String = BuildConfig.API_BASE) {
             }
         }
 
-    private suspend inline fun <reified T> get(path: String): T =
-        withContext(Dispatchers.IO) { json.decodeFromString<T>(request(path)) }
+    private suspend inline fun <reified T> get(path: String, token: String? = null): T =
+        withContext(Dispatchers.IO) { json.decodeFromString<T>(request(path, token = token)) }
 
     private fun weather(name: String, suffix: String, start: String) =
         "/api/sensors/${encode(name)}/weather$suffix${query("start" to start)}"
@@ -129,6 +150,17 @@ class Api(private val base: String = BuildConfig.API_BASE) {
     // Points this install's alerts at the token FCM replaced the old one with.
     suspend fun putPushToken(old: String, new: String) {
         request("/api/alerts/push", "PUT", old, json.encodeToString(PushTokenUpdate(new)))
+    }
+
+    suspend fun listPushAlerts(token: String): List<PushAlert> = get("/api/alerts/push", token)
+
+    // Holding the token is the consent, so an alert starts sending right away: nothing to confirm.
+    suspend fun createPushAlert(token: String, rule: AlertRule) {
+        request("/api/alerts/push", "POST", token, json.encodeToString(rule))
+    }
+
+    suspend fun deletePushAlert(token: String, id: String) {
+        request("/api/alerts/push/${encode(id)}", "DELETE", token)
     }
 }
 

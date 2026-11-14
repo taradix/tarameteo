@@ -92,6 +92,23 @@ class ApiTest {
     }
 
     @Test
+    fun pushAlertsAreListedCreatedAndDeletedUnderTheToken() = runBlocking {
+        body = """[{"id": "1", "sensor": "s", "field": "temperature", "condition": "below", "threshold": -20}]"""
+        assertEquals(listOf(PushAlert("1", "s", "temperature", "below", -20.0)), api.listPushAlerts("t"))
+        assertTrue(sent, "X-Push-Token: t" in sent)
+
+        body = ""
+        api.createPushAlert("t", AlertRule("s", "offline", "above", 6.0, "fr"))
+        assertTrue(sent, sent.startsWith("POST /api/alerts/push "))
+        assertTrue(sent, """"field":"offline"""" in sent)
+        assertTrue(sent, """"language":"fr"""" in sent)
+
+        api.deletePushAlert("t", "a/b")
+        assertTrue(sent, sent.startsWith("DELETE /api/alerts/push/a%2Fb "))
+        assertEquals(listOf("/api/alerts/push", "/api/alerts/push", "/api/alerts/push/a%2Fb"), requests)
+    }
+
+    @Test
     fun nonOkResponsesThrowApiErrorWithTheStatus() {
         status = "404 Not Found"
         body = ""

@@ -13,6 +13,24 @@
         <item quantity="many">%d capteurs</item>
         <item quantity="other">%d capteurs</item>
     </plurals>
+    <string name="alerts_title">Alertes</string>
+    <string name="alerts_new">Nouvelle alerte</string>
+    <string name="alerts_none">Aucune alerte.</string>
+    <string name="alerts_no_sensors">Ajoutez d\'abord un capteur pour y mettre une alerte.</string>
+    <string name="alerts_blocked">Notifications désactivées : autorisez-les dans les paramètres, sinon les alertes ne s\'afficheront pas.</string>
+    <string name="alerts_field_temperature">Température</string>
+    <string name="alerts_field_humidity">Humidité</string>
+    <string name="alerts_field_pressure">Pression</string>
+    <string name="alerts_field_rain">Pluie</string>
+    <string name="alerts_field_snow">Neige</string>
+    <string name="alerts_field_offline">Aucune donnée depuis</string>
+    <string name="alerts_above">au-dessus de</string>
+    <string name="alerts_below">en dessous de</string>
+    <string name="alerts_threshold">Valeur</string>
+    <string name="alerts_hours">Heures</string>
+    <string name="alerts_create">Créer l\'alerte</string>
+    <string name="alerts_delete">Supprimer %1$s</string>
+    <string name="alerts_triggered">déclenchée</string>
     <string name="range_24">24 h</string>
     <string name="range_168">7 j</string>
     <string name="range_720">30 j</string>

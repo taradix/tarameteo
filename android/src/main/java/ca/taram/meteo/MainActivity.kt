@@ -55,6 +55,7 @@ class App : Application() {
 
 @Serializable object Home
 @Serializable object Sensors
+@Serializable object Alerts
 // The card passes the kind so the screen doesn't wait on the sensor list.
 @Serializable data class Detail(val name: String, val kind: String)
 
@@ -84,18 +85,27 @@ fun Screens() {
                     Text(
                         when {
                             destination?.hasRoute<Sensors>() == true -> stringResource(R.string.sensors_title)
+                            destination?.hasRoute<Alerts>() == true -> stringResource(R.string.alerts_title)
                             destination?.hasRoute<Detail>() == true -> entry!!.toRoute<Detail>().name
                             else -> stringResource(R.string.app_name)
                         },
                     )
                 },
-                actions = { if (home) TextButton(pick) { Text(stringResource(R.string.sensors_title)) } },
+                actions = {
+                    if (home) {
+                        TextButton({ nav.navigate(Alerts) { launchSingleTop = true } }) {
+                            Text(stringResource(R.string.alerts_title))
+                        }
+                        TextButton(pick) { Text(stringResource(R.string.sensors_title)) }
+                    }
+                },
             )
         },
     ) { padding ->
         NavHost(nav, Home, Modifier.padding(padding)) {
             composable<Home> { Dashboard(pick, { nav.navigate(Detail(it.name, it.kind)) }) }
             composable<Sensors> { Picker() }
+            composable<Alerts> { AlertsScreen() }
             composable<Detail> {
                 val route = it.toRoute<Detail>()
                 SensorScreen(route.name, route.kind)
