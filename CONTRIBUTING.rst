@@ -199,6 +199,36 @@ New enum values, such as a new sensor ``kind``, count as additive, so
 clients must ignore values they don't recognise.
 
 
+Building the Android app
+------------------------
+
+The app in ``android`` builds with Gradle, and takes the Maps key as a
+property:
+
+.. code-block:: text
+
+    > cd android
+    > ./gradlew assembleDebug -PmapsApiKey=<key>
+
+Without it the sensor list still works but the map stays blank. Put
+``mapsApiKey=<key>`` in ``~/.gradle/gradle.properties`` to stop passing
+it. ``make -C android test check`` runs the unit tests and lint.
+
+Push alerts need a Firebase project, which can be the Google project the
+Maps key already belongs to. Its ``android/google-services.json`` is
+committed: the file ships inside every APK, so it is not a secret. A
+build without it warns and simply has no alerts. The backend sends
+through the same project: set ``FCM_CREDENTIALS`` to the base64 of a
+service-account JSON, as ``.env.example`` describes.
+
+An app alert belongs to the install rather than to a person, since the
+app has no accounts: its FCM registration token is the only name the
+alert has. That makes the token a password, so it travels in an
+``X-Push-Token`` header, never in a URL or a log. The app follows the
+token when FCM replaces it, but reinstalling the app or clearing its
+data loses the alerts it had.
+
+
 Upgrading the database
 ----------------------
 

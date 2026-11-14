@@ -2,6 +2,7 @@ Version 0.1.1
 -------------
 
 -   Add alerts.
+-   Add Android app.
 
 Version 0.1.0
 -------------
