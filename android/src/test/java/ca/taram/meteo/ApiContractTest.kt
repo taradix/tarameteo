@@ -42,5 +42,6 @@ class ApiContractTest {
         AggregateReading.serializer(),
         Cluster.serializer(),
         ClusterList.serializer(),
+        PushTokenUpdate.serializer(),
     ).forEach { check(it.descriptor) }
 }

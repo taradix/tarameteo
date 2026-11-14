@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -12,6 +13,8 @@ import kotlin.concurrent.thread
 class ApiTest {
     @Volatile private var status = "200 OK"
     @Volatile private var body = "[]"
+    // The last request as it arrived: line, headers, then its body.
+    @Volatile private var sent = ""
     private val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     // One request per connection is all HttpURLConnection needs when told to close.
@@ -22,8 +25,12 @@ class ApiTest {
                 val socket = runCatching { server.accept() }.getOrNull() ?: break
                 socket.use {
                     val reader = it.getInputStream().bufferedReader()
-                    requests += reader.readLine().split(" ")[1]
-                    while (!reader.readLine().isNullOrEmpty()) continue
+                    val head = generateSequence { reader.readLine()?.takeUnless(String::isEmpty) }.toList()
+                    requests += head[0].split(" ")[1]
+                    val length = head.firstOrNull { line -> line.startsWith("Content-Length") }
+                        ?.substringAfter(": ")?.toInt() ?: 0
+                    val payload = CharArray(length).also { chars -> reader.read(chars) }
+                    sent = (head + String(payload)).joinToString("\n")
                     val bytes = body.toByteArray()
                     it.getOutputStream().write(
                         "HTTP/1.1 $status\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray() + bytes,
@@ -71,6 +78,17 @@ class ApiTest {
         body = """{"clusters": []}"""
         api.listClusters("-1.5,2,3,4", 6)
         assertEquals(listOf("/api/sensors/clusters?bbox=-1.5%2C2%2C3%2C4&zoom=6"), requests)
+    }
+
+    @Test
+    fun putPushTokenCarriesTheOldTokenInAHeader() = runBlocking {
+        body = """{"moved": 1}"""
+        api.putPushToken("old", "new")
+        assertEquals(listOf("/api/alerts/push"), requests)
+        // The old token says which alerts move; a query string would leave it in the access log.
+        assertTrue(sent, sent.startsWith("PUT /api/alerts/push "))
+        assertTrue(sent, "X-Push-Token: old" in sent)
+        assertTrue(sent, """{"push_token":"new"}""" in sent)
     }
 
     @Test

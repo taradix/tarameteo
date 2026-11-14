@@ -44,6 +44,9 @@ data class AggregateReading(
 )
 
 @Serializable
+data class PushTokenUpdate(@SerialName("push_token") val pushToken: String)
+
+@Serializable
 data class Cluster(val latitude: Double, val longitude: Double, val count: Int, val sensor: SensorEntry? = null)
 
 @Serializable
@@ -73,16 +76,28 @@ class Api(private val base: String = BuildConfig.API_BASE) {
     // Additive API changes add fields older apps don't know.
     private val json = Json { ignoreUnknownKeys = true }
 
-    private suspend inline fun <reified T> get(path: String): T = withContext(Dispatchers.IO) {
-        val connection = URL(base + path).openConnection() as HttpURLConnection
-        try {
-            val status = connection.responseCode
-            if (status !in 200..299) throw ApiError(status, "$status ${connection.responseMessage}")
-            json.decodeFromString<T>(connection.inputStream.bufferedReader().use { it.readText() })
-        } finally {
-            connection.disconnect()
+    private suspend fun request(path: String, method: String = "GET", token: String? = null, body: String? = null) =
+        withContext(Dispatchers.IO) {
+            val connection = URL(base + path).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = method
+                // The push token both names an install and authorizes it, so it travels in a header, never in a URL.
+                if (token != null) connection.setRequestProperty("X-Push-Token", token)
+                if (body != null) {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.outputStream.use { it.write(body.toByteArray()) }
+                }
+                val status = connection.responseCode
+                if (status !in 200..299) throw ApiError(status, "$status ${connection.responseMessage}")
+                if (status == 204) "" else connection.inputStream.bufferedReader().use { it.readText() }
+            } finally {
+                connection.disconnect()
+            }
         }
-    }
+
+    private suspend inline fun <reified T> get(path: String): T =
+        withContext(Dispatchers.IO) { json.decodeFromString<T>(request(path)) }
 
     private fun weather(name: String, suffix: String, start: String) =
         "/api/sensors/${encode(name)}/weather$suffix${query("start" to start)}"
@@ -110,6 +125,11 @@ class Api(private val base: String = BuildConfig.API_BASE) {
 
     suspend fun getWeatherAggregate(name: String, start: String): List<AggregateReading> =
         get(weather(name, "/aggregate", start))
+
+    // Points this install's alerts at the token FCM replaced the old one with.
+    suspend fun putPushToken(old: String, new: String) {
+        request("/api/alerts/push", "PUT", old, json.encodeToString(PushTokenUpdate(new)))
+    }
 }
 
 val api = Api()

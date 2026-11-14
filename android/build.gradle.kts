@@ -3,9 +3,13 @@ plugins {
     id("com.android.application") version "9.5.1"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.4.21"
+    id("com.google.gms.google-services") version "4.6.0" apply false
 }
 
 val openapi = file("../backend/openapi.json")
+// Push alerts need a Firebase project: drop its google-services.json next to this file. The file ships
+// inside every APK, so it is not a secret; without it the app still builds, only alerts don't work.
+val firebase = file("google-services.json").exists()
 // Release builds are signed only when releaseKeystore is set, with releaseKeystorePassword, releaseKeyAlias and releaseKeyPassword.
 val keystore = providers.gradleProperty("releaseKeystore").orNull
 
@@ -62,6 +66,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.firebase:firebase-messaging:26.0.2")
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.13.0")
@@ -74,3 +79,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 }
+
+// Reads google-services.json into the resources the Firebase SDK looks for at startup.
+if (firebase) apply(plugin = "com.google.gms.google-services") else logger.warn("No google-services.json: this build has no push alerts.")

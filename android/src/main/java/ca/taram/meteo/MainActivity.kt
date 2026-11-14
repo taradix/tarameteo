@@ -49,6 +49,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         shown = Shown(this)
+        push = Push(this)
     }
 }
 
