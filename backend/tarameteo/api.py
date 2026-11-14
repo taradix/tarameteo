@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import (
     Depends,
     FastAPI,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -22,7 +23,7 @@ from taraqueue import Queue, QueueEmpty
 
 from tarameteo import alert_text
 from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertService, run_offline_checks
-from tarameteo.alerts import Alert, AlertCreate, AlertStore, ManageRequest
+from tarameteo.alerts import Alert, AlertCreate, AlertRule, AlertStore, ManageRequest, PushAlert, PushTokenUpdate
 from tarameteo.ca_client import (
     CAClient,
     IssueCertificateRequest,
@@ -32,7 +33,7 @@ from tarameteo.ca_client import (
 )
 from tarameteo.consumer import run as run_consumer
 from tarameteo.db import SessionLocal
-from tarameteo.notifier import SmtpNotifier
+from tarameteo.notifier import FcmNotifier, SmtpNotifier
 from tarameteo.sensors import (
     AggregateReading,
     BBox,
@@ -60,9 +61,8 @@ async def lifespan(app: FastAPI):
     app.state.ts_reader = None
     app.state.ts_writer = None
 
-    # Alerts need both a secret to sign links and SMTP to send them.
-    alerts = None
-    if os.environ.get("ALERT_SECRET") and os.environ.get("SMTP_HOST"):
+    notifier = None
+    if os.environ.get("SMTP_HOST"):
         notifier = SmtpNotifier(
             host=os.environ["SMTP_HOST"],
             port=int(os.environ.get("SMTP_PORT", "587")),
@@ -70,7 +70,11 @@ async def lifespan(app: FastAPI):
             password=os.environ.get("SMTP_PASSWORD", ""),
             from_address=os.environ.get("SMTP_FROM", "noreply@taram.ca"),
         )
-        alerts = AlertService(notifier, os.environ["ALERT_SECRET"], os.environ.get("ALERT_BASE_URL", ""))
+    push = FcmNotifier.from_env() if os.environ.get("FCM_CREDENTIALS") else None
+    # Alerts need a secret to sign links, and at least one way to send them.
+    alerts = None
+    if os.environ.get("ALERT_SECRET") and (notifier or push):
+        alerts = AlertService(notifier, os.environ["ALERT_SECRET"], os.environ.get("ALERT_BASE_URL", ""), push)
     app.state.alerts = alerts
     app.state.manage_sent = {}
 
@@ -96,6 +100,8 @@ async def lifespan(app: FastAPI):
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+        if push:
+            await push.client.aclose()
 
 
 app = FastAPI(
@@ -271,6 +277,24 @@ def get_alert_service(request: Request) -> AlertService:
 
 AlertServiceDep = Annotated[AlertService, Depends(get_alert_service)]
 
+
+def get_email_service(alerts: AlertServiceDep) -> AlertService:
+    if alerts.notifier is None:
+        raise HTTPException(status_code=503, detail="Email alerts not configured")
+    return alerts
+
+
+def get_push_service(alerts: AlertServiceDep) -> AlertService:
+    if alerts.push is None:
+        raise HTTPException(status_code=503, detail="Push alerts not configured")
+    return alerts
+
+
+EmailServiceDep = Annotated[AlertService, Depends(get_email_service)]
+PushServiceDep = Annotated[AlertService, Depends(get_push_service)]
+# The FCM token both names the install and authorizes it, so it travels in a header, never in a URL.
+PushTokenDep = Annotated[str, Header(alias="X-Push-Token", max_length=512)]
+
 MAX_ALERTS = 20
 # Confirm emails an address can be sent per day, so the form can't flood a stranger's inbox.
 # ponytail: no per-IP limit; add one (at the proxy) if someone sprays many addresses.
@@ -279,7 +303,7 @@ MAX_PENDING = 3
 
 @app.post("/api/alerts", status_code=201)
 async def post_alert(
-    body: AlertCreate, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
+    body: AlertCreate, alerts: EmailServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> dict[str, str]:
     # The sensor name goes into an email to an unconfirmed address, so only send names we know.
     if not service.list_sensors(names=[body.sensor]).sensors:
@@ -372,7 +396,7 @@ MANAGE_EVERY = timedelta(minutes=5)
 
 @app.post("/api/alerts/manage", status_code=202)
 async def post_alert_manage(
-    body: ManageRequest, request: Request, alerts: AlertServiceDep, alert_store: AlertStoreDep,
+    body: ManageRequest, request: Request, alerts: EmailServiceDep, alert_store: AlertStoreDep,
 ) -> dict[str, str]:
     """Email a link to see and stop the address's alerts; the answer is the same whether or not it has any."""
     email, now = body.email.lower(), datetime.now(UTC)
@@ -407,6 +431,50 @@ def alert_manage(
     alert_store.delete_by_email(payload["email"], alert)
     # Back to the list, as a GET, so reloading doesn't post again.
     return RedirectResponse(request.url.path, status_code=303)
+
+
+# The app has no accounts: its alerts belong to the install that holds the token.
+
+
+@app.post("/api/alerts/push", status_code=201)
+def post_push_alert(
+    body: AlertRule,
+    token: PushTokenDep,
+    alerts: PushServiceDep,
+    alert_store: AlertStoreDep,
+    service: SensorServiceDep,
+) -> dict[str, str]:
+    """Start an alert on this install. Holding the token is the consent, so there's nothing to confirm."""
+    if not service.list_sensors(names=[body.sensor]).sensors:
+        raise HTTPException(status_code=422, detail=f"Unknown sensor {body.sensor!r}")
+    if alert_store.count_by_token(token) >= MAX_ALERTS:
+        raise HTTPException(status_code=409, detail=f"At most {MAX_ALERTS} alerts per install")
+
+    alert = Alert(id=uuid.uuid4().hex, push_token=token, confirmed=True, **body.model_dump())
+    alert_store.create(alert)
+    return {"id": alert.id}
+
+
+@app.get("/api/alerts/push")
+def get_push_alerts(token: PushTokenDep, alert_store: AlertStoreDep) -> list[PushAlert]:
+    """This install's alerts."""
+    return [PushAlert.model_validate(alert.model_dump()) for alert in alert_store.list_by_token(token)]
+
+
+@app.put("/api/alerts/push")
+def put_push_token(
+    body: PushTokenUpdate, token: PushTokenDep, alerts: PushServiceDep, alert_store: AlertStoreDep,
+) -> dict[str, int]:
+    """Move this install's alerts to its new token, which FCM hands out whenever it feels like it."""
+    return {"moved": alert_store.set_token(token, body.push_token)}
+
+
+@app.delete("/api/alerts/push/{alert_id}", status_code=204)
+def delete_push_alert(alert_id: str, token: PushTokenDep, alert_store: AlertStoreDep) -> Response:
+    """Stop one of this install's alerts; another install's token can't reach it."""
+    if not alert_store.delete_by_token(token, alert_id):
+        raise HTTPException(status_code=404, detail="Unknown alert")
+    return Response(status_code=204)
 
 
 @app.exception_handler(Exception)

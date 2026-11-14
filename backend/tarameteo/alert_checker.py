@@ -9,7 +9,7 @@ from attrs import define
 from tarameteo import alert_text
 from tarameteo.alerts import OFFLINE_MAX_HOURS, Alert, AlertStore, Condition
 from tarameteo.db import SessionLocal
-from tarameteo.notifier import Notifier
+from tarameteo.notifier import Notifier, Unregistered
 from tarameteo.sensors import AGGREGATE_MEASUREMENT, MEASUREMENT, SENSOR_TAG, AggregateReading, WeatherReading
 from tarameteo.tokens import sign_token, verify_token
 from tarameteo.ts import TSReader
@@ -48,10 +48,10 @@ def _cleared(value: float, alert: Alert) -> bool:
 class AlertService:
     """Sends every alert email or push, and signs and verifies the links in the emails."""
 
-    notifier: Notifier
+    # One of the two can be missing: a deployment may send only email, or only push.
+    notifier: Notifier | None
     secret: str
     base_url: str
-    # Alerts with a push token go here instead; without it they can't be sent.
     push: Notifier | None = None
 
     def _url(self, action: str, payload: dict, expires_in: timedelta | None = None) -> str:
@@ -86,10 +86,14 @@ class AlertService:
             # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
             headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
         if notifier is None:
-            logger.error(f"Alert {alert.id} needs a push notifier, which isn't configured")
+            logger.error(f"Alert {alert.id} can't be sent: no notifier for {who}")
             return
         try:
             await notifier.send(recipient, subject, body, headers)
+        except Unregistered:
+            # The install is gone, so none of its alerts can ever be delivered.
+            logger.info(f"Dropped {alert_store.delete_by_token(alert.push_token)} alerts of an unregistered install")
+            return
         except Exception:
             # The state stays, so the next check tries again.
             logger.exception(f"Failed to send alert {alert.id} to {who}")

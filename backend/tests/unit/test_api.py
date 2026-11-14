@@ -20,6 +20,7 @@ from hamcrest import (
     contains_string,
     equal_to,
     has_entries,
+    has_key,
     has_properties,
     is_not,
     none,
@@ -634,3 +635,80 @@ def test_alert_manage_emails_an_address_once_per_5_minutes(alert_api):
         client.post("/api/alerts/manage", json={"email": "user@example.com"})
 
     assert_that(notifier.send.call_count, equal_to(1))
+
+
+@pytest.fixture
+def push_api(alert_api):
+    """alert_api with push configured instead of email, as an app-only deployment would be."""
+    client, store, _ = alert_api
+    push = AsyncMock()
+    client.app.state.alerts = AlertService(None, "s", "http://test", push)
+    return client, store, push
+
+
+PUSH_ALERT = {"sensor": "outdoor", "field": "temperature", "condition": "below", "threshold": -20}
+TOKEN = {"X-Push-Token": "tok-1"}
+OTHER_TOKEN = {"X-Push-Token": "tok-2"}
+
+
+def test_push_alert_starts_confirmed_and_hides_the_token(push_api):
+    client, store, _ = push_api
+
+    response = client.post("/api/alerts/push", json=PUSH_ALERT, headers=TOKEN)
+
+    assert_that(response.status_code, equal_to(201))
+    alert_id = response.json()["id"]
+    assert_that(store.get(alert_id), has_properties(confirmed=True, push_token="tok-1", email=none()))
+    listed = client.get("/api/alerts/push", headers=TOKEN).json()
+    assert_that(listed, contains_exactly(has_entries(id=alert_id, sensor="outdoor", triggered=False)))
+    # The app already has its token; sending it back would only spread it around.
+    assert_that(listed[0], is_not(has_key("push_token")))
+
+
+def test_push_alerts_are_scoped_to_their_token(push_api):
+    client, store, _ = push_api
+    alert_id = client.post("/api/alerts/push", json=PUSH_ALERT, headers=TOKEN).json()["id"]
+
+    assert_that(client.get("/api/alerts/push", headers=OTHER_TOKEN).json(), equal_to([]))
+    assert_that(client.delete(f"/api/alerts/push/{alert_id}", headers=OTHER_TOKEN).status_code, equal_to(404))
+
+    assert_that(client.delete(f"/api/alerts/push/{alert_id}", headers=TOKEN).status_code, equal_to(204))
+    assert_that(store.get(alert_id), none())
+
+
+def test_push_token_rotation_moves_the_alerts(push_api):
+    client, store, _ = push_api
+    client.post("/api/alerts/push", json=PUSH_ALERT, headers=TOKEN)
+
+    response = client.put("/api/alerts/push", json={"push_token": "tok-2"}, headers=TOKEN)
+
+    assert_that(response.json(), equal_to({"moved": 1}))
+    assert_that(store.count_by_token("tok-2"), equal_to(1))
+
+
+def test_push_alert_needs_a_token_and_a_known_sensor(push_api):
+    client, _, _ = push_api
+
+    assert_that(client.post("/api/alerts/push", json=PUSH_ALERT).status_code, equal_to(422))
+    assert_that(client.post("/api/alerts/push", json={**PUSH_ALERT, "sensor": "nope"}, headers=TOKEN).status_code, equal_to(422))
+
+
+def test_push_alert_caps_alerts_per_install(push_api):
+    client, store, _ = push_api
+    for i in range(20):
+        store.create(Alert(id=f"a{i}", push_token="tok-1", confirmed=True, **PUSH_ALERT))
+
+    assert_that(client.post("/api/alerts/push", json=PUSH_ALERT, headers=TOKEN).status_code, equal_to(409))
+
+
+def test_alerts_without_their_notifier_are_unavailable(push_api):
+    client, _, _ = push_api
+
+    # Push only: no email to send.
+    assert_that(client.post("/api/alerts", json=NEW_ALERT).status_code, equal_to(503))
+    assert_that(client.post("/api/alerts/manage", json={"email": "user@example.com"}).status_code, equal_to(503))
+
+    # Email only: nothing to push to.
+    client.app.state.alerts = AlertService(AsyncMock(), "s", "http://test")
+    assert_that(client.post("/api/alerts/push", json=PUSH_ALERT, headers=TOKEN).status_code, equal_to(503))
+    assert_that(client.put("/api/alerts/push", json={"push_token": "tok-2"}, headers=TOKEN).status_code, equal_to(503))

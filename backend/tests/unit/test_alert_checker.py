@@ -20,6 +20,7 @@ from tarameteo import alert_text
 from tarameteo.alert_checker import AlertService
 from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.models import SQLModel
+from tarameteo.notifier import Unregistered
 from tarameteo.sensors import AggregateReading, WeatherReading
 
 
@@ -205,6 +206,19 @@ async def test_push_without_a_notifier_stays_untriggered(alert_store, notifier):
     await _check(alert_store, notifier)
 
     assert_that(alert_store.get("a1").triggered, equal_to(False))
+
+
+async def test_unregistered_install_loses_all_its_alerts(alert_store, notifier):
+    alert_store.create(_alert(email=None, push_token="tok-1"))
+    alert_store.create(_alert(id="a2", email=None, push_token="tok-1", field="humidity", condition=Condition.above, threshold=50.0))
+    alert_store.create(_alert(id="a3", email=None, push_token="tok-2", sensor="elsewhere"))
+    push = AsyncMock()
+    push.send.side_effect = Unregistered("gone")
+
+    await AlertService(notifier, "s", "http://localhost", push=push).check(_reading(), alert_store)
+
+    assert_that(alert_store.count_by_token("tok-1"), equal_to(0))
+    assert_that(alert_store.count_by_token("tok-2"), equal_to(1))
 
 
 async def test_retries_when_sending_fails(alert_store, notifier):

@@ -872,6 +872,200 @@
           }
         }
       }
+    },
+    "/api/alerts/push": {
+      "post": {
+        "summary": "Post Push Alert",
+        "description": "Start an alert on this install. Holding the token is the consent, so there's nothing to confirm.",
+        "operationId": "post_push_alert_api_alerts_push_post",
+        "parameters": [
+          {
+            "name": "X-Push-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "title": "X-Push-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertRule"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Post Push Alert Api Alerts Push Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Get Push Alerts",
+        "description": "This install's alerts.",
+        "operationId": "get_push_alerts_api_alerts_push_get",
+        "parameters": [
+          {
+            "name": "X-Push-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "title": "X-Push-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PushAlert"
+                  },
+                  "title": "Response Get Push Alerts Api Alerts Push Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Put Push Token",
+        "description": "Move this install's alerts to its new token, which FCM hands out whenever it feels like it.",
+        "operationId": "put_push_token_api_alerts_push_put",
+        "parameters": [
+          {
+            "name": "X-Push-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "title": "X-Push-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushTokenUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Put Push Token Api Alerts Push Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/push/{alert_id}": {
+      "delete": {
+        "summary": "Delete Push Alert",
+        "description": "Stop one of this install's alerts; another install's token can't reach it.",
+        "operationId": "delete_push_alert_api_alerts_push__alert_id__delete",
+        "parameters": [
+          {
+            "name": "alert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Alert Id"
+            }
+          },
+          {
+            "name": "X-Push-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "title": "X-Push-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1041,11 +1235,58 @@
       },
       "AlertCreate": {
         "properties": {
+          "sensor": {
+            "type": "string",
+            "title": "Sensor"
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "temperature",
+              "humidity",
+              "pressure",
+              "rain",
+              "snow",
+              "offline"
+            ],
+            "title": "Field"
+          },
+          "condition": {
+            "$ref": "#/components/schemas/Condition"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "description": "For \"offline\", hours without a reading; the condition must be \"above\""
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "fr"
+            ],
+            "title": "Language",
+            "default": "en"
+          },
           "email": {
             "type": "string",
             "format": "email",
             "title": "Email"
-          },
+          }
+        },
+        "type": "object",
+        "required": [
+          "sensor",
+          "field",
+          "condition",
+          "threshold",
+          "email"
+        ],
+        "title": "AlertCreate",
+        "description": "Payload for creating a new alert to email."
+      },
+      "AlertRule": {
+        "properties": {
           "sensor": {
             "type": "string",
             "title": "Sensor"
@@ -1082,14 +1323,13 @@
         },
         "type": "object",
         "required": [
-          "email",
           "sensor",
           "field",
           "condition",
           "threshold"
         ],
-        "title": "AlertCreate",
-        "description": "Payload for creating a new alert."
+        "title": "AlertRule",
+        "description": "What to watch for, without who to tell."
       },
       "CertificateMaterial": {
         "properties": {
@@ -1273,6 +1513,77 @@
         ],
         "title": "ManageRequest",
         "description": "Payload for emailing a link to manage an address's alerts."
+      },
+      "PushAlert": {
+        "properties": {
+          "sensor": {
+            "type": "string",
+            "title": "Sensor"
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "temperature",
+              "humidity",
+              "pressure",
+              "rain",
+              "snow",
+              "offline"
+            ],
+            "title": "Field"
+          },
+          "condition": {
+            "$ref": "#/components/schemas/Condition"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "description": "For \"offline\", hours without a reading; the condition must be \"above\""
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "fr"
+            ],
+            "title": "Language",
+            "default": "en"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "triggered": {
+            "type": "boolean",
+            "title": "Triggered",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "sensor",
+          "field",
+          "condition",
+          "threshold",
+          "id"
+        ],
+        "title": "PushAlert",
+        "description": "An alert as the app that holds its token sees it: no recipient, it knows its own."
+      },
+      "PushTokenUpdate": {
+        "properties": {
+          "push_token": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Push Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "push_token"
+        ],
+        "title": "PushTokenUpdate",
+        "description": "The install's new token, once FCM replaces the one in the X-Push-Token header."
       },
       "SensorEntry": {
         "properties": {

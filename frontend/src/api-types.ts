@@ -214,6 +214,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/alerts/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Push Alerts
+         * @description This install's alerts.
+         */
+        get: operations["get_push_alerts_api_alerts_push_get"];
+        /**
+         * Put Push Token
+         * @description Move this install's alerts to its new token, which FCM hands out whenever it feels like it.
+         */
+        put: operations["put_push_token_api_alerts_push_put"];
+        /**
+         * Post Push Alert
+         * @description Start an alert on this install. Holding the token is the consent, so there's nothing to confirm.
+         */
+        post: operations["post_push_alert_api_alerts_push_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts/push/{alert_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Push Alert
+         * @description Stop one of this install's alerts; another install's token can't reach it.
+         */
+        delete: operations["delete_push_alert_api_alerts_push__alert_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -259,14 +307,39 @@ export interface components {
         };
         /**
          * AlertCreate
-         * @description Payload for creating a new alert.
+         * @description Payload for creating a new alert to email.
          */
         AlertCreate: {
+            /** Sensor */
+            sensor: string;
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "temperature" | "humidity" | "pressure" | "rain" | "snow" | "offline";
+            condition: components["schemas"]["Condition"];
+            /**
+             * Threshold
+             * @description For "offline", hours without a reading; the condition must be "above"
+             */
+            threshold: number;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "fr";
             /**
              * Email
              * Format: email
              */
             email: string;
+        };
+        /**
+         * AlertRule
+         * @description What to watch for, without who to tell.
+         */
+        AlertRule: {
             /** Sensor */
             sensor: string;
             /**
@@ -381,6 +454,46 @@ export interface components {
              * @enum {string}
              */
             language: "en" | "fr";
+        };
+        /**
+         * PushAlert
+         * @description An alert as the app that holds its token sees it: no recipient, it knows its own.
+         */
+        PushAlert: {
+            /** Sensor */
+            sensor: string;
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "temperature" | "humidity" | "pressure" | "rain" | "snow" | "offline";
+            condition: components["schemas"]["Condition"];
+            /**
+             * Threshold
+             * @description For "offline", hours without a reading; the condition must be "above"
+             */
+            threshold: number;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "fr";
+            /** Id */
+            id: string;
+            /**
+             * Triggered
+             * @default false
+             */
+            triggered: boolean;
+        };
+        /**
+         * PushTokenUpdate
+         * @description The install's new token, once FCM replaces the one in the X-Push-Token header.
+         */
+        PushTokenUpdate: {
+            /** Push Token */
+            push_token: string;
         };
         /** SensorEntry */
         SensorEntry: {
@@ -1032,6 +1145,142 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_push_alerts_api_alerts_push_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Push-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushAlert"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_push_token_api_alerts_push_put: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Push-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushTokenUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_push_alert_api_alerts_push_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Push-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRule"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_push_alert_api_alerts_push__alert_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Push-Token": string;
+            };
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

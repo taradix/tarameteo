@@ -52,10 +52,9 @@ class Alert(BaseModel):
         return self
 
 
-class AlertCreate(BaseModel):
-    """Payload for creating a new alert."""
+class AlertRule(BaseModel):
+    """What to watch for, without who to tell."""
 
-    email: EmailStr
     sensor: str
     field: AlertField
     condition: Condition
@@ -63,10 +62,29 @@ class AlertCreate(BaseModel):
     language: Language = "en"
 
     @model_validator(mode="after")
-    def _check_offline(self) -> "AlertCreate":
+    def _check_offline(self) -> "AlertRule":
         if self.field == "offline" and (self.condition != Condition.above or not 1 <= self.threshold <= OFFLINE_MAX_HOURS):
             raise ValueError(f'An offline alert needs condition "above" and 1 to {OFFLINE_MAX_HOURS} hours')
         return self
+
+
+class AlertCreate(AlertRule):
+    """Payload for creating a new alert to email."""
+
+    email: EmailStr
+
+
+class PushAlert(AlertRule):
+    """An alert as the app that holds its token sees it: no recipient, it knows its own."""
+
+    id: str
+    triggered: bool = False
+
+
+class PushTokenUpdate(BaseModel):
+    """The install's new token, once FCM replaces the one in the X-Push-Token header."""
+
+    push_token: str = Field(max_length=512)
 
 
 class ManageRequest(BaseModel):
@@ -157,6 +175,12 @@ class AlertStore:
             select(AlertRow).where(AlertRow.push_token == token).order_by(AlertRow.sensor, AlertRow.created_at)
         ).scalars().all()
         return [self._row_to_alert(row) for row in rows]
+
+    def set_token(self, old: str, new: str) -> int:
+        """Point the token's alerts at the new token FCM gave the install."""
+        result = self.db.execute(update(AlertRow).where(AlertRow.push_token == old).values(push_token=new))
+        self.db.commit()
+        return result.rowcount
 
     def delete_by_token(self, token: str, alert_id: str | None = None) -> int:
         """Delete one of the token's alerts, or all of them (the install is gone)."""
