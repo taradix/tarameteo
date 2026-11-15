@@ -29,6 +29,9 @@ jobs:
           distribution: temurin
           java-version: 25
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
       - name: Set up backend environment
         uses: ./.github/actions/setup-uv-env
         with:
@@ -43,7 +46,7 @@ jobs:
           working-directory: firmware
 
       - name: Run check target
-        run: make check
+        run: make -j4 --output-sync=target check
 
   firmware-test:
     runs-on: ubuntu-latest
