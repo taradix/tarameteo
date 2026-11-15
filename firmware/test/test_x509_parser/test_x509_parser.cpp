@@ -158,29 +158,26 @@ void test_x509_validate_keypair_matching() {
     TEST_ASSERT_TRUE(result);
 }
 
-void test_x509_validate_keypair_mismatched() {
+void test_x509_validate_keypair_accepts_valid_pem_formats() {
+    // Unit tests without mbedTLS can only verify PEM format validation,
+    // not cryptographic keypair matching. Cryptographic validation is
+    // tested in test_integration/test_x509_crypto.cpp on real hardware.
     bool result = X509Parser::validateKeyPair(TEST_CERT_PEM, DIFFERENT_KEY_PEM);
 
-    // In unit tests, this does basic format checking
-    // In production with mbedTLS, it would detect the mismatch
-    // For now, both are valid PEM format so it passes in test mode
-#ifdef UNIT_TEST
-    TEST_ASSERT_TRUE(result);  // Mock accepts valid formats
-#else
-    TEST_ASSERT_FALSE(result);  // Real mbedTLS rejects mismatch
-#endif
+    // Both are valid PEM formats → should pass format check
+    TEST_ASSERT_TRUE(result);
 }
 
-void test_x509_validate_keypair_invalid_cert() {
+void test_x509_validate_keypair_rejects_invalid_cert() {
     bool result = X509Parser::validateKeyPair(INVALID_CERT, TEST_KEY_PEM);
 
-    TEST_ASSERT_FALSE(result);
+    TEST_ASSERT_FALSE(result);  // Invalid PEM format rejected
 }
 
-void test_x509_validate_keypair_invalid_key() {
+void test_x509_validate_keypair_rejects_invalid_key() {
     bool result = X509Parser::validateKeyPair(TEST_CERT_PEM, INVALID_KEY);
 
-    TEST_ASSERT_FALSE(result);
+    TEST_ASSERT_FALSE(result);  // Invalid PEM format rejected
 }
 
 void test_x509_validate_keypair_null_cert() {
@@ -269,9 +266,9 @@ int main(int argc, char **argv) {
 
     // Key Pair Validation
     RUN_TEST(test_x509_validate_keypair_matching);
-    RUN_TEST(test_x509_validate_keypair_mismatched);
-    RUN_TEST(test_x509_validate_keypair_invalid_cert);
-    RUN_TEST(test_x509_validate_keypair_invalid_key);
+    RUN_TEST(test_x509_validate_keypair_accepts_valid_pem_formats);
+    RUN_TEST(test_x509_validate_keypair_rejects_invalid_cert);
+    RUN_TEST(test_x509_validate_keypair_rejects_invalid_key);
     RUN_TEST(test_x509_validate_keypair_null_cert);
     RUN_TEST(test_x509_validate_keypair_null_key);
 
