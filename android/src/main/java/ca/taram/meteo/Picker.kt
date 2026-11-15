@@ -93,7 +93,7 @@ private const val NEARBY = 0.9
 private const val FOCUS = 0.2
 // A network fix can hang indefinitely. Nothing on screen waits for it, so this bound is only a last resort.
 private const val FIX = 15_000L
-// First paint, before any fix: where the sensors are. ponytail: a constant, until the last viewport is remembered.
+// First paint, before any fix: where the sensors are. NOTE: a constant, until the last viewport is remembered.
 private val HOME = CameraPosition.fromLatLngZoom(LatLng(46.8, -71.2), 6f)
 
 // The server takes west > east as crossing the antimeridian. Three decimals (about 100 m) keep requests steady.
@@ -112,7 +112,7 @@ private fun viewportOf(camera: CameraPositionState): Viewport? {
     val bounds = camera.projection?.visibleRegion?.latLngBounds ?: return null
     val (south, west) = bounds.southwest.let { it.latitude to it.longitude }
     val (north, east) = bounds.northeast.let { it.latitude to it.longitude }
-    // ponytail: zoomed out this far the world repeats across the screen and the bounds can't say so; ask for all of it.
+    // NOTE: zoomed out this far the world repeats across the screen and the bounds can't say so; ask for all of it.
     if (camera.position.zoom < 1) return Viewport(bboxOf(-180.0, south, 180.0, north), 0)
     return Viewport(bboxOf(west, south, east, north), zoomOf(west, east))
 }
@@ -125,7 +125,7 @@ private fun round(x: Double) = Math.round(x * 100) / 100.0
 // Two decimals (about 1 km) is enough to sort sensors, and all the server learns about the phone.
 private fun at(location: Location) = LatLng(round(location.latitude), round(location.longitude))
 
-// ponytail: network provider only; GPS-only phones fall back to the world by name.
+// NOTE: network provider only; GPS-only phones fall back to the world by name.
 private fun locator(context: Context) = context.getSystemService(LocationManager::class.java)
     ?.takeIf { it.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }
 
@@ -247,7 +247,7 @@ fun Picker(model: PickerModel = viewModel()) {
                         key(at) {
                             val label = pluralStringResource(R.plurals.sensors_cluster, cluster.count, cluster.count)
                             // Cells are a quarter of the view, so zooming in twice splits the cluster.
-                            // ponytail: sensors sharing a spot stay one cluster at any zoom; spread them out if that happens.
+                            // NOTE: sensors sharing a spot stay one cluster at any zoom; spread them out if that happens.
                             MarkerComposable(
                                 cluster.count,
                                 state = rememberUpdatedMarkerState(at),

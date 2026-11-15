@@ -15,7 +15,7 @@ check:
 test:
 	@$(GRADLE) testDebugUnitTest
 
-# ponytail: no coverage gate yet; add Kover when one is wanted.
+# NOTE: no coverage gate yet; add Kover when one is wanted.
 .PHONY: coverage
 coverage: test
 

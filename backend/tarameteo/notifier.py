@@ -77,7 +77,7 @@ class FcmNotifier:
 
     project: str
     client_email: str
-    # ponytail: signs the service-account JWT here; google-auth is a dependency (and a sync one) for 15 lines.
+    # NOTE: signs the service-account JWT here; google-auth is a dependency (and a sync one) for 15 lines.
     key: rsa.RSAPrivateKey = field(repr=False)
     client: httpx.AsyncClient
     # The access token and when it stops being usable; refreshed on demand.

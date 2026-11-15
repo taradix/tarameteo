@@ -13,7 +13,7 @@ import java.io.File
 
 // backend/openapi.json is the contract: every field the app reads must exist there with the same nullability,
 // and be optional here exactly when the API may leave it out.
-// ponytail: checks names and nullability, not number vs string; add types if a mismatch ever slips through.
+// NOTE: checks names and nullability, not number vs string; add types if a mismatch ever slips through.
 class ApiContractTest {
     private val schemas = Json.parseToJsonElement(File(System.getProperty("openapi")!!).readText())
         .jsonObject.getValue("components").jsonObject.getValue("schemas").jsonObject

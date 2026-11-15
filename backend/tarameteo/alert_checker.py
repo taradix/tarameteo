@@ -152,7 +152,7 @@ async def run_offline_checks(alerts: AlertService, ts_reader: TSReader) -> None:
     """Check offline alerts every few minutes, until cancelled."""
     while True:
         try:
-            # ponytail: reads every sensor's last point each time; query only alerted sensors if that gets slow.
+            # NOTE: reads every sensor's last point each time; query only alerted sensors if that gets slow.
             seen = await asyncio.to_thread(last_seen, ts_reader, datetime.now(UTC) - timedelta(hours=OFFLINE_MAX_HOURS))
             db = SessionLocal()
             try:

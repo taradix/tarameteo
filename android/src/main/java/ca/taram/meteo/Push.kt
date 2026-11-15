@@ -35,12 +35,12 @@ class Push(context: Context) {
         return current
     }
 
-    // ponytail: FCM 25 deprecates tokens in favour of installation IDs (register()/onRegistered, and "fid"
+    // NOTE: FCM 25 deprecates tokens in favour of installation IDs (register()/onRegistered, and "fid"
     // instead of "token" in the send payload), which needs a manifest opt-in; tokens are still what the FCM
     // guide documents, so stay on them until the FID path is the default. Same for Messaging below.
     @Suppress("DEPRECATION")
     private suspend fun fetch(): String = suspendCancellableCoroutine { continuation ->
-        // ponytail: hand-rolled await; kotlinx-coroutines-play-services is a dependency for these three lines.
+        // NOTE: hand-rolled await; kotlinx-coroutines-play-services is a dependency for these three lines.
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { continuation.resume(it) }
             .addOnFailureListener { continuation.resumeWithException(it) }
@@ -54,7 +54,7 @@ lateinit var push: Push
 class Messaging : FirebaseMessagingService() {
     @Suppress("OVERRIDE_DEPRECATION")
     override fun onNewToken(token: String) {
-        // ponytail: one attempt, no WorkManager; Push.token() retries it when the app next needs the token.
+        // NOTE: one attempt, no WorkManager; Push.token() retries it when the app next needs the token.
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { push.token() }.onFailure { Log.w("Push", "Token move failed", it) }
         }

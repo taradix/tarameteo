@@ -185,7 +185,7 @@ private fun NewAlert(sensors: List<String>, busy: Boolean, onCreate: (AlertRule)
             Modifier.fillMaxWidth().padding(top = 8.dp),
             label = { Text(stringResource(if (offline) R.string.alerts_hours else R.string.alerts_threshold)) },
             suffix = { Text(UNITS[field].orEmpty()) },
-            // ponytail: the phone keypad is the only one with a minus sign; Compose has no signed number type.
+            // NOTE: the phone keypad is the only one with a minus sign; Compose has no signed number type.
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             singleLine = true,
         )

@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ponytail: no up arrow, the system back gesture covers it; add one with material-icons if wanted.
+// NOTE: no up arrow, the system back gesture covers it; add one with material-icons if wanted.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Screens() {

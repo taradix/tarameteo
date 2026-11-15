@@ -116,7 +116,7 @@ class SensorService:
 
     ts_reader: TSReader
 
-    # ponytail: scans every sensor's last point per request; a sensor directory table replaces
+    # NOTE: scans every sensor's last point per request; a sensor directory table replaces
     # _all_sensors past a few thousand sensors, behind the same filters.
     def list_sensors(
         self,
@@ -149,7 +149,7 @@ class SensorService:
 
     def cluster_sensors(self, bbox: BBox, zoom: int) -> ClusterList:
         """Group the sensors in bbox into grid cells sized for the map zoom level."""
-        # ponytail: degree grid, not Mercator, so cells get taller toward the poles; fine for picking.
+        # NOTE: degree grid, not Mercator, so cells get taller toward the poles; fine for picking.
         cell = 360 / 2**zoom / CELLS_PER_TILE
         cells: dict[tuple[int, int], list[SensorEntry]] = {}
         for s in self._all_sensors():

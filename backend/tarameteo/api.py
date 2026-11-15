@@ -296,7 +296,7 @@ PushTokenDep = Annotated[str, Header(alias="X-Push-Token", max_length=512)]
 
 MAX_ALERTS = 20
 # Confirm emails an address can be sent per day, so the form can't flood a stranger's inbox.
-# ponytail: no per-IP limit; add one (at the proxy) if someone sprays many addresses.
+# NOTE: no per-IP limit; add one (at the proxy) if someone sprays many addresses.
 MAX_PENDING = 3
 
 
@@ -399,7 +399,7 @@ async def post_alert_manage(
 ) -> dict[str, str]:
     """Email a link to see and stop the address's alerts; the answer is the same whether or not it has any."""
     email, now = body.email.lower(), datetime.now(UTC)
-    # ponytail: in-memory and per process, so a restart forgets it; fine for one API process.
+    # NOTE: in-memory and per process, so a restart forgets it; fine for one API process.
     sent = request.app.state.manage_sent
     if alert_store.count_by_email(email) and now - sent.get(email, datetime.min.replace(tzinfo=UTC)) >= MANAGE_EVERY:
         sent[email] = now
