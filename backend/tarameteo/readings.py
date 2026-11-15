@@ -6,7 +6,7 @@ from datetime import (
     datetime,
 )
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from tarameteo.ts import TSPoint
 
@@ -34,16 +34,26 @@ class WeatherReading(BaseModel):
     snow: float | None = Field(None, description="Snowfall in mm")
     rssi: int | None = Field(None, description="WiFi RSSI in dBm")
     retry_count: int | None = Field(None, description="Number of retry attempts")
+    server_time: datetime | None = Field(
+        None,
+        exclude=True,
+        description="Fallback time when firmware timestamp is invalid (default: now)",
+    )
 
-    @field_validator("timestamp", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def coerce_timestamp(cls, v: object) -> datetime:
-        if isinstance(v, int):
-            v = datetime.fromtimestamp(v, tz=UTC)
-        if isinstance(v, datetime) and v < _MIN_TIMESTAMP:
-            logger.warning("Firmware sent invalid timestamp %s (NTP sync likely failed); using server time", v)
-            return datetime.now(UTC)
-        return v  # type: ignore[return-value]
+    def coerce_timestamp(cls, data: dict) -> dict:
+        """Coerce integer timestamps and fall back to server time for invalid timestamps."""
+        timestamp = data.get("timestamp")
+        if isinstance(timestamp, int):
+            timestamp = datetime.fromtimestamp(timestamp, tz=UTC)
+        if isinstance(timestamp, datetime) and timestamp < _MIN_TIMESTAMP:
+            server_time = data.get("server_time") or datetime.now(UTC)
+            logger.warning("Firmware sent invalid timestamp %s (NTP sync likely failed); using server time", timestamp)
+            data["timestamp"] = server_time
+        elif isinstance(timestamp, datetime):
+            data["timestamp"] = timestamp
+        return data
 
 
 class AggregateReading(BaseModel):

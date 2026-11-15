@@ -100,15 +100,18 @@ async def test_weather_handler_rejects_wrong_domain(memory_store, memory_writer,
 
 async def test_weather_handler_falls_back_to_server_time_on_ntp_failure(memory_store, memory_writer, memory_queue):
     # Firmware sends timestamp=0 when NTP sync has not occurred
-    before = datetime.now(UTC)
-    await weather_handler(make_message(timestamp=0), ts_writer=memory_writer, queue=memory_queue)
-    after = datetime.now(UTC)
+    fixed_time = datetime(2026, 4, 24, 12, 0, 0, tzinfo=UTC)
+    await weather_handler(
+        make_message(timestamp=0, server_time=fixed_time),
+        ts_writer=memory_writer,
+        queue=memory_queue,
+    )
 
     assert_that(memory_store.points, contains_exactly(
         has_properties(measurement="weather"),
     ))
     stored_ts = memory_store.points[0].timestamp
-    assert before <= stored_ts <= after
+    assert stored_ts == fixed_time
 
 
 async def test_weather_handler_publishes_to_sensor_channel(memory_writer, memory_queue, unique):
