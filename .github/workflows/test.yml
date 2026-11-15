@@ -36,13 +36,13 @@ jobs:
         uses: ./.github/actions/setup-uv-env
         with:
           extras: check
-          python-version: "3.14"
+          python-version: "3.15"
           working-directory: backend
 
       - name: Set up firmware environment
         uses: ./.github/actions/setup-uv-env
         with:
-          python-version: "3.14"
+          python-version: "3.15"
           working-directory: firmware
 
       - name: Run check target
@@ -58,7 +58,7 @@ jobs:
       - name: Set up Python environment
         uses: ./.github/actions/setup-uv-env
         with:
-          python-version: "3.14"
+          python-version: "3.15"
           working-directory: firmware
 
       - name: Create config.h from example
@@ -97,7 +97,7 @@ jobs:
       - name: Set up Python environment
         uses: ./.github/actions/setup-uv-env
         with:
-          python-version: "3.14"
+          python-version: "3.15"
           working-directory: firmware
 
       - name: Download coverage data
@@ -120,7 +120,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.12', '3.13', '3.14']
+        python-version: ['3.13', '3.14', '3.15']
       fail-fast: false
     steps:
       - name: Check out
@@ -159,7 +159,7 @@ jobs:
         uses: ./.github/actions/setup-uv-env
         with:
           extras: test
-          python-version: "3.14"
+          python-version: "3.15"
           working-directory: backend
 
       - name: Download coverage data
