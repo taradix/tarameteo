@@ -17,7 +17,7 @@ from tarameteo.mqtt import (
     MQTTConsumer,
     MQTTMessage,
 )
-from tarameteo.sensors import WeatherReading
+from tarameteo.readings import WeatherReading
 from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)

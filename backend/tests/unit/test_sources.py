@@ -8,7 +8,7 @@ import httpx
 import pytest
 from hamcrest import assert_that, contains_exactly, equal_to, has_properties
 
-from tarameteo.sensors import AggregateReading
+from tarameteo.readings import AggregateReading
 from tarameteo.source import Source
 from tarameteo.sources import (
     _run_source_backfill,

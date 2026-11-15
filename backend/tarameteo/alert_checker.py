@@ -10,7 +10,7 @@ from tarameteo import alert_text
 from tarameteo.alerts import OFFLINE_MAX_HOURS, Alert, AlertStore, Condition
 from tarameteo.db import SessionLocal
 from tarameteo.notifier import Notifier, Unregistered
-from tarameteo.sensors import AGGREGATE_MEASUREMENT, MEASUREMENT, SENSOR_TAG, AggregateReading, WeatherReading
+from tarameteo.readings import AGGREGATE_MEASUREMENT, MEASUREMENT, SENSOR_TAG, AggregateReading, Reading
 from tarameteo.tokens import sign_token, verify_token
 from tarameteo.ts import TSReader
 
@@ -30,7 +30,7 @@ def _crossed(value: float, alert: Alert) -> bool:
     return value > alert.threshold if alert.condition == Condition.above else value < alert.threshold
 
 
-def _value(reading: WeatherReading | AggregateReading, alert: Alert) -> float | None:
+def _value(reading: Reading, alert: Alert) -> float | None:
     # A daily aggregate crosses "above" with its maximum and "below" with its minimum; rain and snow are totals.
     if isinstance(reading, AggregateReading) and alert.field not in ("rain", "snow"):
         return getattr(reading, f"{alert.field}_{'max' if alert.condition == Condition.above else 'min'}")
@@ -101,7 +101,7 @@ class AlertService:
         alert_store.set_triggered(alert.id, key in ("alert", "offline"), datetime.now(UTC))
         logger.info(f"Alert {alert.id} sent {key} to {who}")
 
-    async def check(self, reading: WeatherReading | AggregateReading, alert_store: AlertStore) -> None:
+    async def check(self, reading: Reading, alert_store: AlertStore) -> None:
         """Email once when a value crosses its threshold, and once when it's back to normal."""
         for alert in alert_store.list_by_sensor(reading.sensor):
             if alert.field == "offline":
@@ -126,7 +126,7 @@ class AlertService:
             if seen is None or hours > alert.threshold:
                 await self._notify(alert, "offline", round(hours), alert_store)
 
-    async def check_reading(self, reading: WeatherReading | AggregateReading) -> None:
+    async def check_reading(self, reading: Reading) -> None:
         """Check a reading against its sensor's alerts in a session of its own."""
         db = SessionLocal()
         try:

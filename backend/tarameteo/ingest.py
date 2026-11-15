@@ -7,31 +7,10 @@ from collections.abc import Sequence
 from taraqueue import Queue
 
 from tarameteo.alert_checker import AlertService
-from tarameteo.sensors import (
-    AGGREGATE_MEASUREMENT,
-    MEASUREMENT,
-    SENSOR_TAG,
-    AggregateReading,
-    WeatherReading,
-)
-from tarameteo.ts import TSPoint, TSWriter
+from tarameteo.readings import Reading, to_point
+from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)
-
-Reading = WeatherReading | AggregateReading
-
-
-def to_point(reading: Reading) -> TSPoint:
-    """Map a reading to its Influx point: location as tags, measurements as fields."""
-    tags = {SENSOR_TAG: reading.sensor}
-    if reading.latitude is not None and reading.longitude is not None:
-        tags |= {"latitude": f"{reading.latitude:.6f}", "longitude": f"{reading.longitude:.6f}"}
-    return TSPoint(
-        measurement=MEASUREMENT if isinstance(reading, WeatherReading) else AGGREGATE_MEASUREMENT,
-        fields=reading.model_dump(exclude={"sensor", "timestamp", "latitude", "longitude"}, exclude_none=True),
-        tags=tags,
-        timestamp=reading.timestamp,
-    )
 
 
 def write_readings(ts_writer: TSWriter, readings: Sequence[Reading]) -> None:

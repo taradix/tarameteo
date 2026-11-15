@@ -34,14 +34,13 @@ from tarameteo.ca_client import (
 from tarameteo.consumer import run as run_consumer
 from tarameteo.db import SessionLocal
 from tarameteo.notifier import FcmNotifier, SmtpNotifier
+from tarameteo.readings import AggregateReading, WeatherReading
 from tarameteo.sensors import (
-    AggregateReading,
     BBox,
     ClusterList,
     SensorInfo,
     SensorList,
     SensorService,
-    WeatherReading,
 )
 from tarameteo.sources import run_sync
 from tarameteo.ts import (

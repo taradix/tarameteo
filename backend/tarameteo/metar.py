@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-from tarameteo.sensors import WeatherReading
+from tarameteo.readings import WeatherReading
 from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 

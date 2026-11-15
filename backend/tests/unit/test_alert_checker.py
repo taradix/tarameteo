@@ -21,7 +21,7 @@ from tarameteo.alert_checker import AlertService
 from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.models import SQLModel
 from tarameteo.notifier import Unregistered
-from tarameteo.sensors import AggregateReading, WeatherReading
+from tarameteo.readings import AggregateReading, WeatherReading
 
 
 @pytest.fixture

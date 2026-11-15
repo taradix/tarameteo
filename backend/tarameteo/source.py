@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from tarameteo.sensors import AggregateReading, WeatherReading
+from tarameteo.readings import Reading
 from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class Source(ABC):
         return type(self).__name__
 
     @abstractmethod
-    async def run_once(self, client: httpx.AsyncClient) -> list[WeatherReading | AggregateReading]:
+    async def run_once(self, client: httpx.AsyncClient) -> list[Reading]:
         """Fetch the current data for all sensors, oldest first per sensor."""
 
     @property

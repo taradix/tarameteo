@@ -9,7 +9,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from tarameteo.ingest import write_readings
-from tarameteo.sensors import AggregateReading
+from tarameteo.readings import AggregateReading
 from tarameteo.source import Source
 from tarameteo.ts import TSWriter
 
