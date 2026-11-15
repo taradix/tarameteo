@@ -5,6 +5,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -41,6 +42,14 @@ class ApiTest {
     }
 
     private val api = Api("http://127.0.0.1:${server.localPort}")
+
+    @Before
+    fun setUp() {
+        status = "200 OK"
+        body = "[]"
+        sent = ""
+        requests.clear()
+    }
 
     @After
     fun stop() = server.close()
