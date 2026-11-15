@@ -74,7 +74,7 @@ async def test_weather_handler_stores_lat_lon_as_tags(memory_store, memory_write
     )
 
     tags = memory_store.points[0].tags
-    assert_that(tags, has_entries(latitude="45.504000", longitude="-73.617000"))
+    assert_that(tags, has_entries(latitude="45.5040", longitude="-73.6170"))
 
 
 async def test_weather_handler_uses_firmware_timestamp(memory_store, memory_writer, memory_queue):

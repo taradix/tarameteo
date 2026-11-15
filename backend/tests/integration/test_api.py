@@ -51,7 +51,7 @@ def weather_points(influxdb_writer, unique):
                 "rssi": -70 - i,
                 "retry_count": i,
             },
-            tags={"device_id": sensor, "latitude": "45.504000", "longitude": "-73.617000"},
+            tags={"device_id": sensor, "latitude": "45.5040", "longitude": "-73.6170"},
             timestamp=now - timedelta(minutes=(5 - i)),
         )
         for i in range(5)

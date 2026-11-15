@@ -86,7 +86,7 @@ async def test_run_source_once_stores_all_and_publishes_latest(memory_store, mem
         await _run_source_once(_TwoDaySource(), client, memory_writer, q)
         assert_that(AggregateReading.model_validate_json(await q.receive(1)).rain, equal_to(2.0))
     assert_that(memory_store.points, contains_exactly(
-        has_properties(measurement="weather_aggregate", tags=equal_to({"device_id": "station", "latitude": "45.500000", "longitude": "-73.600000"}),
+        has_properties(measurement="weather_aggregate", tags=equal_to({"device_id": "station", "latitude": "45.5000", "longitude": "-73.6000"}),
             fields={"rain": 1.0}),
         has_properties(fields={"rain": 2.0}),
     ))

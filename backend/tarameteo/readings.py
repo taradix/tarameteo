@@ -6,7 +6,7 @@ from datetime import (
     datetime,
 )
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from tarameteo.ts import TSPoint
 
@@ -79,11 +79,18 @@ class AggregateReading(BaseModel):
 Reading = WeatherReading | AggregateReading
 
 
+def location_tags(latitude: float, longitude: float) -> dict[str, str]:
+    """Location tags at 4 decimals (about 11 m), so a position that wanders a little stays one series."""
+    # NOTE: lat/lon are tags, so each move is a new series; fine for provisioned locations,
+    # make them fields if a GPS source ever sends positions that wander more than this.
+    return {"latitude": f"{latitude:.4f}", "longitude": f"{longitude:.4f}"}
+
+
 def to_point(reading: Reading) -> TSPoint:
     """Map a reading to its Influx point: location as tags, measurements as fields."""
     tags = {SENSOR_TAG: reading.sensor}
     if reading.latitude is not None and reading.longitude is not None:
-        tags |= {"latitude": f"{reading.latitude:.6f}", "longitude": f"{reading.longitude:.6f}"}
+        tags |= location_tags(reading.latitude, reading.longitude)
     return TSPoint(
         measurement=MEASUREMENT if isinstance(reading, WeatherReading) else AGGREGATE_MEASUREMENT,
         fields=reading.model_dump(exclude={"sensor", "timestamp", "latitude", "longitude"}, exclude_none=True),
