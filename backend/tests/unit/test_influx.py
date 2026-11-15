@@ -1,9 +1,13 @@
 """Unit tests for the InfluxWriter and InfluxReader against fake Influx APIs."""
 
+from datetime import UTC, datetime
+
 from attrs import define, field
 from hamcrest import (
     assert_that,
     calling,
+    ends_with,
+    has_entries,
     has_length,
     none,
     raises,
@@ -77,3 +81,13 @@ def test_influx_reader_retries_transient_errors():
 
     assert_that(reader.latest("weather"), none())
     assert_that(api.calls, has_length(1))
+
+
+def test_influx_reader_limits_in_the_query():
+    """A limit should be applied by Influx, not after fetching the whole range."""
+    api = FakeApi()
+    reader = InfluxReader(query_api=api, org="org", bucket="bucket")
+
+    reader.query_points(measurement="weather", start=datetime(2026, 1, 1, tzinfo=UTC), limit=5)
+
+    assert_that(api.calls[0], has_entries(query=ends_with("|> limit(n: n)"), params=has_entries(n=5)))

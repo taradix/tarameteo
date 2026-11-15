@@ -78,6 +78,17 @@ def test_memory_reader_query_points_time_bounds(memory_writer, memory_reader):
     ))
 
 
+def test_memory_reader_query_points_limit(memory_writer, memory_reader):
+    """A limit keeps the oldest points."""
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    memory_writer.write_point("weather", {"v": 2.0}, timestamp=base + timedelta(hours=1))
+    memory_writer.write_point("weather", {"v": 1.0}, timestamp=base)
+
+    result = memory_reader.query_points(measurement="weather", start=base, limit=1)
+
+    assert_that(result, contains_exactly(has_properties(fields={"v": 1.0})))
+
+
 def test_memory_reader_query_points_filters_by_tags(memory_writer, memory_reader):
     """Only points matching every requested tag should be returned."""
     ts = datetime(2026, 1, 1, tzinfo=UTC)

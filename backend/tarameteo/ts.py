@@ -93,8 +93,9 @@ class TSReader(Protocol):
         fields: Sequence[str] | None = None,
         every: str | None = None,
         aggregate: Aggregate | None = None,
+        limit: int | None = None,
     ) -> list[TSPoint]:
-        """Return points in ascending timestamp order."""
+        """Return the first limit points (all when None) in ascending timestamp order."""
 
     def latest(
         self,
@@ -174,6 +175,7 @@ class InfluxReader(TSReader):
         fields: Sequence[str] | None = None,
         every: str | None = None,
         aggregate: Aggregate | None = None,
+        limit: int | None = None,
     ) -> list[TSPoint]:
         flux, params = self._build_points_query(
             measurement=measurement,
@@ -184,8 +186,12 @@ class InfluxReader(TSReader):
             every=every,
             aggregate=aggregate,
         )
+        if limit is not None:
+            # limit() runs per series and field, so it can keep more than limit points, never fewer.
+            params["n"] = limit
+            flux += "\n  |> limit(n: n)"
         records = self._query_records(flux, params=params)
-        return self._records_to_points(records)
+        return self._records_to_points(records)[:limit]
 
     def latest(
         self,
@@ -476,6 +482,7 @@ class MemoryReader(TSReader):
         fields: Sequence[str] | None = None,
         every: str | None = None,
         aggregate: Aggregate | None = None,
+        limit: int | None = None,
     ) -> list[TSPoint]:
         matched = [
             p for p in self.store.points
@@ -496,7 +503,7 @@ class MemoryReader(TSReader):
             ]
             matched = [p for p in matched if p.fields]
         matched.sort(key=lambda p: p.timestamp)
-        return matched
+        return matched[:limit]
 
     def latest(
         self,

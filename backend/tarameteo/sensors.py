@@ -200,9 +200,8 @@ class SensorService:
             start=start,
             stop=end,
             tags={SENSOR_TAG: name},
+            limit=limit,
         )
-        if limit is not None:
-            points = points[:limit]
         return [from_point(p) for p in points]
 
     def get_latest(self, name: str) -> WeatherReading | None:
@@ -262,9 +261,8 @@ class SensorService:
             start=start,
             stop=end,
             tags={SENSOR_TAG: name},
+            limit=limit,
         )
-        if limit is not None:
-            points = points[:limit]
         return [from_point(p) for p in points]
 
     def get_sensor(self, name: str) -> SensorInfo:

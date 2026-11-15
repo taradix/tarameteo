@@ -17,7 +17,6 @@ from fastapi import (
     Query,
     Request,
 )
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from taraqueue import Queue, QueueEmpty
 
@@ -109,21 +108,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     lifespan=lifespan,
 )
-
-origins = [
-    "http://172.22.1.5",
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:5173",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# No CORS: the web app reaches /api on its own origin, through nginx or the Vite dev proxy.
 
 
 def get_ts_reader(request: Request) -> TSReader:
