@@ -50,7 +50,6 @@ tarameteo-services = "tarameteo.testing.services"
 subject = "tarameteo.testing.unique:unique_subject"
 
 [project.scripts]
-tarameteo-consumer = "tarameteo.consumer:main"
 tarameteo-pki = "tarameteo.pki_cli:main"
 tarameteo-sources = "tarameteo.sources:main"
 

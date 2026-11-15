@@ -1,9 +1,11 @@
-"""MQTT consumer service."""
+"""MQTT consumer, run by the API as a background task.
+
+There is no separate consumer process: a second one would write every
+reading twice and need its own MQTT client id.
+"""
 
 import asyncio
 import logging
-import signal
-from argparse import ArgumentParser
 from contextlib import suppress
 
 from pydantic import ValidationError
@@ -11,20 +13,12 @@ from taraqueue import Queue
 
 from tarameteo.alert_checker import AlertService
 from tarameteo.ingest import ingest
-from tarameteo.logger import (
-    LoggerHandlerAction,
-    LoggerLevelAction,
-    setup_logger,
-)
 from tarameteo.mqtt import (
     MQTTConsumer,
     MQTTMessage,
 )
 from tarameteo.sensors import WeatherReading
-from tarameteo.ts import (
-    InfluxWriter,
-    TSWriter,
-)
+from tarameteo.ts import TSWriter
 
 logger = logging.getLogger(__name__)
 
@@ -114,42 +108,3 @@ async def run(
         logger.info("MQTT consumer stopping.")
     finally:
         consumer.disconnect()
-
-
-async def async_main(argv=None) -> None:
-    parser = ArgumentParser()
-    parser.add_argument(
-        "--client-id",
-        default="weather-consumer",
-        help="Client ID when connecting to MQTT Broker (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--topic-filter",
-        default="weather/+/event",
-        help="Topic filter to consume from (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--log-file",
-        action=LoggerHandlerAction,
-    )
-    parser.add_argument(
-        "--log-level",
-        action=LoggerLevelAction,
-    )
-    args = parser.parse_args(argv)
-
-    setup_logger(args.log_level, args.log_file)
-
-    ts_writer = InfluxWriter.from_env()
-    queue = Queue.from_url("memory://")
-    loop = asyncio.get_running_loop()
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, loop.stop)
-
-    logger.info("MQTT consumer started. Press Ctrl+C to stop.")
-    await run(ts_writer, queue, client_id=args.client_id, topic=args.topic_filter)
-
-
-def main(argv=None) -> None:
-    asyncio.run(async_main(argv))

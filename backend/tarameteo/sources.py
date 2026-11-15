@@ -1,10 +1,12 @@
-"""Periodic runner for all registered external weather sources."""
+"""Periodic runner for all registered external weather sources.
+
+The API runs the sync loop as a background task; the CLI only
+backfills, which is a one-off against Influx and writes nothing twice.
+"""
 
 import asyncio
 import logging
-import signal
 from argparse import ArgumentParser
-from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -84,7 +86,6 @@ async def _run_source_backfill(
 async def run_sync(
     ts_writer: InfluxWriter,
     queue: Queue,
-    names: list[str] | None = None,
     *,
     alerts: AlertService | None = None,
 ) -> None:
@@ -93,7 +94,7 @@ async def run_sync(
     Intended to be launched as an :mod:`asyncio` background task from the
     FastAPI lifespan.  Exits cleanly on :exc:`asyncio.CancelledError`.
     """
-    sources = _select_sources(names or [])
+    sources = list(_SOURCES.values())
     logger.info(
         "Sources runner started with %d source(s).",
         len(sources),
@@ -139,14 +140,6 @@ async def async_main(argv=None) -> None:
     parser.add_argument("--log-level", action=LoggerLevelAction)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    sync_parser = subparsers.add_parser("sync", help="Run the periodic sync loop")
-    sync_parser.add_argument(
-        "sources",
-        nargs="*",
-        metavar="SOURCE",
-        help="Sources to sync (default: all)",
-    )
-
     backfill_parser = subparsers.add_parser(
         "backfill", help="Backfill historical data for all sources"
     )
@@ -176,26 +169,13 @@ async def async_main(argv=None) -> None:
 
     ts_writer = InfluxWriter.from_env()
 
-    if args.command == "sync":
-        loop = asyncio.get_running_loop()
-        task = loop.create_task(run_sync(ts_writer, Queue.from_url("memory://"), args.sources))
-
-        def _stop() -> None:
-            task.cancel()
-
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, _stop)
-
-        with suppress(asyncio.CancelledError):
-            await task
+    from_year, from_month = (int(x) for x in args.from_date.split("-"))
+    if args.to_date:
+        to_year, to_month = (int(x) for x in args.to_date.split("-"))
     else:
-        from_year, from_month = (int(x) for x in args.from_date.split("-"))
-        if args.to_date:
-            to_year, to_month = (int(x) for x in args.to_date.split("-"))
-        else:
-            now = datetime.now(UTC)
-            to_year, to_month = now.year, now.month
-        await _run_backfill(ts_writer, from_year, from_month, to_year, to_month, args.sources)
+        now = datetime.now(UTC)
+        to_year, to_month = now.year, now.month
+    await _run_backfill(ts_writer, from_year, from_month, to_year, to_month, args.sources)
 
 
 def main(argv=None) -> None:
