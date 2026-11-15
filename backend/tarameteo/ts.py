@@ -2,14 +2,13 @@
 
 import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import (
     UTC,
     datetime,
     timedelta,
 )
-from itertools import count
 from time import sleep
 from typing import (
     Any,
@@ -22,13 +21,55 @@ from attrs import (
     field,
 )
 from influxdb_client import InfluxDBClient, Point
-from influxdb_client.client.flux_table import FluxRecord, FluxTable
+from influxdb_client.client.flux_table import FluxRecord
 from influxdb_client.client.query_api import QueryApi
 from influxdb_client.client.write_api import SYNCHRONOUS
+from influxdb_client.rest import ApiException
 from more_itertools import chunked
+from urllib3.exceptions import HTTPError
 
 Scalar = int | float | bool | str
 Aggregate = Literal["mean", "min", "max", "sum", "count", "last", "first"]
+
+
+def _transient(error: ApiException | HTTPError) -> bool:
+    """Whether trying again could help: Influx down or overloaded, not a bad token or request."""
+    if isinstance(error, ApiException):
+        # 0 is the client's own failure, such as a TLS error, which a retry won't fix.
+        return error.status == 429 or (error.status or 0) >= 500
+    return True
+
+
+def _with_retries[T](call: Callable[[], T], max_retries: int, backoff_seconds: float) -> T:
+    for attempt in range(max_retries):
+        try:
+            return call()
+        except (ApiException, HTTPError) as error:
+            if not _transient(error):
+                raise
+            sleep(backoff_seconds * 2**attempt)
+    return call()
+
+
+def _filter_lines(
+    params: dict[str, Any],
+    tags: Mapping[str, str] | None,
+    fields: Sequence[str] | None,
+) -> list[str]:
+    """Flux filters for the tags and fields, adding their values to params."""
+    lines = []
+    for k, v in (tags or {}).items():
+        p = f"tag_{k}"
+        params[p] = str(v)
+        lines.append(f'  |> filter(fn: (r) => r["{k}"] == {p})')
+    if fields:
+        ors = []
+        for i, f in enumerate(fields):
+            p = f"field_{i}"
+            params[p] = str(f)
+            ors.append(f"r._field == {p}")
+        lines.append(f'  |> filter(fn: (r) => {" or ".join(ors)})')
+    return lines
 
 
 @define(frozen=True)
@@ -76,18 +117,13 @@ class TSWriter(Protocol):
         measurement: str,
         fields: Mapping[str, Scalar],
         tags: Mapping[str, str] | None = None,
-        timestamp: datetime | None= None,
+        timestamp: datetime | None = None,
     ) -> None:
-        if fields is None:
-            fields = {}
-        if timestamp is None:
-            timestamp = datetime.now(UTC)
-
         point = TSPoint(
             measurement=measurement,
-            fields=fields,
-            tags=tags,
-            timestamp=timestamp,
+            fields=dict(fields),
+            tags=dict(tags or {}),
+            timestamp=timestamp or datetime.now(UTC),
         )
         self.write_points([point])
 
@@ -102,7 +138,6 @@ class InfluxReader(TSReader):
     query_api: QueryApi
     org: str
     bucket: str
-    batch_size: int = 5_000
     max_retries: int = 3
     retry_backoff_seconds: float = 0.5
 
@@ -193,19 +228,12 @@ class InfluxReader(TSReader):
         records = self._query_records(flux + "\n  |> last()", params=params)
         return self._records_to_points(records)
 
-    def _query_tables(self, flux: str, *, params: Mapping[str, Any]) -> list[FluxTable]:
-        for attempt in count():
-            try:
-                return self.query_api.query(query=flux, org=self.org, params=dict(params))
-            except Exception:
-                if attempt >= self.max_retries:
-                    raise
-
-                # exponential backoff: base * 2^attempt
-                sleep(self.retry_backoff_seconds * (2 ** attempt))
-
     def _query_records(self, flux: str, *, params: Mapping[str, Any]) -> list[FluxRecord]:
-        tables = self._query_tables(flux, params=params)
+        tables = _with_retries(
+            lambda: self.query_api.query(query=flux, org=self.org, params=dict(params)),
+            self.max_retries,
+            self.retry_backoff_seconds,
+        )
         return [r for t in tables for r in t.records]
 
     def _build_points_query(
@@ -231,24 +259,8 @@ class InfluxReader(TSReader):
             'from(bucket: bucket)',
             '  |> range(start: start' + (', stop: stop' if stop is not None else '') + ')',
             '  |> filter(fn: (r) => r._measurement == measurement)',
+            *_filter_lines(params, tags, fields),
         ]
-
-        if tags:
-            # param keys: tag_<name>
-            for k, v in tags.items():
-                p = f"tag_{k}"
-                params[p] = str(v)
-                flux_lines.append(f'  |> filter(fn: (r) => r["{k}"] == {p})')
-
-        if fields:
-            # Build an OR expression with parameters field_0, field_1...
-            ors = []
-            for i, f in enumerate(fields):
-                p = f"field_{i}"
-                params[p] = str(f)
-                ors.append(f'r._field == {p}')
-            expr = " or ".join(ors)
-            flux_lines.append(f'  |> filter(fn: (r) => {expr})')
 
         if every:
             # Aggregation is optional; if you specify every without aggregate, default to mean.
@@ -280,24 +292,10 @@ class InfluxReader(TSReader):
             'from(bucket: bucket)',
             '  |> range(start: -duration(v: lookback))',
             '  |> filter(fn: (r) => r._measurement == measurement)',
+            *_filter_lines(params, tags, fields),
+            # "last()" works per series; this returns one row per field.
+            '  |> last()',
         ]
-
-        if tags:
-            for k, v in tags.items():
-                p = f"tag_{k}"
-                params[p] = str(v)
-                flux_lines.append(f'  |> filter(fn: (r) => r["{k}"] == {p})')
-
-        if fields:
-            ors = []
-            for i, f in enumerate(fields):
-                p = f"field_{i}"
-                params[p] = str(f)
-                ors.append(f'r._field == {p}')
-            flux_lines.append(f'  |> filter(fn: (r) => {" or ".join(ors)})')
-
-        # "last()" works per series; this returns one row per field.
-        flux_lines.append('  |> last()')
 
         flux = "\n".join(flux_lines)
         return flux, params
@@ -407,12 +405,12 @@ class InfluxWriter(TSWriter):
         )
 
     def write_points(self, points: Sequence[TSPoint]) -> None:
-        influx_points = [self._to_influx_point(p) for p in points]
-        self.write_influx_points(influx_points)
-
-    def write_influx_points(self, points: Sequence[Point]) -> None:
-        for chunk in chunked(points, self.batch_size):
-            self._write_with_retries(chunk)
+        for chunk in chunked(map(self._to_influx_point, points), self.batch_size):
+            _with_retries(
+                lambda chunk=chunk: self.write_api.write(bucket=self.bucket, org=self.org, record=chunk),
+                self.max_retries,
+                self.retry_backoff_seconds,
+            )
 
     def _to_influx_point(self, p: TSPoint) -> Point:
         ip = Point(p.measurement)
@@ -431,17 +429,6 @@ class InfluxWriter(TSWriter):
             ip.time(p.timestamp)
 
         return ip
-
-    def _write_with_retries(self, batch: Sequence[Point]) -> None:
-        for attempt in count():
-            try:
-                return self.write_api.write(bucket=self.bucket, org=self.org, record=batch)
-            except Exception:
-                if attempt >= self.max_retries:
-                    raise
-
-                # exponential backoff: base * 2^attempt
-                sleep(self.retry_backoff_seconds * (2 ** attempt))
 
 
 _DURATION_UNITS = {
@@ -540,21 +527,6 @@ class MemoryWriter(TSWriter):
     """In-memory TSWriter for tests."""
 
     store: MemoryStore
-
-    def write_point(
-        self,
-        measurement: str,
-        fields: Mapping[str, Scalar],
-        tags: Mapping[str, str] | None = None,
-        timestamp: datetime | None = None,
-    ) -> None:
-        point = TSPoint(
-            measurement=measurement,
-            fields=dict(fields),
-            tags=dict(tags) if tags else {},
-            timestamp=timestamp or datetime.now(UTC),
-        )
-        self.write_points([point])
 
     def write_points(self, points: Sequence[TSPoint]) -> None:
         self.store.points.extend(points)
