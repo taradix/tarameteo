@@ -14,13 +14,20 @@ import kotlin.concurrent.thread
 class ApiTest {
     @Volatile private var status = "200 OK"
     @Volatile private var body = "[]"
-    // The last request as it arrived: line, headers, then its body.
     @Volatile private var sent = ""
     private val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    // One request per connection is all HttpURLConnection needs when told to close.
-    private val server = ServerSocket(0, 0, InetAddress.getLoopbackAddress())
-    init {
+    private lateinit var server: ServerSocket
+    private lateinit var api: Api
+
+    @Before
+    fun setUp() {
+        status = "200 OK"
+        body = "[]"
+        sent = ""
+        requests.clear()
+
+        server = ServerSocket(0, 0, InetAddress.getLoopbackAddress())
         thread(isDaemon = true) {
             while (true) {
                 val socket = runCatching { server.accept() }.getOrNull() ?: break
@@ -39,16 +46,8 @@ class ApiTest {
                 }
             }
         }
-    }
 
-    private val api = Api("http://127.0.0.1:${server.localPort}")
-
-    @Before
-    fun setUp() {
-        status = "200 OK"
-        body = "[]"
-        sent = ""
-        requests.clear()
+        api = Api("http://127.0.0.1:${server.localPort}")
     }
 
     @After
