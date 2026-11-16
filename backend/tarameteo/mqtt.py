@@ -43,6 +43,7 @@ class MQTTMessage:
 class MQTTBase:
     """Base class providing mTLS connection lifecycle."""
 
+    clean_session: ClassVar[bool] = True
     host: str
     cafile: str = field(kw_only=True)
     certfile: str | None = field(default=None, kw_only=True)
@@ -52,7 +53,6 @@ class MQTTBase:
     client_id: str = field(kw_only=True)
     port: int = field(default=8883, kw_only=True)
     keepalive: int = field(default=60, kw_only=True)
-    clean_session: ClassVar[bool] = True
     _client: mqtt.Client | None = field(init=False, default=None)
     _connected: threading.Event = field(init=False, factory=threading.Event)
     _running: bool = field(init=False, default=False)
