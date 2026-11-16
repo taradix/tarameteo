@@ -7,7 +7,7 @@ import ssl
 import threading
 from collections import deque
 from collections.abc import Callable
-from typing import Any, Self
+from typing import Any, ClassVar, Self
 
 import paho.mqtt.client as mqtt
 from attrs import define, field
@@ -52,6 +52,7 @@ class MQTTBase:
     client_id: str = field(kw_only=True)
     port: int = field(default=8883, kw_only=True)
     keepalive: int = field(default=60, kw_only=True)
+    clean_session: ClassVar[bool] = True
     _client: mqtt.Client | None = field(init=False, default=None)
     _connected: threading.Event = field(init=False, factory=threading.Event)
     _running: bool = field(init=False, default=False)
@@ -77,6 +78,7 @@ class MQTTBase:
         client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.client_id,
+            clean_session=self.clean_session,
         )
         client.tls_set(
             ca_certs=self.cafile,
@@ -140,8 +142,14 @@ class MQTTBase:
 
 @define
 class MQTTConsumer(MQTTBase):
-    """MQTT subscriber that delivers messages to a single callback."""
+    """MQTT subscriber that delivers messages to a single callback.
 
+    The session is persistent, so the broker keeps the subscription and
+    queues messages while the consumer is offline (an API restart, for
+    example). That needs a stable ``client_id``.
+    """
+
+    clean_session: ClassVar[bool] = False
     topic: str = field(kw_only=True)
     on_message: MQTTMessageHandler = field(kw_only=True)
     qos: int = field(default=1, kw_only=True)
