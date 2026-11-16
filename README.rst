@@ -30,9 +30,10 @@ to the device identifier (used as the certificate CN and MQTT topic)::
 
     SENSOR_ID=outdoor-north uv run pio run -e esp32 --target upload
 
-On first boot, the sensor enters **provisioning mode** (WiFi AP
-``TaraMeteoProv-XXXX``) where you provide WiFi credentials and GPS location
-via a web form at ``http://192.168.4.1``.
+On first boot, the sensor enters **provisioning mode**: it advertises
+``TaraMeteo-XXXX`` over Bluetooth. Pair with the ``BLE_PASSKEY`` from
+``config.h``, then enter WiFi credentials and the sensor location in the
+TaraMeteo app.
 
 To erase and re-provision::
 

@@ -3,8 +3,6 @@
 
 #include <Preferences.h>
 #include "IWiFiClient.h"
-#include "IWebServer.h"
-#include "IWiFi.h"
 #include "IArduino.h"
 
 // Forward declaration
@@ -18,7 +16,7 @@ public:
     static const int CERT_EXPIRY_WARNING_DAYS = 365;
 
     // Constructor with dependency injection
-    CertificateManager(Preferences& prefs, IWiFi* wifi, IArduino* arduino);
+    CertificateManager(Preferences& prefs, IArduino* arduino);
     ~CertificateManager();
 
     // Lifecycle
@@ -31,10 +29,7 @@ public:
     bool validateCertificates();
 
     // Provisioning
-    bool startProvisioningMode(IWebServer* webServer);
-    void stopProvisioningMode();
     void setWiFiManager(WiFiManager* wifiManager) { _wifiManager = wifiManager; }
-    void handleProvisioningLoop();  // Must be called repeatedly to service HTTP requests
     bool applyProvisioning(const char* wifiSsid, const char* wifiPassword, float latitude, float longitude);
 
     // Storage Management
@@ -47,7 +42,6 @@ public:
     const char* getSensorName() const { return _cn; }  // Sensor name IS the CN
     unsigned long getExpirationTime() const { return _expiresAt; }
     int getCertificateVersion() const { return _certVersion; }
-    bool isProvisioningActive() const { return _provisioningActive; }
     float getLatitude() const { return _latitude; }
     float getLongitude() const { return _longitude; }
 
@@ -59,13 +53,9 @@ private:
     float _longitude;
     unsigned long _expiresAt;
     int _certVersion;
-    bool _provisioningActive;
-    unsigned long _provisioningStartTime;
 
     Preferences& _prefs;
-    IWiFi* _wifi;
     IArduino* _arduino;
-    IWebServer* _provisioningServer;
     WiFiManager* _wifiManager;
 
     // Certificate storage buffers
@@ -86,17 +76,10 @@ private:
     bool loadFromEmbedded();
     bool saveToNVS(const char* certPem, const char* keyPem, const char* caCertPem);
 
-    // Provisioning server
-    void setupProvisioningServer();
-    void handleProvisionRequest();
-    void handleRootRequest();
-    void sendResponse(int code, const char* message);
-
     // Utilities
     void clearClientCredentials();
     void clearCACertificate();
     void setError(const char* error);
-    const char* getLastMACOctet();
 };
 
 #endif // CERTIFICATE_MANAGER_H

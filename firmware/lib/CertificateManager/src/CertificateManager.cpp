@@ -1,8 +1,8 @@
 #include "CertificateManager.h"
 #include "X509Parser.h"
 
-#include <ArduinoJson.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef UNIT_TEST
@@ -15,16 +15,14 @@ class WiFiManager;
 
 static const int SECONDS_PER_DAY = 24 * 60 * 60;
 
-CertificateManager::CertificateManager(Preferences &prefs, IWiFi *wifi, IArduino *arduino)
-    : _prefs(prefs), _wifi(wifi), _arduino(arduino), _expiresAt(0), _certVersion(0), _provisioningActive(false),
-      _provisioningStartTime(0), _provisioningServer(nullptr), _wifiManager(nullptr), _clientCert(nullptr),
+CertificateManager::CertificateManager(Preferences &prefs, IArduino *arduino)
+    : _prefs(prefs), _arduino(arduino), _expiresAt(0), _certVersion(0), _wifiManager(nullptr), _clientCert(nullptr),
       _clientKey(nullptr), _caCert(nullptr), _latitude(0.0f), _longitude(0.0f) {
   _lastError[0] = '\0';
   _cn[0] = '\0';
 }
 
 CertificateManager::~CertificateManager() {
-  stopProvisioningMode();
   clearClientCredentials();
   clearCACertificate();
 }
@@ -460,225 +458,8 @@ bool CertificateManager::clearCertificates() {
   return true;
 }
 
-bool CertificateManager::startProvisioningMode(IWebServer *webServer) {
-  _arduino->log("CertificateManager: Starting provisioning mode");
-
-  if (!webServer) {
-    setError("Web server not provided");
-    return false;
-  }
-
-  _provisioningServer = webServer;
-
-  // Disconnect any existing WiFi connections
-  _wifi->disconnect();
-  _arduino->delay(100);
-
-  // Start WiFi in AP mode with explicit IP configuration
-  char macStr[64];
-  snprintf(macStr, sizeof(macStr), "TaraMeteoProv-%s", getLastMACOctet());
-
-  _wifi->mode(2); // WIFI_AP
-
-  // Configure AP with explicit IP address
-  // Note: IPAddress is provided by Arduino.h in ESP32 builds
-  // In unit tests, it's provided by test/mocks/Arduino.h
-  IPAddress local_IP(192, 168, 4, 1);
-  IPAddress gateway(192, 168, 4, 1);
-  IPAddress subnet(255, 255, 255, 0);
-
-  if (!_wifi->softAPConfig(local_IP, gateway, subnet)) {
-    _arduino->log("CertificateManager: Failed to configure AP IP");
-    setError("Failed to configure AP");
-    return false;
-  }
-
-  if (!_wifi->softAP(macStr)) {
-    _arduino->log("CertificateManager: Failed to start AP");
-    setError("Failed to start AP");
-    return false;
-  }
-
-  _arduino->delay(500); // Give AP time to start
-
-  auto IP = _wifi->softAPIP();
-  _arduino->log("===========================================");
-  _arduino->logf("AP SSID: %s", macStr);
-  // Note: IP.toString() might not work with mocks, so we format manually
-  _arduino->log("AP IP: 192.168.4.1");
-  _arduino->log("AP Password: (none - open network)");
-  _arduino->log("Visit: http://192.168.4.1");
-  _arduino->log("===========================================");
-
-  setupProvisioningServer();
-
-  _provisioningActive = true;
-  _provisioningStartTime = _arduino->millis();
-
-  _arduino->log("CertificateManager: HTTP server started and ready for requests");
-  return true;
-}
-
-void CertificateManager::stopProvisioningMode() {
-  if (_provisioningServer) {
-    _provisioningServer->stop();
-    _provisioningServer = nullptr;
-  }
-  _provisioningActive = false;
-  _arduino->log("CertificateManager: Provisioning mode stopped");
-}
-
-void CertificateManager::handleProvisioningLoop() {
-  if (_provisioningServer && _provisioningActive) {
-    _provisioningServer->handleClient();
-
-    // Check for timeout every 30 seconds
-    static unsigned long lastCheck = 0;
-    unsigned long now = _arduino->millis();
-    if (now - lastCheck > 30000) {
-      unsigned long elapsed = (now - _provisioningStartTime) / 1000;
-      _arduino->logf("Provisioning active for %lu seconds, waiting for connection...", elapsed);
-
-      // Show number of connected clients
-      int clients = _wifi->softAPgetStationNum();
-      _arduino->logf("Connected clients to AP: %d", clients);
-
-      lastCheck = now;
-    }
-  }
-}
-
-void CertificateManager::setupProvisioningServer() {
-  _provisioningServer->on("/", [this]() {
-    _arduino->log("CertificateManager: Received GET request for /");
-    handleRootRequest();
-  });
-
-  _provisioningServer->onPost("/provision", [this]() {
-    _arduino->log("CertificateManager: Received POST request for /provision");
-    handleProvisionRequest();
-  });
-
-  _provisioningServer->onNotFound([this]() {
-    _arduino->logf("CertificateManager: 404 - Not found: %s", _provisioningServer->uri());
-    _provisioningServer->send(404, "text/plain", "Not found");
-  });
-
-  _provisioningServer->begin();
-  _arduino->log("CertificateManager: HTTP server started on port 80");
-}
-
-void CertificateManager::handleRootRequest() {
-  const char *html = R"html(
-<!DOCTYPE html>
-<html>
-<head>
-    <title>TaraMeteo Provisioning</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial; margin: 40px; background: #f0f0f0; }
-        .container { background: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: 0 auto; }
-        h1 { color: #2196F3; }
-        input { width: 100%; padding: 10px; margin: 10px 0; font-size: 14px; box-sizing: border-box; }
-        button { background: #2196F3; color: white; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
-        button:hover { background: #0b7dda; }
-        .info { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .loc-row { display: flex; align-items: center; gap: 8px; }
-        .loc-row input { flex: 1; margin: 10px 0; }
-        #loc-btn { flex-shrink: 0; padding: 10px 14px; font-size: 13px; }
-        #loc-status { font-size: 12px; color: #666; margin: 4px 0 10px; }
-    </style>
-    <script>
-        function fillLocation() {
-            var btn = document.getElementById('loc-btn');
-            var status = document.getElementById('loc-status');
-            if (!navigator.geolocation) {
-                status.textContent = 'Geolocation not available (requires HTTPS on most browsers).';
-                return;
-            }
-            btn.disabled = true;
-            status.textContent = 'Getting location...';
-            navigator.geolocation.getCurrentPosition(
-                function(pos) {
-                    document.getElementById('latitude').value = pos.coords.latitude.toFixed(6);
-                    document.getElementById('longitude').value = pos.coords.longitude.toFixed(6);
-                    status.textContent = 'Location filled from browser.';
-                    btn.disabled = false;
-                },
-                function(err) {
-                    status.textContent = 'Could not get location — enter manually. (' + err.message + ')';
-                    btn.disabled = false;
-                }
-            );
-        }
-        window.addEventListener('load', fillLocation);
-    </script>
-</head>
-<body>
-    <div class="container">
-        <h1>TaraMeteo Provisioning</h1>
-        <div class="info">
-            <strong>WiFi &amp; Location Setup</strong><br>
-            <p>Certificates are pre-flashed. Enter your WiFi credentials and sensor location below.</p>
-        </div>
-        <form method="POST" action="/provision">
-            <h2>WiFi Configuration</h2>
-            <label><strong>WiFi SSID:</strong></label>
-            <input type="text" name="wifi_ssid" required placeholder="your-wifi-network">
-
-            <label><strong>WiFi Password:</strong></label>
-            <input type="password" name="wifi_password" required placeholder="your-wifi-password">
-
-            <h2>Location</h2>
-            <div class="loc-row">
-                <label><strong>Latitude:</strong></label>
-                <button type="button" id="loc-btn" onclick="fillLocation()">&#x25CE; Use my location</button>
-            </div>
-            <span id="loc-status"></span>
-            <input type="number" id="latitude" name="latitude" required step="0.000001" min="-90" max="90" placeholder="45.504">
-
-            <label><strong>Longitude:</strong></label>
-            <input type="number" id="longitude" name="longitude" required step="0.000001" min="-180" max="180" placeholder="-73.617">
-
-            <button type="submit">Provision Device</button>
-        </form>
-    </div>
-</body>
-</html>
-)html";
-
-  _provisioningServer->send(200, "text/html", html);
-}
-
-void CertificateManager::handleProvisionRequest() {
-  _arduino->log("CertificateManager: Received provisioning request");
-
-  // Validate required WiFi fields
-  if (!_provisioningServer->hasArg("wifi_ssid") || !_provisioningServer->hasArg("wifi_password")) {
-    sendResponse(400, "Missing required fields: wifi_ssid and wifi_password");
-    return;
-  }
-
-  // Validate location fields
-  if (!_provisioningServer->hasArg("latitude") || !_provisioningServer->hasArg("longitude")) {
-    sendResponse(400, "Missing required fields: latitude and longitude");
-    return;
-  }
-
-  if (!applyProvisioning(_provisioningServer->arg("wifi_ssid"), _provisioningServer->arg("wifi_password"),
-                         atof(_provisioningServer->arg("latitude")), atof(_provisioningServer->arg("longitude")))) {
-    sendResponse(400, _lastError);
-    return;
-  }
-
-  sendResponse(200, "Provisioned successfully! WiFi and location stored. Rebooting in 3 seconds...");
-  _arduino->delay(3000);
-  stopProvisioningMode();
-  _arduino->restart();
-}
-
-// Transport-agnostic provisioning: validate + persist. Shared by HTTP (above) and
-// the BLE transport (Phase 1). On failure sets _lastError and returns false.
+// Validates and persists what the BLE transport received. On failure sets
+// _lastError and returns false.
 bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wifiPassword, float latitude,
                                            float longitude) {
   if (!wifiSsid || !wifiPassword || strlen(wifiSsid) == 0 || strlen(wifiPassword) == 0) {
@@ -715,28 +496,6 @@ bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wif
 #endif
 
   return true;
-}
-
-void CertificateManager::sendResponse(int code, const char *message) {
-  StaticJsonDocument<256> doc;
-  doc["status"] = (code == 200) ? "success" : "error";
-  doc["message"] = message;
-  if (code == 200) {
-    doc["cn"] = _cn;
-  }
-
-  char response[512];
-  serializeJson(doc, response, sizeof(response));
-
-  _provisioningServer->send(code, "application/json", response);
-}
-
-const char *CertificateManager::getLastMACOctet() {
-  static char macStr[5];
-  uint8_t mac[6];
-  _wifi->macAddress(mac);
-  snprintf(macStr, sizeof(macStr), "%02X%02X", mac[4], mac[5]);
-  return macStr;
 }
 
 void CertificateManager::setError(const char *error) {
