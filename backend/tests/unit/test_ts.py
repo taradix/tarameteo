@@ -152,7 +152,7 @@ def test_memory_reader_latest_returns_most_recent(memory_writer, memory_reader):
     memory_writer.write_point("weather", {"v": 1.0}, timestamp=now - timedelta(minutes=10))
     memory_writer.write_point("weather", {"v": 2.0}, timestamp=now - timedelta(minutes=1))
 
-    result = memory_reader.latest("weather", lookback="1h")
+    result = memory_reader.latest("weather", lookback=timedelta(hours=1))
 
     assert_that(result, has_properties(fields={"v": 2.0}))
 
@@ -167,7 +167,7 @@ def test_memory_reader_latest_respects_lookback(memory_writer, memory_reader):
     now = datetime.now(UTC)
     memory_writer.write_point("weather", {"v": 1.0}, timestamp=now - timedelta(days=2))
 
-    assert_that(memory_reader.latest("weather", lookback="1h"), none())
+    assert_that(memory_reader.latest("weather", lookback=timedelta(hours=1)), none())
 
 
 def test_memory_reader_last_points_one_per_series(memory_writer, memory_reader):
