@@ -1,6 +1,6 @@
 /*
  * TaraMeteo Firmware
- * Weather station using XIAO_ESP32S3 and BME280 sensor
+ * Weather station using XIAO_ESP32C3 and BME280 sensor
  *
  * Features:
  * - Deep sleep power management
