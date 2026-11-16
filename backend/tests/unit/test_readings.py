@@ -1,5 +1,6 @@
 """Unit tests for mapping readings to and from time series points."""
 
+import json
 from datetime import (
     UTC,
     datetime,
@@ -35,3 +36,26 @@ TS = datetime(2026, 1, 1, tzinfo=UTC)
 def test_from_point_reverses_to_point(reading):
     """A stored reading should read back as the same reading."""
     assert_that(from_point(to_point(reading)), equal_to(reading))
+
+
+# Copies of what MqttClient::buildPayload in the firmware publishes. Flashed
+# sensors can't be updated, so this payload must keep parsing: see the
+# additive-only rule in CONTRIBUTING.rst.
+@pytest.mark.parametrize("payload, expected", [
+    (
+        '{"timestamp":1767225600,"temperature":20.5,"humidity":50,"pressure":1013.25,'
+        '"latitude":46.81,"longitude":-71.21}',
+        {"temperature": 20.5, "humidity": 50.0, "pressure": 1013.25, "altitude": None, "rssi": None},
+    ),
+    (
+        '{"timestamp":1767225600,"temperature":20.5,"humidity":50,"pressure":1013.25,'
+        '"latitude":46.81,"longitude":-71.21,"altitude":150.5,"rssi":-60,"retry_count":2}',
+        {"altitude": 150.5, "rssi": -60, "retry_count": 2},
+    ),
+])
+def test_weather_reading_parses_firmware_payload(payload, expected):
+    """The JSON a sensor publishes should parse into a reading."""
+    reading = WeatherReading(sensor="a", **json.loads(payload))
+
+    assert_that(reading.timestamp, equal_to(TS))
+    assert_that(reading.model_dump(include=set(expected)), equal_to(expected))

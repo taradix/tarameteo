@@ -198,6 +198,12 @@ mobile apps. Put breaking changes under a new ``/api/v2`` instead.
 New enum values, such as a new sensor ``kind``, count as additive, so
 clients must ignore values they don't recognise.
 
+The same rule holds for the JSON that sensors publish on
+``weather/<sensor>/event``, even more strictly: flashed sensors are never
+updated, so the backend must keep accepting every payload they send.
+New fields must be optional. ``tests/unit/test_readings.py`` holds
+copies of the firmware payloads; update them when the firmware changes.
+
 
 Building the Android app
 ------------------------
