@@ -76,3 +76,24 @@ async def test_mqtt_receive_message(make_mqtt_consumer, mqtt_publisher):
         qos=0,
         retain=False,
     )))
+
+
+@pytest.mark.asyncio
+async def test_mqtt_receive_message_published_while_offline(make_mqtt_consumer, mqtt_publisher):
+    """A QoS 0 message published while the consumer is offline should arrive when it reconnects."""
+    loop = asyncio.get_running_loop()
+    received = asyncio.Event()
+    messages = []
+
+    def handler(message: MQTTMessage):
+        messages.append(message)
+        loop.call_soon_threadsafe(received.set)
+
+    consumer = make_mqtt_consumer("weather/+/event", handler)
+    consumer._client.loop_stop()
+    mqtt_publisher.publish(topic="weather/test-device/event", payload="data").wait_for_publish(timeout=5)
+    consumer._client.loop_start()
+
+    await asyncio.wait_for(received.wait(), timeout=10.0)
+
+    assert_that(messages, contains_exactly(has_properties(data="data")))

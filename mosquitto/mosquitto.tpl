@@ -63,6 +63,10 @@ max_connections 1000
 # Maximum number of queued messages per client
 max_queued_messages 1000
 
+# Sensors can only publish at QoS 0 (PubSubClient), so queue QoS 0 messages
+# too, for persistent subscribers that are offline, like the API during a restart.
+queue_qos0_messages true
+
 # Maximum QoS level (0=fire-and-forget, 1=at-least-once, 2=exactly-once)
 max_qos 1
 

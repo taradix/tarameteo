@@ -7,7 +7,7 @@ import ssl
 import threading
 from collections import deque
 from collections.abc import Callable
-from typing import Any, Self
+from typing import Any, ClassVar, Self
 
 import paho.mqtt.client as mqtt
 from attrs import define, field
@@ -43,6 +43,7 @@ class MQTTMessage:
 class MQTTBase:
     """Base class providing mTLS connection lifecycle."""
 
+    clean_session: ClassVar[bool] = True
     host: str
     cafile: str = field(kw_only=True)
     certfile: str | None = field(default=None, kw_only=True)
@@ -77,6 +78,8 @@ class MQTTBase:
         client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.client_id,
+            clean_session=self.clean_session,
+            protocol=mqtt.MQTTProtocolVersion.MQTTv311,
         )
         client.tls_set(
             ca_certs=self.cafile,
@@ -115,8 +118,11 @@ class MQTTBase:
 
     def connect(self):
         """Build the client, connect, and start background networking."""
-        self._client = self._build_client()
-        self._client.connect(self.host, self.port, self.keepalive)
+        if self._client is None:
+            self._client = self._build_client()
+            self._client.connect(self.host, self.port, self.keepalive)
+        else:
+            self._client.reconnect()
         self._client.loop_start()
         self._running = True
 
@@ -127,7 +133,6 @@ class MQTTBase:
         if self._client is not None:
             self._client.loop_stop()
             self._client.disconnect()
-            self._client = None
 
     def __enter__(self):
         self.connect()
@@ -140,8 +145,14 @@ class MQTTBase:
 
 @define
 class MQTTConsumer(MQTTBase):
-    """MQTT subscriber that delivers messages to a single callback."""
+    """MQTT subscriber that delivers messages to a single callback.
 
+    The session is persistent, so the broker keeps the subscription and
+    queues messages while the consumer is offline (an API restart, for
+    example). That needs a stable ``client_id``.
+    """
+
+    clean_session: ClassVar[bool] = False
     topic: str = field(kw_only=True)
     on_message: MQTTMessageHandler = field(kw_only=True)
     qos: int = field(default=1, kw_only=True)
