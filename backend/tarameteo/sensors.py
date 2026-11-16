@@ -29,7 +29,7 @@ from tarameteo.ts import (
 SensorKind = Literal["timeseries", "aggregate"]
 
 # Upper bound on history we scan when computing stats or listing sensors.
-# Influx retention (default 7d) usually keeps this well-bounded in practice.
+# Influx retention is infinite by default, so this is the only bound.
 STATS_WINDOW = timedelta(days=90)
 LATEST_LOOKBACK = timedelta(days=30)
 
