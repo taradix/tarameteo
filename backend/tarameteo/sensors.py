@@ -31,7 +31,7 @@ SensorKind = Literal["timeseries", "aggregate"]
 # Upper bound on history we scan when computing stats or listing sensors.
 # Influx retention (default 7d) usually keeps this well-bounded in practice.
 STATS_WINDOW = timedelta(days=90)
-LATEST_LOOKBACK = "30d"
+LATEST_LOOKBACK = timedelta(days=30)
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,6 @@
 """Time series abstraction and implementation."""
 
 import os
-import re
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import (
@@ -103,9 +102,9 @@ class TSReader(Protocol):
         *,
         tags: Mapping[str, str] | None = None,
         fields: Sequence[str] | None = None,
-        lookback: str | None = None,
+        lookback: timedelta = timedelta(hours=1),
     ) -> TSPoint | None:
-        """Return the most recent point for the series."""
+        """Return the most recent point for the series within lookback of now."""
 
     def last_points(self, *, measurement: str, start: datetime) -> list[TSPoint]:
         """Return the most recent point of each series (tag set) in ascending timestamp order."""
@@ -199,15 +198,11 @@ class InfluxReader(TSReader):
         *,
         tags: Mapping[str, str] | None = None,
         fields: Sequence[str] | None = None,
-        lookback: str | None = None,
+        lookback: timedelta = timedelta(hours=1),
     ) -> TSPoint | None:
-        # Use a bounded range by default to avoid scanning too much.
-        # If no lookback provided, pick something conservative.
-        lookback = lookback or "1h"
-
         flux, params = self._build_latest_query(
             measurement=measurement,
-            lookback=lookback,
+            start=datetime.now(UTC) - lookback,
             tags=tags,
             fields=fields,
         )
@@ -284,19 +279,19 @@ class InfluxReader(TSReader):
         self,
         *,
         measurement: str,
-        lookback: str,
+        start: datetime,
         tags: Mapping[str, str] | None,
         fields: Sequence[str] | None,
     ) -> tuple[str, dict[str, Any]]:
         params = {
             "bucket": self.bucket,
             "measurement": measurement,
-            "lookback": lookback,
+            "start": start,
         }
 
         flux_lines = [
             'from(bucket: bucket)',
-            '  |> range(start: -duration(v: lookback))',
+            '  |> range(start: start)',
             '  |> filter(fn: (r) => r._measurement == measurement)',
             *_filter_lines(params, tags, fields),
             # "last()" works per series; this returns one row per field.
@@ -437,28 +432,6 @@ class InfluxWriter(TSWriter):
         return ip
 
 
-_DURATION_UNITS = {
-    "ns": timedelta(microseconds=0.001),
-    "us": timedelta(microseconds=1),
-    "ms": timedelta(milliseconds=1),
-    "s": timedelta(seconds=1),
-    "m": timedelta(minutes=1),
-    "h": timedelta(hours=1),
-    "d": timedelta(days=1),
-    "w": timedelta(weeks=1),
-}
-
-
-def _parse_duration(s: str) -> timedelta:
-    match = re.fullmatch(r"\s*(\d+)\s*([a-z]+)\s*", s)
-    if not match:
-        raise ValueError(f"Invalid duration: {s!r}")
-    n, unit = int(match.group(1)), match.group(2)
-    if unit not in _DURATION_UNITS:
-        raise ValueError(f"Unknown duration unit: {unit!r}")
-    return _DURATION_UNITS[unit] * n
-
-
 @define
 class MemoryStore:
     """Shared in-memory backing store for MemoryReader and MemoryWriter."""
@@ -511,9 +484,9 @@ class MemoryReader(TSReader):
         *,
         tags: Mapping[str, str] | None = None,
         fields: Sequence[str] | None = None,
-        lookback: str | None = None,
+        lookback: timedelta = timedelta(hours=1),
     ) -> TSPoint | None:
-        start = datetime.now(UTC) - _parse_duration(lookback or "1h")
+        start = datetime.now(UTC) - lookback
         points = self.query_points(
             measurement=measurement,
             start=start,
