@@ -49,12 +49,9 @@ async def test_weather_handler_stores_all_fields(memory_store, memory_writer, me
         queue=memory_queue,
     )
 
-    point = memory_store.points[0]
-    assert_that(point.fields["temperature"], 22.5)
-    assert_that(point.fields["humidity"], 60.0)
-    assert_that(point.fields["pressure"], 1013.25)
-    assert_that(point.fields["altitude"], 150.0)
-    assert_that(point.fields["rssi"], -70)
+    assert_that(memory_store.points[0].fields, has_entries(
+        temperature=22.5, humidity=60.0, pressure=1013.25, altitude=150.0, rssi=-70,
+    ))
 
 
 async def test_weather_handler_excludes_metadata_from_fields(memory_store, memory_writer, memory_queue):
