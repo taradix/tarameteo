@@ -184,7 +184,7 @@ void MqttClient::disconnect() {
 bool MqttClient::buildPayload(const WeatherData &data, char *buffer, size_t size) {
   StaticJsonDocument<MQTT_BUFFER_SIZE> doc;
 
-  // Authentication now handled at MQTT connection level
+  // The backend parses this payload; keep backend/tests/unit/test_readings.py in sync.
   doc["timestamp"] = data.timestamp;
   doc["temperature"] = data.temperature;
   doc["humidity"] = data.humidity;
