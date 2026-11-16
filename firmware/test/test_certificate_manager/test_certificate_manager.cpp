@@ -6,8 +6,6 @@
 #include "Preferences.h"
 #include "./mocks/mock_arduino_core.h"
 #include "./mocks/mock_ble_provisioner.h"
-#include "./mocks/mock_web_server.h"
-#include "./mocks/mock_wifi.h"
 #include "./mocks/mock_wifi_client.h"
 
 // Override millis/delay for testing
@@ -47,7 +45,6 @@ const char *INVALID_CERT = "This is not a certificate";
 
 // Global test fixtures
 Preferences testPrefs;
-MockWiFi mockWiFi;
 MockArduino mockArduino;
 
 // ========================================
@@ -56,7 +53,6 @@ MockArduino mockArduino;
 
 void setUp(void) {
   _mock_millis = 0;
-  mockWiFi.reset();
   mockArduino.reset();
   testPrefs.clear();
 }
@@ -68,7 +64,7 @@ void tearDown(void) { testPrefs.end(); }
 // ========================================
 
 void test_certificate_manager_begin_no_certificates(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
 
   bool result = certMgr.begin();
 
@@ -88,7 +84,7 @@ void test_certificate_manager_begin_with_valid_certificates(void) {
   testPrefs.putInt("cert_version", 1);
   testPrefs.end();
 
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
 
   bool result = certMgr.begin();
 
@@ -103,7 +99,7 @@ void test_certificate_manager_begin_with_valid_certificates(void) {
 // ========================================
 
 void test_certificate_manager_store_valid_certificates(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   bool result = certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
@@ -116,7 +112,7 @@ void test_certificate_manager_store_valid_certificates(void) {
 }
 
 void test_certificate_manager_store_without_ca_cert(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   bool result = certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
@@ -126,7 +122,7 @@ void test_certificate_manager_store_without_ca_cert(void) {
 }
 
 void test_certificate_manager_reject_invalid_certificate(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   bool result = certMgr.storeCertificates(INVALID_CERT, VALID_KEY_PEM);
@@ -137,7 +133,7 @@ void test_certificate_manager_reject_invalid_certificate(void) {
 }
 
 void test_certificate_manager_reject_invalid_key(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   bool result = certMgr.storeCertificates(VALID_CERT_PEM, INVALID_CERT);
@@ -148,7 +144,7 @@ void test_certificate_manager_reject_invalid_key(void) {
 }
 
 void test_certificate_manager_increment_version_on_store(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
@@ -166,7 +162,7 @@ void test_certificate_manager_increment_version_on_store(void) {
 // ========================================
 
 void test_certificate_manager_validate_after_store(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
 
@@ -176,7 +172,7 @@ void test_certificate_manager_validate_after_store(void) {
 }
 
 void test_certificate_manager_validate_fails_without_certificates(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   bool result = certMgr.validateCertificates();
@@ -186,7 +182,7 @@ void test_certificate_manager_validate_fails_without_certificates(void) {
 }
 
 void test_certificate_manager_detect_expiration_warning(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   // Set epoch time to simulate certificate expiring in 15 days
@@ -199,7 +195,7 @@ void test_certificate_manager_detect_expiration_warning(void) {
   testPrefs.putULong("cert_expires", 1700000000UL + (15 * 24 * 60 * 60)); // 15 days from now
   testPrefs.end();
 
-  CertificateManager certMgr2(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr2(testPrefs, &mockArduino);
   certMgr2.begin();
   certMgr2.validateCertificates();
 
@@ -207,7 +203,7 @@ void test_certificate_manager_detect_expiration_warning(void) {
 }
 
 void test_certificate_manager_validate_fails_when_current_time_unavailable(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
 
@@ -225,7 +221,7 @@ void test_certificate_manager_validate_fails_when_current_time_unavailable(void)
 
 void test_certificate_manager_load_certificates_to_client(void) {
   MockWiFiClient mockClient;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
 
@@ -239,7 +235,7 @@ void test_certificate_manager_load_certificates_to_client(void) {
 
 void test_certificate_manager_load_fails_without_ca_cert(void) {
   MockWiFiClient mockClient;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
 
@@ -254,7 +250,7 @@ void test_certificate_manager_load_fails_without_ca_cert(void) {
 
 void test_certificate_manager_load_fails_without_provisioning(void) {
   MockWiFiClient mockClient;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
 
   bool result = certMgr.loadCertificates(mockClient);
@@ -268,7 +264,7 @@ void test_certificate_manager_load_fails_without_provisioning(void) {
 // ========================================
 
 void test_certificate_manager_clear_removes_all_data(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
 
@@ -282,13 +278,13 @@ void test_certificate_manager_clear_removes_all_data(void) {
 }
 
 void test_certificate_manager_clear_clears_nvs(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
   certMgr.clearCertificates();
 
   // Try to create a new instance - should not find certificates
-  CertificateManager certMgr2(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr2(testPrefs, &mockArduino);
   bool result = certMgr2.begin();
 
   TEST_ASSERT_FALSE(result);
@@ -296,157 +292,14 @@ void test_certificate_manager_clear_clears_nvs(void) {
 }
 
 // ========================================
-// Test Cases - Provisioning Mode
-// ========================================
-
-void test_certificate_manager_start_provisioning_mode(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-
-  bool result = certMgr.startProvisioningMode(&mockServer);
-
-  TEST_ASSERT_TRUE(result);
-  TEST_ASSERT_TRUE(certMgr.isProvisioningActive());
-  TEST_ASSERT_TRUE(mockWiFi.disconnectCalled);
-  TEST_ASSERT_TRUE(mockWiFi.apMode);
-  TEST_ASSERT_TRUE(mockWiFi.apStarted);
-  TEST_ASSERT_TRUE(mockServer.beginCalled);
-}
-
-void test_certificate_manager_stop_provisioning_mode(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-  certMgr.startProvisioningMode(&mockServer);
-
-  certMgr.stopProvisioningMode();
-
-  TEST_ASSERT_FALSE(certMgr.isProvisioningActive());
-  TEST_ASSERT_TRUE(mockServer.stopCalled);
-}
-
-void test_certificate_manager_provisioning_loop(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-  certMgr.startProvisioningMode(&mockServer);
-
-  certMgr.handleProvisioningLoop();
-
-  TEST_ASSERT_GREATER_THAN(0, mockServer.handleClientCallCount);
-}
-
-void test_certificate_manager_provision_request_with_wifi(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-
-  // Pre-flash certs so the manager is provisioned for cert purposes
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
-  certMgr.startProvisioningMode(&mockServer);
-
-  // Provisioning form now only accepts WiFi + location
-  mockServer.setArg("wifi_ssid", "my-network");
-  mockServer.setArg("wifi_password", "my-password");
-  mockServer.setArg("latitude", "45.504");
-  mockServer.setArg("longitude", "-73.617");
-
-  // Need a WiFiManager for the handler to store credentials
-  // In UNIT_TEST mode, the mock path is taken
-  WiFiManager wifiMgr;
-  certMgr.setWiFiManager(&wifiMgr);
-
-  mockServer.triggerHandler("/provision");
-
-  TEST_ASSERT_EQUAL(200, mockServer.lastResponseCode);
-  TEST_ASSERT_TRUE(mockArduino.hasLogContaining("WiFi credentials stored"));
-}
-
-void test_certificate_manager_provision_request_missing_wifi(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-  certMgr.startProvisioningMode(&mockServer);
-
-  // Missing wifi_ssid and wifi_password
-  mockServer.setArg("latitude", "45.504");
-  mockServer.setArg("longitude", "-73.617");
-  mockServer.triggerHandler("/provision");
-
-  TEST_ASSERT_EQUAL(400, mockServer.lastResponseCode);
-}
-
-void test_certificate_manager_provision_request_missing_location(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-  certMgr.startProvisioningMode(&mockServer);
-
-  // Has WiFi but missing latitude and longitude
-  mockServer.setArg("wifi_ssid", "my-network");
-  mockServer.setArg("wifi_password", "my-password");
-  mockServer.triggerHandler("/provision");
-
-  TEST_ASSERT_EQUAL(400, mockServer.lastResponseCode);
-}
-
-void test_certificate_manager_provision_stores_location(void) {
-  MockWebServer mockServer;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
-  certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
-  certMgr.startProvisioningMode(&mockServer);
-
-  WiFiManager wifiMgr;
-  certMgr.setWiFiManager(&wifiMgr);
-
-  mockServer.setArg("wifi_ssid", "my-network");
-  mockServer.setArg("wifi_password", "my-password");
-  mockServer.setArg("latitude", "45.504");
-  mockServer.setArg("longitude", "-73.617");
-  mockServer.triggerHandler("/provision");
-
-  TEST_ASSERT_EQUAL(200, mockServer.lastResponseCode);
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLatitude());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLongitude());
-}
-
-void test_certificate_manager_location_persists_across_instances(void) {
-  {
-    MockWebServer mockServer;
-    CertificateManager certMgr1(testPrefs, &mockWiFi, &mockArduino);
-    certMgr1.begin();
-    certMgr1.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
-    certMgr1.startProvisioningMode(&mockServer);
-
-    WiFiManager wifiMgr;
-    certMgr1.setWiFiManager(&wifiMgr);
-
-    mockServer.setArg("wifi_ssid", "my-network");
-    mockServer.setArg("wifi_password", "my-password");
-    mockServer.setArg("latitude", "45.504");
-    mockServer.setArg("longitude", "-73.617");
-    mockServer.triggerHandler("/provision");
-  }
-
-  CertificateManager certMgr2(testPrefs, &mockWiFi, &mockArduino);
-  certMgr2.begin();
-
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLatitude());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLongitude());
-}
-
-// ========================================
 // Test Cases - BLE Provisioning Transport
 // ========================================
 // These drive the same main-loop sequence the firmware uses (poll ->
-// applyProvisioning -> notifyStatus) to prove the BLE transport shares the one
-// validated sink with the HTTP path.
+// applyProvisioning -> notifyStatus).
 
 void test_ble_provision_valid_payload(void) {
   MockBleProvisioner ble;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   WiFiManager wifiMgr;
   certMgr.setWiFiManager(&wifiMgr);
@@ -465,7 +318,7 @@ void test_ble_provision_valid_payload(void) {
 
 void test_ble_provision_rejects_bad_latitude(void) {
   MockBleProvisioner ble;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   WiFiManager wifiMgr;
   certMgr.setWiFiManager(&wifiMgr);
@@ -482,7 +335,7 @@ void test_ble_provision_rejects_bad_latitude(void) {
 
 void test_ble_provision_rejects_empty_credentials(void) {
   MockBleProvisioner ble;
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   WiFiManager wifiMgr;
   certMgr.setWiFiManager(&wifiMgr);
@@ -495,6 +348,24 @@ void test_ble_provision_rejects_empty_credentials(void) {
 
   TEST_ASSERT_FALSE(ok);
   TEST_ASSERT_TRUE(strstr(ble.lastStatus.c_str(), "must not be empty") != NULL);
+}
+
+void test_ble_provision_location_persists_across_instances(void) {
+  {
+    CertificateManager certMgr1(testPrefs, &mockArduino);
+    certMgr1.begin();
+    certMgr1.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
+    WiFiManager wifiMgr;
+    certMgr1.setWiFiManager(&wifiMgr);
+
+    TEST_ASSERT_TRUE(certMgr1.applyProvisioning("my-network", "my-password", 45.504f, -73.617f));
+  }
+
+  CertificateManager certMgr2(testPrefs, &mockArduino);
+  certMgr2.begin();
+
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLatitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLongitude());
 }
 
 void test_ble_poll_empty_when_no_payload(void) {
@@ -510,7 +381,7 @@ void test_certificate_manager_load_from_embedded_returns_false_in_unit_test(void
   // In UNIT_TEST builds, loadFromEmbedded() always returns false
   // because the extern symbols don't exist. This tests that begin()
   // falls through correctly to needsProvisioning().
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
 
   bool result = certMgr.begin();
 
@@ -523,7 +394,7 @@ void test_certificate_manager_load_from_embedded_returns_false_in_unit_test(void
 // ========================================
 
 void test_certificate_manager_extract_cn_from_certificate(void) {
-  CertificateManager certMgr(testPrefs, &mockWiFi, &mockArduino);
+  CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
 
@@ -538,14 +409,14 @@ void test_certificate_manager_extract_cn_from_certificate(void) {
 void test_certificate_manager_persistence_across_instances(void) {
   // First instance stores certificates
   {
-    CertificateManager certMgr1(testPrefs, &mockWiFi, &mockArduino);
+    CertificateManager certMgr1(testPrefs, &mockArduino);
     certMgr1.begin();
     certMgr1.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
   }
 
   // Second instance should load them from NVS
   {
-    CertificateManager certMgr2(testPrefs, &mockWiFi, &mockArduino);
+    CertificateManager certMgr2(testPrefs, &mockArduino);
     bool result = certMgr2.begin();
 
     TEST_ASSERT_TRUE(result);
@@ -587,20 +458,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test_certificate_manager_clear_removes_all_data);
   RUN_TEST(test_certificate_manager_clear_clears_nvs);
 
-  // Provisioning mode tests
-  RUN_TEST(test_certificate_manager_start_provisioning_mode);
-  RUN_TEST(test_certificate_manager_stop_provisioning_mode);
-  RUN_TEST(test_certificate_manager_provisioning_loop);
-  RUN_TEST(test_certificate_manager_provision_request_with_wifi);
-  RUN_TEST(test_certificate_manager_provision_request_missing_wifi);
-  RUN_TEST(test_certificate_manager_provision_request_missing_location);
-  RUN_TEST(test_certificate_manager_provision_stores_location);
-  RUN_TEST(test_certificate_manager_location_persists_across_instances);
-
   // BLE provisioning transport tests
   RUN_TEST(test_ble_provision_valid_payload);
   RUN_TEST(test_ble_provision_rejects_bad_latitude);
   RUN_TEST(test_ble_provision_rejects_empty_credentials);
+  RUN_TEST(test_ble_provision_location_persists_across_instances);
   RUN_TEST(test_ble_poll_empty_when_no_payload);
 
   // Load from embedded tests
@@ -635,17 +497,10 @@ void loop() {
   RUN_TEST(test_certificate_manager_load_fails_without_provisioning);
   RUN_TEST(test_certificate_manager_clear_removes_all_data);
   RUN_TEST(test_certificate_manager_clear_clears_nvs);
-  RUN_TEST(test_certificate_manager_start_provisioning_mode);
-  RUN_TEST(test_certificate_manager_stop_provisioning_mode);
-  RUN_TEST(test_certificate_manager_provisioning_loop);
-  RUN_TEST(test_certificate_manager_provision_request_with_wifi);
-  RUN_TEST(test_certificate_manager_provision_request_missing_wifi);
-  RUN_TEST(test_certificate_manager_provision_request_missing_location);
-  RUN_TEST(test_certificate_manager_provision_stores_location);
-  RUN_TEST(test_certificate_manager_location_persists_across_instances);
   RUN_TEST(test_ble_provision_valid_payload);
   RUN_TEST(test_ble_provision_rejects_bad_latitude);
   RUN_TEST(test_ble_provision_rejects_empty_credentials);
+  RUN_TEST(test_ble_provision_location_persists_across_instances);
   RUN_TEST(test_ble_poll_empty_when_no_payload);
   RUN_TEST(test_certificate_manager_load_from_embedded_returns_false_in_unit_test);
   RUN_TEST(test_certificate_manager_extract_cn_from_certificate);

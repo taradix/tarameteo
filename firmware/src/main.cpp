@@ -26,7 +26,6 @@
 
 // CertificateManager adapters
 #include "ArduinoAdapter.h"
-#include "WiFiAdapter.h"
 
 // BLE provisioning transport
 #include "NimBLEProvisionerAdapter.h"
@@ -40,8 +39,7 @@ WiFiManager wifiManager(nullptr, nullptr, WIFI_TIMEOUT_MS);
 // CertificateManager dependencies (must be global to persist)
 Preferences certPrefs;
 ArduinoAdapter arduinoAdapter;
-WiFiAdapter wifiAdapter;
-CertificateManager certManager(certPrefs, &wifiAdapter, &arduinoAdapter);
+CertificateManager certManager(certPrefs, &arduinoAdapter);
 
 MqttClient mqttClient(MQTT_SERVER, MQTT_PORT, &certManager);
 PowerManager powerManager(SLEEP_DURATION);
@@ -102,7 +100,7 @@ void setup() {
   // the analysis (clang-tidy, -DUNIT_TEST) pass skips this device-only glue.
 #ifndef UNIT_TEST
   if (wifiManager.needsProvisioning()) {
-    // Advertise "TaraMeteo-XXXX" using the last two MAC octets, matching the old AP name scheme.
+    // Advertise "TaraMeteo-XXXX" using the last two MAC octets.
     uint8_t mac[6];
     WiFi.macAddress(mac);
     char deviceName[24];
