@@ -170,6 +170,9 @@ class MQTTConsumer(MQTTBase):
             return
         logger.info("Subscribed to %s (qos=%d)", self.topic, self.qos)
         self._connected.set()
+            return
+        logger.info("Subscribed to %s (qos=%d)", self.topic, self.qos)
+        self._connected.set()
 
     def _on_message(self, client, userdata, msg: mqtt.MQTTMessage):
         message = MQTTMessage.from_msg(msg)
