@@ -22,6 +22,7 @@ from tarameteo.alerts import Alert, AlertStore, Condition
 from tarameteo.models import SQLModel
 from tarameteo.notifier import Unregistered
 from tarameteo.readings import AggregateReading, WeatherReading
+from tarameteo.ts import TSPoint
 
 
 @pytest.fixture
@@ -66,6 +67,9 @@ def _reading(**kwargs) -> WeatherReading:
     defaults.update(kwargs)
     return WeatherReading(**defaults)
 
+
+def _seen(timestamp: datetime, **tags) -> TSPoint:
+    return TSPoint(measurement="weather", fields={}, tags={"device_id": "outdoor-north", **tags}, timestamp=timestamp)
 
 async def _check(alert_store, notifier, **reading):
     await AlertService(notifier, "s", "http://localhost").check(_reading(**reading), alert_store)
@@ -167,9 +171,9 @@ async def test_offline_emails_once_then_when_readings_are_back(alert_store, noti
     alert_store.create(_alert(id="gone", sensor="gone", field="offline", condition=Condition.above, threshold=3.0))
     alerts, now = AlertService(notifier, "s", "http://localhost"), datetime.now(UTC)
 
-    await alerts.check_offline({"outdoor-north": now - timedelta(hours=2)}, alert_store)
+    await alerts.check_offline({"outdoor-north": _seen(now - timedelta(hours=2))}, alert_store)
     for _ in range(2):
-        await alerts.check_offline({"outdoor-north": now - timedelta(hours=4)}, alert_store)
+        await alerts.check_offline({"outdoor-north": _seen(now - timedelta(hours=4))}, alert_store)
     # A source re-sending an old reading on startup isn't the sensor coming back.
     await _check(alert_store, notifier, timestamp=now - timedelta(hours=4))
     await _check(alert_store, notifier)
@@ -179,6 +183,22 @@ async def test_offline_emails_once_then_when_readings_are_back(alert_store, noti
         "outdoor-north: no reading for 4 h",
         "outdoor-north: readings are back",
     ))
+
+
+async def test_names_the_sensor_by_its_label(alert_store, notifier):
+    alert_store.create(_alert())
+    alert_store.create(_alert(id="off", field="offline", condition=Condition.above, threshold=3.0))
+    alerts = AlertService(notifier, "s", "http://localhost")
+
+    await alerts.check_offline({"outdoor-north": _seen(datetime.now(UTC) - timedelta(hours=4), label="Gazebo")}, alert_store)
+    await _check(alert_store, notifier, label="Gazebo")
+
+    assert_that(_subjects(notifier), contains_exactly(
+        "Gazebo: no reading for 4 h",
+        "Gazebo: temperature is -25 °C",
+        "Gazebo: readings are back",
+    ))
+    assert_that(notifier.send.call_args.args[2], contains_string("Your alert: Gazebo: no reading for 3 h"))
 
 
 def test_offline_rule_in_french():

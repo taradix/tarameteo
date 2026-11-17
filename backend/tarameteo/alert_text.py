@@ -1,5 +1,6 @@
 """Alert emails and link pages, in the language the alert was created in."""
 
+from collections.abc import Mapping
 from html import escape
 
 from tarameteo.alerts import Alert
@@ -81,34 +82,37 @@ def value(alert: Alert, x: float, language: str | None = None) -> str:
     return f"{number} {UNITS[alert.field]}"
 
 
-def rule(alert: Alert, language: str | None = None) -> str:
-    """'outdoor: temperature below -20 °C', in the alert's language unless given another."""
+def rule(alert: Alert, language: str | None = None, label: str | None = None) -> str:
+    """'outdoor: temperature below -20 °C', in the alert's language unless given another; label names the sensor."""
     language = language or alert.language
     text = TEXT[language]
+    sensor = label or alert.sensor
     if alert.field == "offline":
-        return f"{alert.sensor}{text['colon']} {text['offline_rule'].format(value=value(alert, alert.threshold, language))}"
+        return f"{sensor}{text['colon']} {text['offline_rule'].format(value=value(alert, alert.threshold, language))}"
     field, condition = text["fields"][alert.field], text["conditions"][alert.condition]
-    return f"{alert.sensor}{text['colon']} {field} {condition} {value(alert, alert.threshold, language)}"
+    return f"{sensor}{text['colon']} {field} {condition} {value(alert, alert.threshold, language)}"
 
 
-def email(alert: Alert, key: str, url: str, reading: float | None = None, manage_url: str = "") -> tuple[str, str]:
+def email(
+    alert: Alert, key: str, url: str, reading: float | None = None, manage_url: str = "", label: str | None = None,
+) -> tuple[str, str]:
     """Subject and body for confirm, alert, normal, offline or online."""
     text = TEXT[alert.language]
     args = {
-        "sensor": alert.sensor,
+        "sensor": label or alert.sensor,
         "field": text["fields"][alert.field],
         "value": value(alert, reading) if reading is not None else "",
-        "rule": rule(alert),
+        "rule": rule(alert, label=label),
         "url": url,
         "manage_url": manage_url,
     }
     return text[f"{key}_subject"].format(**args), text[f"{key}_body"].format(**args)
 
 
-def push(alert: Alert, key: str, reading: float | None = None) -> tuple[str, str]:
+def push(alert: Alert, key: str, reading: float | None = None, label: str | None = None) -> tuple[str, str]:
     """Title and body for a push notification: the email's subject, then the rule it came from."""
-    title, _ = email(alert, key, "", reading)
-    return title, rule(alert)
+    title, _ = email(alert, key, "", reading, label=label)
+    return title, rule(alert, label=label)
 
 
 def _document(language: str, body: str) -> str:
@@ -132,14 +136,15 @@ def page(language: str, *paragraphs: str, button: str | None = None) -> str:
     return _document(language, text + (_button(button) if button else ""))
 
 
-def manage_page(language: str, email: str, alerts: list[Alert]) -> str:
-    """The address's alerts, each with a stop button, and one to stop them all."""
+def manage_page(language: str, email: str, alerts: list[Alert], labels: Mapping[str, str | None] | None = None) -> str:
+    """The address's alerts, each with a stop button, and one to stop them all; labels maps sensors to their labels."""
+    labels = labels or {}
     text = TEXT[language]
     title = f"<h1 style=\"font-size: 1.25rem\">{escape(text['manage_title'].format(email=email))}</h1>"
     if not alerts:
         return _document(language, f"{title}<p>{escape(text['manage_empty'])}</p>")
     items = "".join(
-        f"<li>{escape(rule(a, language))}{'' if a.confirmed else ' ' + escape(text['pending'])}"
+        f"<li>{escape(rule(a, language, labels.get(a.sensor)))}{'' if a.confirmed else ' ' + escape(text['pending'])}"
         f"{_button(text['remove_button'], f'?alert={a.id}')}</li>"
         for a in alerts
     )

@@ -1076,6 +1076,17 @@
             "type": "string",
             "title": "Sensor"
           },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
           "timestamp": {
             "type": "string",
             "format": "date-time",
@@ -1596,6 +1607,18 @@
             "type": "string",
             "title": "Name"
           },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "The owner's name for the sensor; show it instead of name when set"
+          },
           "kind": {
             "type": "string",
             "enum": [
@@ -1639,6 +1662,18 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "The owner's name for the sensor; show it instead of name when set"
           },
           "latitude": {
             "type": "number",
@@ -1823,6 +1858,21 @@
             "type": "string",
             "title": "Sensor",
             "description": "Sensor name"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32,
+                "minLength": 1,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "The owner's name for the sensor"
           },
           "timestamp": {
             "type": "string",

@@ -13,6 +13,8 @@ from tarameteo.ts import TSPoint
 MEASUREMENT = "weather"
 AGGREGATE_MEASUREMENT = "weather_aggregate"
 SENSOR_TAG = "device_id"
+LABEL_TAG = "label"
+LABEL_MAX_LENGTH = 32
 
 _MIN_TIMESTAMP = datetime(2020, 1, 1, tzinfo=UTC)
 
@@ -23,6 +25,11 @@ class WeatherReading(BaseModel):
     """A single weather measurement."""
 
     sensor: str = Field(..., description="Sensor name")
+    # No control characters: the label goes into email subjects.
+    label: str | None = Field(
+        None, min_length=1, max_length=LABEL_MAX_LENGTH, pattern=r"^[^\x00-\x1f\x7f]+$",
+        description="The owner's name for the sensor",
+    )
     timestamp: datetime = Field(..., description="Timestamp of reading")
     temperature: float = Field(..., description="Temperature in Celsius")
     humidity: float = Field(..., description="Humidity percentage")
@@ -60,6 +67,7 @@ class AggregateReading(BaseModel):
     """A period aggregate (min/avg/max) weather measurement."""
 
     sensor: str
+    label: str | None = None
     timestamp: datetime
     latitude: float | None = None
     longitude: float | None = None
@@ -87,13 +95,15 @@ def location_tags(latitude: float, longitude: float) -> dict[str, str]:
 
 
 def to_point(reading: Reading) -> TSPoint:
-    """Map a reading to its Influx point: location as tags, measurements as fields."""
+    """Map a reading to its Influx point: label and location as tags, measurements as fields."""
     tags = {SENSOR_TAG: reading.sensor}
+    if reading.label is not None:
+        tags[LABEL_TAG] = reading.label
     if reading.latitude is not None and reading.longitude is not None:
         tags |= location_tags(reading.latitude, reading.longitude)
     return TSPoint(
         measurement=MEASUREMENT if isinstance(reading, WeatherReading) else AGGREGATE_MEASUREMENT,
-        fields=reading.model_dump(exclude={"sensor", "timestamp", "latitude", "longitude"}, exclude_none=True),
+        fields=reading.model_dump(exclude={"sensor", "label", "timestamp", "latitude", "longitude"}, exclude_none=True),
         tags=tags,
         timestamp=reading.timestamp,
     )
@@ -104,6 +114,7 @@ def from_point(point: TSPoint) -> Reading:
     model = WeatherReading if point.measurement == MEASUREMENT else AggregateReading
     return model(
         sensor=point.tags[SENSOR_TAG],
+        label=point.tags.get(LABEL_TAG),
         timestamp=point.timestamp,
         latitude=point.tags.get("latitude"),
         longitude=point.tags.get("longitude"),

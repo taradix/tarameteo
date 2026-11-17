@@ -302,7 +302,7 @@ async def post_alert(
 
     alert = Alert(id=uuid.uuid4().hex, **body.model_dump())
     # Saved only once sent, so a failed send doesn't leave a pending alert that counts against MAX_PENDING.
-    await alerts.send_confirm(alert)
+    await alerts.send_confirm(alert, service.get_label(alert.sensor))
     alert_store.create(alert)
     return {"status": "confirmation_sent"}
 
@@ -323,21 +323,25 @@ GONE_PAGE = alert_text.page("fr", alert_text.GONE)
 
 
 @app.get("/api/alerts/confirm/{token}", response_class=HTMLResponse)
-def confirm_alert_page(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+def confirm_alert_page(
+    token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
+) -> HTMLResponse:
     alert_id = _token_alert_id(token, "confirm", alerts)
     if alert_id is None:
         return _html(INVALID_PAGE, 400)
     alert = alert_store.get(alert_id)
     if alert is None:
         return _html(GONE_PAGE, 404)
-    text = alert_text.TEXT[alert.language]
+    text, rule = alert_text.TEXT[alert.language], alert_text.rule(alert, label=service.get_label(alert.sensor))
     if alert.confirmed:
-        return _html(alert_text.page(alert.language, text["confirmed"].format(rule=alert_text.rule(alert))))
-    return _html(alert_text.page(alert.language, text["confirm_title"], alert_text.rule(alert), button=text["confirm_button"]))
+        return _html(alert_text.page(alert.language, text["confirmed"].format(rule=rule)))
+    return _html(alert_text.page(alert.language, text["confirm_title"], rule, button=text["confirm_button"]))
 
 
 @app.post("/api/alerts/confirm/{token}", response_class=HTMLResponse)
-def confirm_alert(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+def confirm_alert(
+    token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
+) -> HTMLResponse:
     alert_id = _token_alert_id(token, "confirm", alerts)
     if alert_id is None:
         return _html(INVALID_PAGE, 400)
@@ -345,20 +349,22 @@ def confirm_alert(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDe
     alert = alert_store.get(alert_id)
     if alert is None:
         return _html(GONE_PAGE, 404)
-    text = alert_text.TEXT[alert.language]
-    return _html(alert_text.page(alert.language, text["confirmed"].format(rule=alert_text.rule(alert))))
+    text, rule = alert_text.TEXT[alert.language], alert_text.rule(alert, label=service.get_label(alert.sensor))
+    return _html(alert_text.page(alert.language, text["confirmed"].format(rule=rule)))
 
 
 @app.get("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
-def unsubscribe_alert_page(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+def unsubscribe_alert_page(
+    token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
+) -> HTMLResponse:
     alert_id = _token_alert_id(token, "unsubscribe", alerts)
     if alert_id is None:
         return _html(INVALID_PAGE, 400)
     alert = alert_store.get(alert_id)
     if alert is None:
         return _html(GONE_PAGE, 404)
-    text = alert_text.TEXT[alert.language]
-    return _html(alert_text.page(alert.language, text["remove_title"], alert_text.rule(alert), button=text["remove_button"]))
+    text, rule = alert_text.TEXT[alert.language], alert_text.rule(alert, label=service.get_label(alert.sensor))
+    return _html(alert_text.page(alert.language, text["remove_title"], rule, button=text["remove_button"]))
 
 
 # Also the one-click unsubscribe target for the List-Unsubscribe-Post header.
@@ -393,12 +399,16 @@ async def post_alert_manage(
 
 
 @app.get("/api/alerts/manage/{token}", response_class=HTMLResponse)
-def alert_manage_page(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
+def alert_manage_page(
+    token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
+) -> HTMLResponse:
     payload = alerts.verify(token, "manage")
     if payload is None:
         return _html(INVALID_PAGE, 400)
     email = payload["email"]
-    return _html(alert_text.manage_page(payload["language"], email, alert_store.list_by_email(email)))
+    email_alerts = alert_store.list_by_email(email)
+    labels = {s.name: s.label for s in service.list_sensors(names=[a.sensor for a in email_alerts]).sensors}
+    return _html(alert_text.manage_page(payload["language"], email, email_alerts, labels))
 
 
 @app.post("/api/alerts/manage/{token}")

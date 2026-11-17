@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from tarameteo.readings import (
     AGGREGATE_MEASUREMENT,
+    LABEL_TAG,
     MEASUREMENT,
     SENSOR_TAG,
     AggregateReading,
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 class SensorEntry(BaseModel):
     name: str
+    label: str | None = Field(None, description="The owner's name for the sensor; show it instead of name when set")
     kind: SensorKind
     latitude: float
     longitude: float
@@ -105,6 +107,7 @@ class SensorInfo(BaseModel):
     """Full sensor record returned by GET /api/sensors/{name}."""
 
     name: str
+    label: str | None = Field(None, description="The owner's name for the sensor; show it instead of name when set")
     latitude: float
     longitude: float
     statistics: SensorStatistics
@@ -134,7 +137,7 @@ class SensorService:
             wanted = set(names)
             sensors = [s for s in sensors if s.name in wanted]
         if q is not None:
-            sensors = [s for s in sensors if q.casefold() in s.name.casefold()]
+            sensors = [s for s in sensors if any(q.casefold() in n.casefold() for n in (s.name, s.label) if n)]
         if bbox is not None:
             sensors = [s for s in sensors if bbox.contains(s.latitude, s.longitude)]
         if near is not None:
@@ -174,18 +177,17 @@ class SensorService:
         return sorted(sensors, key=lambda s: (s.name, s.kind))
 
     def _list_located(self, measurement: str, kind: SensorKind, start: datetime) -> list[SensorEntry]:
-        # Points come oldest first, so a sensor that moved keeps its latest location.
-        locations: dict[str, tuple[float, float]] = {}
+        # Points come oldest first, so a sensor that moved or was renamed keeps its latest location and label.
+        latest: dict[str, SensorEntry] = {}
         for p in self.ts_reader.last_points(measurement=measurement, start=start):
             name, lat, lon = (p.tags.get(k) for k in (SENSOR_TAG, "latitude", "longitude"))
             if name is None or lat is None or lon is None:
                 logger.warning("Skipping %s series without sensor name or location: %s", measurement, p.tags)
                 continue
-            locations[name] = (float(lat), float(lon))
-        return [
-            SensorEntry(name=name, kind=kind, latitude=lat, longitude=lon)
-            for name, (lat, lon) in locations.items()
-        ]
+            latest[name] = SensorEntry(
+                name=name, label=p.tags.get(LABEL_TAG), kind=kind, latitude=float(lat), longitude=float(lon),
+            )
+        return list(latest.values())
 
     def get_weather(
         self,
@@ -199,10 +201,22 @@ class SensorService:
             measurement=MEASUREMENT,
             start=start,
             stop=end,
-            tags={SENSOR_TAG: name},
+            tags=self._history_tags(name),
             limit=limit,
         )
         return [from_point(p) for p in points]
+
+    def _history_tags(self, name: str) -> dict[str, str]:
+        """Tags of the sensor's current history: a new label starts a new one, a move doesn't."""
+        # NOTE: a sensor silent for longer than LATEST_LOOKBACK has no current label, so it
+        # shows all its labels at once; look further back if that ever confuses someone.
+        label = self.get_label(name)
+        return {SENSOR_TAG: name} if label is None else {SENSOR_TAG: name, LABEL_TAG: label}
+
+    def get_label(self, name: str) -> str | None:
+        """The sensor's current label, if its latest reading has one."""
+        latest = self.get_latest(name)
+        return latest.label if latest is not None else None
 
     def get_latest(self, name: str) -> WeatherReading | None:
         point = self.ts_reader.latest(
@@ -219,7 +233,7 @@ class SensorService:
         points = self.ts_reader.query_points(
             measurement=MEASUREMENT,
             start=now - STATS_WINDOW,
-            tags={SENSOR_TAG: name},
+            tags=self._history_tags(name),
         )
         if not points:
             return SensorStatistics(
@@ -270,6 +284,7 @@ class SensorService:
         if latest is not None:
             return SensorInfo(
                 name=name,
+                label=latest.label,
                 latitude=latest.latitude,
                 longitude=latest.longitude,
                 statistics=self.get_statistics(name),
