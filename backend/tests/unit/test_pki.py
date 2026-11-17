@@ -6,6 +6,7 @@ from hamcrest import (
     all_of,
     assert_that,
     contains_string,
+    equal_to,
     has_properties,
 )
 
@@ -14,6 +15,7 @@ from tarameteo.crypto import (
     load_cert,
 )
 from tarameteo.pki import (
+    NO_EXPIRY,
     create_csr_pem,
     self_sign_ca_key_pem,
     sign_csr_pem,
@@ -80,6 +82,28 @@ def test_sign_csr_pem_server_auth_requires_san(unique):
             ca_cert_pem=ca_cert_material.cert_pem,
             server_auth=True,
         )
+
+
+def test_no_expiry(unique):
+    """A no-expiry CA and leaf both get the RFC 5280 notAfter."""
+    subject, common_name = unique("subject"), unique("text")
+    ca_key_pem = generate_key_pem()
+    ca_cert_material = self_sign_ca_key_pem(ca_key_pem, subject=subject, no_expiry=True)
+    csr_pem = create_csr_pem(generate_key_pem(), common_name)
+    cert_material = sign_csr_pem(
+        csr_pem,
+        ca_key_pem=ca_key_pem,
+        ca_cert_pem=ca_cert_material.cert_pem,
+        no_expiry=True,
+    )
+    assert_that(ca_cert_material.not_after, equal_to(NO_EXPIRY))
+    assert_that(cert_material.not_after, equal_to(NO_EXPIRY))
+
+
+def test_no_expiry_excludes_ttl_days(unique):
+    """Asking for both a TTL and no expiry is an error."""
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        self_sign_ca_key_pem(generate_key_pem(), subject=unique("subject"), ttl_days=1, no_expiry=True)
 
 
 def test_self_sign_ca_key_pem(unique):

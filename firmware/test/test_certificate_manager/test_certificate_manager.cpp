@@ -47,6 +47,21 @@ const char *INVALID_CERT = "This is not a certificate";
 Preferences testPrefs;
 MockArduino mockArduino;
 
+// What scripts/factory.py writes into the tarameteo_certs namespace.
+void seedIdentity(const char *certPem = VALID_CERT_PEM, const char *caCertPem = CA_CERT_PEM,
+                  unsigned long passkey = 123456) {
+  testPrefs.begin("tarameteo_certs", false);
+  testPrefs.putString("cli_cert", certPem);
+  testPrefs.putString("cli_key", VALID_KEY_PEM);
+  if (caCertPem) {
+    testPrefs.putString("ca_cert", caCertPem);
+  }
+  if (passkey) {
+    testPrefs.putULong("passkey", passkey);
+  }
+  testPrefs.end();
+}
+
 // ========================================
 // Test Setup/Teardown
 // ========================================
@@ -60,7 +75,7 @@ void setUp(void) {
 void tearDown(void) { testPrefs.end(); }
 
 // ========================================
-// Test Cases - Basic Lifecycle
+// Test Cases - Factory Identity
 // ========================================
 
 void test_certificate_manager_begin_no_certificates(void) {
@@ -71,104 +86,48 @@ void test_certificate_manager_begin_no_certificates(void) {
   TEST_ASSERT_FALSE(result);
   TEST_ASSERT_TRUE(certMgr.needsProvisioning());
   TEST_ASSERT_FALSE(certMgr.isProvisioned());
-  TEST_ASSERT_TRUE(mockArduino.hasLogContaining("Initializing"));
+  TEST_ASSERT_TRUE(mockArduino.hasLogContaining("factory.py"));
 }
 
-void test_certificate_manager_begin_with_valid_certificates(void) {
-  // Pre-populate NVS with valid certificates
-  testPrefs.begin("tarameteo_certs", false);
-  testPrefs.putString("cli_cert", VALID_CERT_PEM);
-  testPrefs.putString("cli_key", VALID_KEY_PEM);
-  testPrefs.putString("cert_cn", "station-01");
-  testPrefs.putULong("cert_expires", 2000000000UL);
-  testPrefs.putInt("cert_version", 1);
-  testPrefs.end();
-
+void test_certificate_manager_begin_with_factory_identity(void) {
+  seedIdentity();
   CertificateManager certMgr(testPrefs, &mockArduino);
 
   bool result = certMgr.begin();
 
   TEST_ASSERT_TRUE(result);
   TEST_ASSERT_TRUE(certMgr.isProvisioned());
-  TEST_ASSERT_FALSE(certMgr.needsProvisioning());
   TEST_ASSERT_EQUAL_STRING("station-01", certMgr.getCN());
+  TEST_ASSERT_EQUAL_STRING("station-01", certMgr.getSensorName());
+  TEST_ASSERT_EQUAL_UINT32(123456, certMgr.getPasskey());
 }
 
-// ========================================
-// Test Cases - Certificate Storage
-// ========================================
-
-void test_certificate_manager_store_valid_certificates(void) {
+void test_certificate_manager_begin_rejects_missing_passkey(void) {
+  seedIdentity(VALID_CERT_PEM, CA_CERT_PEM, 0);
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
 
-  bool result = certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
-
-  TEST_ASSERT_TRUE(result);
-  TEST_ASSERT_TRUE(certMgr.isProvisioned());
-  TEST_ASSERT_EQUAL_STRING("station-01", certMgr.getCN());
-  TEST_ASSERT_EQUAL(1, certMgr.getCertificateVersion());
-  TEST_ASSERT_TRUE(mockArduino.hasLogContaining("stored successfully"));
+  TEST_ASSERT_FALSE(certMgr.begin());
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "passkey") != NULL);
 }
 
-void test_certificate_manager_store_without_ca_cert(void) {
+void test_certificate_manager_begin_rejects_out_of_range_passkey(void) {
+  seedIdentity(VALID_CERT_PEM, CA_CERT_PEM, 1000000);
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
 
-  bool result = certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-
-  TEST_ASSERT_TRUE(result);
-  TEST_ASSERT_TRUE(certMgr.isProvisioned());
+  TEST_ASSERT_FALSE(certMgr.begin());
 }
 
-void test_certificate_manager_reject_invalid_certificate(void) {
+void test_certificate_manager_invalid_certificate_keeps_nvs(void) {
+  // The identity can't be re-created on the device, so a bad cert must never
+  // wipe NVS: the next boot (or a fixed firmware) sees the same data.
+  seedIdentity(INVALID_CERT);
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
 
-  bool result = certMgr.storeCertificates(INVALID_CERT, VALID_KEY_PEM);
-
-  TEST_ASSERT_FALSE(result);
+  TEST_ASSERT_FALSE(certMgr.begin());
   TEST_ASSERT_FALSE(certMgr.isProvisioned());
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Invalid certificate format") != NULL);
-}
-
-void test_certificate_manager_reject_invalid_key(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-
-  bool result = certMgr.storeCertificates(VALID_CERT_PEM, INVALID_CERT);
-
-  TEST_ASSERT_FALSE(result);
-  TEST_ASSERT_FALSE(certMgr.isProvisioned());
-  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Invalid private key format") != NULL);
-}
-
-void test_certificate_manager_increment_version_on_store(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-  int version1 = certMgr.getCertificateVersion();
-
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-  int version2 = certMgr.getCertificateVersion();
-
-  TEST_ASSERT_EQUAL(1, version1);
-  TEST_ASSERT_EQUAL(2, version2);
-}
-
-// ========================================
-// Test Cases - Certificate Validation
-// ========================================
-
-void test_certificate_manager_validate_after_store(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-
-  bool result = certMgr.validateCertificates();
-
-  TEST_ASSERT_TRUE(result);
+  TEST_ASSERT_TRUE(testPrefs.isKey("cli_cert"));
+  TEST_ASSERT_TRUE(testPrefs.isKey("cli_key"));
 }
 
 void test_certificate_manager_validate_fails_without_certificates(void) {
@@ -181,49 +140,15 @@ void test_certificate_manager_validate_fails_without_certificates(void) {
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "not provisioned") != NULL);
 }
 
-void test_certificate_manager_detect_expiration_warning(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-
-  // Set epoch time to simulate certificate expiring in 15 days
-  mockArduino.setCurrentEpochSeconds(1700000000UL);
-
-  // Pre-populate with cert expiring soon
-  testPrefs.begin("tarameteo_certs", false);
-  testPrefs.putString("cli_cert", VALID_CERT_PEM);
-  testPrefs.putString("cli_key", VALID_KEY_PEM);
-  testPrefs.putULong("cert_expires", 1700000000UL + (15 * 24 * 60 * 60)); // 15 days from now
-  testPrefs.end();
-
-  CertificateManager certMgr2(testPrefs, &mockArduino);
-  certMgr2.begin();
-  certMgr2.validateCertificates();
-
-  TEST_ASSERT_TRUE(mockArduino.hasLogContaining("expires in"));
-}
-
-void test_certificate_manager_validate_fails_when_current_time_unavailable(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-
-  mockArduino.setCurrentEpochSeconds(0);
-
-  bool result = certMgr.validateCertificates();
-
-  TEST_ASSERT_FALSE(result);
-  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Current time unavailable") != NULL);
-}
-
 // ========================================
 // Test Cases - Certificate Loading
 // ========================================
 
 void test_certificate_manager_load_certificates_to_client(void) {
+  seedIdentity();
   MockWiFiClient mockClient;
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
 
   bool result = certMgr.loadCertificates(mockClient);
 
@@ -234,10 +159,10 @@ void test_certificate_manager_load_certificates_to_client(void) {
 }
 
 void test_certificate_manager_load_fails_without_ca_cert(void) {
+  seedIdentity(VALID_CERT_PEM, nullptr);
   MockWiFiClient mockClient;
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
 
   bool result = certMgr.loadCertificates(mockClient);
 
@@ -257,38 +182,6 @@ void test_certificate_manager_load_fails_without_provisioning(void) {
 
   TEST_ASSERT_FALSE(result);
   TEST_ASSERT_FALSE(mockClient.certificateSet);
-}
-
-// ========================================
-// Test Cases - Certificate Clearing
-// ========================================
-
-void test_certificate_manager_clear_removes_all_data(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-
-  bool result = certMgr.clearCertificates();
-
-  TEST_ASSERT_TRUE(result);
-  TEST_ASSERT_FALSE(certMgr.isProvisioned());
-  TEST_ASSERT_EQUAL_STRING("", certMgr.getCN());
-  TEST_ASSERT_EQUAL(0, certMgr.getExpirationTime());
-  TEST_ASSERT_EQUAL(0, certMgr.getCertificateVersion());
-}
-
-void test_certificate_manager_clear_clears_nvs(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-  certMgr.clearCertificates();
-
-  // Try to create a new instance - should not find certificates
-  CertificateManager certMgr2(testPrefs, &mockArduino);
-  bool result = certMgr2.begin();
-
-  TEST_ASSERT_FALSE(result);
-  TEST_ASSERT_FALSE(certMgr2.isProvisioned());
 }
 
 // ========================================
@@ -351,10 +244,10 @@ void test_ble_provision_rejects_empty_credentials(void) {
 }
 
 void test_ble_provision_location_persists_across_instances(void) {
+  seedIdentity();
   {
     CertificateManager certMgr1(testPrefs, &mockArduino);
     certMgr1.begin();
-    certMgr1.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM, CA_CERT_PEM);
     WiFiManager wifiMgr;
     certMgr1.setWiFiManager(&wifiMgr);
 
@@ -362,7 +255,7 @@ void test_ble_provision_location_persists_across_instances(void) {
   }
 
   CertificateManager certMgr2(testPrefs, &mockArduino);
-  certMgr2.begin();
+  TEST_ASSERT_TRUE(certMgr2.begin());
 
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLatitude());
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLongitude());
@@ -374,89 +267,24 @@ void test_ble_poll_empty_when_no_payload(void) {
 }
 
 // ========================================
-// Test Cases - Load From Embedded
-// ========================================
-
-void test_certificate_manager_load_from_embedded_returns_false_in_unit_test(void) {
-  // In UNIT_TEST builds, loadFromEmbedded() always returns false
-  // because the extern symbols don't exist. This tests that begin()
-  // falls through correctly to needsProvisioning().
-  CertificateManager certMgr(testPrefs, &mockArduino);
-
-  bool result = certMgr.begin();
-
-  TEST_ASSERT_FALSE(result);
-  TEST_ASSERT_TRUE(certMgr.needsProvisioning());
-}
-
-// ========================================
-// Test Cases - CN Extraction
-// ========================================
-
-void test_certificate_manager_extract_cn_from_certificate(void) {
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  certMgr.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-
-  TEST_ASSERT_EQUAL_STRING("station-01", certMgr.getCN());
-  TEST_ASSERT_EQUAL_STRING("station-01", certMgr.getSensorName());
-}
-
-// ========================================
-// Test Cases - Persistence
-// ========================================
-
-void test_certificate_manager_persistence_across_instances(void) {
-  // First instance stores certificates
-  {
-    CertificateManager certMgr1(testPrefs, &mockArduino);
-    certMgr1.begin();
-    certMgr1.storeCertificates(VALID_CERT_PEM, VALID_KEY_PEM);
-  }
-
-  // Second instance should load them from NVS
-  {
-    CertificateManager certMgr2(testPrefs, &mockArduino);
-    bool result = certMgr2.begin();
-
-    TEST_ASSERT_TRUE(result);
-    TEST_ASSERT_TRUE(certMgr2.isProvisioned());
-    TEST_ASSERT_EQUAL_STRING("station-01", certMgr2.getCN());
-  }
-}
-
-// ========================================
 // Main - Unity Test Runner
 // ========================================
 
 int main(int argc, char **argv) {
   UNITY_BEGIN();
 
-  // Basic lifecycle tests
+  // Factory identity tests
   RUN_TEST(test_certificate_manager_begin_no_certificates);
-  RUN_TEST(test_certificate_manager_begin_with_valid_certificates);
-
-  // Certificate storage tests
-  RUN_TEST(test_certificate_manager_store_valid_certificates);
-  RUN_TEST(test_certificate_manager_store_without_ca_cert);
-  RUN_TEST(test_certificate_manager_reject_invalid_certificate);
-  RUN_TEST(test_certificate_manager_reject_invalid_key);
-  RUN_TEST(test_certificate_manager_increment_version_on_store);
-
-  // Certificate validation tests
-  RUN_TEST(test_certificate_manager_validate_after_store);
+  RUN_TEST(test_certificate_manager_begin_with_factory_identity);
+  RUN_TEST(test_certificate_manager_begin_rejects_missing_passkey);
+  RUN_TEST(test_certificate_manager_begin_rejects_out_of_range_passkey);
+  RUN_TEST(test_certificate_manager_invalid_certificate_keeps_nvs);
   RUN_TEST(test_certificate_manager_validate_fails_without_certificates);
-  RUN_TEST(test_certificate_manager_detect_expiration_warning);
-  RUN_TEST(test_certificate_manager_validate_fails_when_current_time_unavailable);
 
   // Certificate loading tests
   RUN_TEST(test_certificate_manager_load_certificates_to_client);
   RUN_TEST(test_certificate_manager_load_fails_without_ca_cert);
   RUN_TEST(test_certificate_manager_load_fails_without_provisioning);
-
-  // Certificate clearing tests
-  RUN_TEST(test_certificate_manager_clear_removes_all_data);
-  RUN_TEST(test_certificate_manager_clear_clears_nvs);
 
   // BLE provisioning transport tests
   RUN_TEST(test_ble_provision_valid_payload);
@@ -465,46 +293,5 @@ int main(int argc, char **argv) {
   RUN_TEST(test_ble_provision_location_persists_across_instances);
   RUN_TEST(test_ble_poll_empty_when_no_payload);
 
-  // Load from embedded tests
-  RUN_TEST(test_certificate_manager_load_from_embedded_returns_false_in_unit_test);
-
-  // CN extraction tests
-  RUN_TEST(test_certificate_manager_extract_cn_from_certificate);
-
-  // Persistence tests
-  RUN_TEST(test_certificate_manager_persistence_across_instances);
-
   return UNITY_END();
 }
-
-#ifdef UNIT_TEST
-void setup() { UNITY_BEGIN(); }
-
-void loop() {
-  RUN_TEST(test_certificate_manager_begin_no_certificates);
-  RUN_TEST(test_certificate_manager_begin_with_valid_certificates);
-  RUN_TEST(test_certificate_manager_store_valid_certificates);
-  RUN_TEST(test_certificate_manager_store_without_ca_cert);
-  RUN_TEST(test_certificate_manager_reject_invalid_certificate);
-  RUN_TEST(test_certificate_manager_reject_invalid_key);
-  RUN_TEST(test_certificate_manager_increment_version_on_store);
-  RUN_TEST(test_certificate_manager_validate_after_store);
-  RUN_TEST(test_certificate_manager_validate_fails_without_certificates);
-  RUN_TEST(test_certificate_manager_detect_expiration_warning);
-  RUN_TEST(test_certificate_manager_validate_fails_when_current_time_unavailable);
-  RUN_TEST(test_certificate_manager_load_certificates_to_client);
-  RUN_TEST(test_certificate_manager_load_fails_without_ca_cert);
-  RUN_TEST(test_certificate_manager_load_fails_without_provisioning);
-  RUN_TEST(test_certificate_manager_clear_removes_all_data);
-  RUN_TEST(test_certificate_manager_clear_clears_nvs);
-  RUN_TEST(test_ble_provision_valid_payload);
-  RUN_TEST(test_ble_provision_rejects_bad_latitude);
-  RUN_TEST(test_ble_provision_rejects_empty_credentials);
-  RUN_TEST(test_ble_provision_location_persists_across_instances);
-  RUN_TEST(test_ble_poll_empty_when_no_payload);
-  RUN_TEST(test_certificate_manager_load_from_embedded_returns_false_in_unit_test);
-  RUN_TEST(test_certificate_manager_extract_cn_from_certificate);
-  RUN_TEST(test_certificate_manager_persistence_across_instances);
-  UNITY_END();
-}
-#endif

@@ -24,6 +24,11 @@ setup: .pio/libdeps/esp32/integrity.dat include/config.h
 	@echo "==> Building ESP32 firmware..."
 	@$(PIO) run -e esp32
 
+.PHONY: factory
+factory: .pio/libdeps/esp32/integrity.dat include/config.h
+	@echo "==> Flashing firmware and factory identity..."
+	@$(PIO) run -e esp32 -t upload $(if $(PORT),--upload-port $(PORT))
+	@$(PYTHON) scripts/factory.py $(if $(PORT),--port $(PORT))
 .PHONY: check
 check: .pio/libdeps/analysis/integrity.dat include/config.h
 	@echo "==> Running static analysis..."
