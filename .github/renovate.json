@@ -14,8 +14,6 @@
   "automergeStrategy": "squash",
   "platformAutomerge": false,
   "recreateWhen": "always",
-  "npmrc": "allow-remote=all",
-  "npmrcMerge": true,
   "packageRules": [
     {
       "matchPackageNames": ["typescript", "typescript-eslint"],
