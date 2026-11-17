@@ -11,34 +11,31 @@ Weather in Notre-Dame-du-Laus.
 Provision a new sensor
 ----------------------
 
-Generate a key and client certificate for a new sensor::
+Every sensor runs the same firmware; its identity lives in the nvs
+partition. On a new board, flash the firmware, then give it an identity::
 
     export PKI_API_TOKEN=<CA_TOKEN>
-    tarameteo-pki issue <device_id>
+    make -C firmware factory PORT=<serial_port>
 
-Outputs:
+This picks a random sensor ID (like ``tm-3f9a1c``), issues a never-expiring
+client certificate for it and writes the certificate, key, CA and a BLE
+passkey into NVS. Write the printed ID and passkey on the sticker.
 
-- ``<device_id>.key`` — private key (mode 0600)
-- ``<device_id>.pem`` — client certificate (CN = ``<device_id>``)
-- ``ca.pem`` — CA certificate
+On first boot, the sensor enters **provisioning mode**: it advertises its ID
+over Bluetooth. Pair with the passkey from the sticker, then enter WiFi
+credentials and the sensor location in the TaraMeteo app.
 
 Flash a sensor
 --------------
 
-Certificates are embedded into the firmware at build time. Set ``SENSOR_ID``
-to the device identifier (used as the certificate CN and MQTT topic)::
+To update the firmware, flash the app only; NVS keeps the identity and WiFi
+settings::
 
-    SENSOR_ID=outdoor-north uv run pio run -e esp32 --target upload
+    uv run pio run -e esp32 --target upload
 
-On first boot, the sensor enters **provisioning mode**: it advertises
-``TaraMeteo-XXXX`` over Bluetooth. Pair with the ``BLE_PASSKEY`` from
-``config.h``, then enter WiFi credentials and the sensor location in the
-TaraMeteo app.
-
-To erase and re-provision::
-
-    uv run pio run -t erase
-    SENSOR_ID=outdoor-north uv run pio run -e esp32 --target upload
+Never erase the chip (``pio run -t erase``) or move the nvs partition in
+``firmware/partitions.csv``: both lose the identity, and the board then needs
+a new one from ``make factory``.
 
 To monitor serial output::
 

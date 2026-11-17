@@ -10,7 +10,6 @@ public:
 
     // Time functions
     virtual unsigned long millis() = 0;
-    virtual unsigned long currentEpochSeconds() = 0;
     virtual void delay(unsigned long ms) = 0;
 
     // Serial/logging functions

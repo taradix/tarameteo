@@ -88,36 +88,36 @@ void setup() {
     Serial.println("WiFi credentials not found in NVS");
   }
 
-  // Initialize certificate manager (certs are pre-flashed into firmware)
+  // Load the identity the factory step wrote into NVS (scripts/factory.py)
   Serial.println("Initializing certificate manager...");
   certManager.setWiFiManager(&wifiManager); // Link for unified provisioning
   if (!certManager.begin()) {
-    Serial.println("Certificate initialization failed");
+    printStatus("Factory Identity", false, certManager.getLastError());
+    powerManager.sleep();
   }
+  printStatus("Factory Identity", true);
+  Serial.printf("Sensor ID: %s\n", certManager.getCN());
 
-  // Provisioning is only needed for WiFi credentials (certs are pre-flashed).
+  // Provisioning is only needed for WiFi credentials (the identity is in NVS).
   // Guarded: NimBLEProvisionerAdapter wraps NimBLE, which has no host build, so
   // the analysis (clang-tidy, -DUNIT_TEST) pass skips this device-only glue.
 #ifndef UNIT_TEST
   if (wifiManager.needsProvisioning()) {
-    // Advertise "TaraMeteo-XXXX" using the last two MAC octets.
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char deviceName[24];
-    snprintf(deviceName, sizeof(deviceName), "TaraMeteo-%02X%02X", mac[4], mac[5]);
+    // Advertise the sensor ID printed on the sticker next to the passkey.
+    const char *deviceName = certManager.getCN();
 
     Serial.println("===========================================");
     Serial.println("PROVISIONING MODE (BLE)");
     Serial.println("===========================================");
     Serial.println("WiFi credentials not found!");
     Serial.printf("Open the TaraMeteo app and connect to: %s\n", deviceName);
-    Serial.printf("Pair with passkey: %06u\n", (unsigned)BLE_PASSKEY);
+    Serial.println("Pair with the passkey printed on the sticker.");
     Serial.println("Then enter WiFi credentials and sensor location.");
     Serial.println("Device will wait up to 5 minutes for provisioning...");
     Serial.println("===========================================");
 
     NimBLEProvisionerAdapter ble;
-    if (!ble.begin(deviceName, BLE_PASSKEY)) {
+    if (!ble.begin(deviceName, certManager.getPasskey())) {
       Serial.println("Failed to start BLE provisioning!");
       delay(5000);
       ESP.restart();
@@ -160,7 +160,7 @@ void setup() {
   Serial.printf("Connected to %s (IP: %s)\n", wifiManager.getSSID(), wifiManager.getIP());
   Serial.printf("WiFi RSSI: %d dBm\n", wifiManager.getRSSI());
 
-  // Initialize time manager and sync before certificate validation, which needs current time
+  // Initialize time manager and sync before TLS, which checks the broker certificate dates
   if (!timeManager.begin()) {
     printStatus("Time Manager", false, timeManager.getLastError());
     powerManager.sleep();
@@ -170,7 +170,7 @@ void setup() {
   Serial.println("Synchronizing time with NTP servers...");
   if (!timeManager.syncTime()) {
     printStatus("Time Sync", false, timeManager.getLastError());
-    Serial.println("NTP sync failed. Cannot validate certificate without current time. Sleeping.");
+    Serial.println("NTP sync failed. Cannot validate the broker certificate without current time. Sleeping.");
     powerManager.sleep();
   }
   printStatus("Time Sync", true);
@@ -181,18 +181,6 @@ void setup() {
     Serial.printf("Current time: %s\n", timeString);
   }
 
-  // Validate certificates before proceeding
-  if (!certManager.validateCertificates()) {
-    printStatus("Certificate Validation", false, certManager.getLastError());
-    Serial.println("Certificate validation failed. Please re-provision.");
-    delay(5000);
-    certManager.clearCertificates();
-    ESP.restart();
-  }
-  printStatus("Certificate Validation", true);
-  Serial.printf("Certificate CN: %s\n", certManager.getCN());
-  Serial.printf("Sensor Name: %s (from certificate)\n", certManager.getSensorName());
-  Serial.printf("Certificate expires: %lu\n", certManager.getExpirationTime());
 
   // Initialize MQTT client (certificates already loaded by CertificateManager)
   if (!mqttClient.begin()) {

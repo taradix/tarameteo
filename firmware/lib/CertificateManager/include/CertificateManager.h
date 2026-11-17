@@ -8,12 +8,15 @@
 // Forward declaration
 class WiFiManager;
 
+// Loads the board identity the factory step wrote into NVS (scripts/factory.py):
+// client cert + key, CA cert and BLE passkey. The firmware never writes or
+// clears them, so an app-only reflash keeps the identity.
 class CertificateManager {
 public:
     static const int MAX_CERT_SIZE = 4096;
     static const int MAX_KEY_SIZE = 4096;
     static const int MAX_CN_LENGTH = 64;
-    static const int CERT_EXPIRY_WARNING_DAYS = 365;
+    static const uint32_t MAX_PASSKEY = 999999;
 
     // Constructor with dependency injection
     CertificateManager(Preferences& prefs, IArduino* arduino);
@@ -32,27 +35,20 @@ public:
     void setWiFiManager(WiFiManager* wifiManager) { _wifiManager = wifiManager; }
     bool applyProvisioning(const char* wifiSsid, const char* wifiPassword, float latitude, float longitude);
 
-    // Storage Management
-    bool storeCertificates(const char* certPem, const char* keyPem, const char* caCertPem = nullptr);
-    bool clearCertificates();
-
     // Getters
     const char* getLastError() const { return _lastError; }
     const char* getCN() const { return _cn; }
     const char* getSensorName() const { return _cn; }  // Sensor name IS the CN
-    unsigned long getExpirationTime() const { return _expiresAt; }
-    int getCertificateVersion() const { return _certVersion; }
+    uint32_t getPasskey() const { return _passkey; }
     float getLatitude() const { return _latitude; }
     float getLongitude() const { return _longitude; }
 
 private:
-    char _serialNumber[65];  // Hex string of serial
     char _lastError[128];
     char _cn[MAX_CN_LENGTH];
+    uint32_t _passkey;
     float _latitude;
     float _longitude;
-    unsigned long _expiresAt;
-    int _certVersion;
 
     Preferences& _prefs;
     IArduino* _arduino;
@@ -65,16 +61,11 @@ private:
 
     // Certificate parsing
     bool extractCNFromCert(const char* certPem);
-    bool extractExpirationFromCert(const char* certPem);
     bool validateCertificateFormat(const char* certPem);
     bool validatePrivateKeyFormat(const char* keyPem);
-    bool validateCertKeyPair(const char* certPem, const char* keyPem);
-    void logCertificateInfo(const char* certPem);
 
     // NVS operations
     bool loadFromNVS();
-    bool loadFromEmbedded();
-    bool saveToNVS(const char* certPem, const char* keyPem, const char* caCertPem);
 
     // Utilities
     void clearClientCredentials();
