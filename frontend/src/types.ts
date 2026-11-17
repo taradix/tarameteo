@@ -6,7 +6,9 @@ type Schemas = components["schemas"];
 export type SensorEntry = Schemas["SensorEntry"];
 export type SensorKind = SensorEntry["kind"];
 // Enough to fetch and chart a sensor, even one picked from the URL before the list loads.
-export type SensorRef = Pick<SensorEntry, "name" | "kind">;
+export type SensorRef = Pick<SensorEntry, "name" | "kind" | "label">;
+// What people see: the owner's label, else the ID.
+export const sensorTitle = (s: SensorRef) => s.label ?? s.name;
 export type WeatherReading = Schemas["WeatherReading"];
 export type AggregateReading = Schemas["AggregateReading"];
 export type SensorList = Schemas["SensorList"];

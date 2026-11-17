@@ -1,7 +1,7 @@
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
-import type { AlertCreate } from "../types";
+import { sensorTitle, type AlertCreate, type SensorRef } from "../types";
 
 type AlertField = AlertCreate["field"];
 
@@ -13,7 +13,7 @@ const emailLanguage = (language?: string) => (language === "fr" ? "fr" : "en");
 
 // One header button for every screen size; on phones the dialog is a bottom
 // sheet so the form isn't buried under the charts.
-export function AlertsDialog({ sensors }: { sensors: string[] }) {
+export function AlertsDialog({ sensors }: { sensors: SensorRef[] }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDialogElement>(null);
   const [view, setView] = useState<"create" | "manage" | null>(null);
@@ -59,9 +59,9 @@ export function AlertsDialog({ sensors }: { sensors: string[] }) {
   );
 }
 
-function AlertForm({ sensors, onClose }: { sensors: string[]; onClose: () => void }) {
+function AlertForm({ sensors, onClose }: { sensors: SensorRef[]; onClose: () => void }) {
   const { t, i18n } = useTranslation();
-  const [sensor, setSensor] = useState(sensors[0] ?? "");
+  const [sensor, setSensor] = useState(sensors[0]?.name ?? "");
   const [field, setField] = useState<AlertField>("temperature");
   const [condition, setCondition] = useState<"above" | "below">("below");
   const [threshold, setThreshold] = useState("");
@@ -105,7 +105,7 @@ function AlertForm({ sensors, onClose }: { sensors: string[]; onClose: () => voi
 
       <div className="flex flex-wrap gap-2">
         <select value={sensor} onChange={(e) => setSensor(e.target.value)} className="border rounded px-2 py-1">
-          {sensors.map((s) => <option key={s} value={s}>{s}</option>)}
+          {sensors.map((s) => <option key={s.name} value={s.name}>{sensorTitle(s)}</option>)}
         </select>
 
         <select value={field} onChange={(e) => setField(e.target.value as AlertField)} className="border rounded px-2 py-1">

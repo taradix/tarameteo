@@ -25,4 +25,18 @@ describe("SensorPicker", () => {
     // Down stops at the last suggestion, so Up lands on the first.
     expect(onChange).toHaveBeenCalledExactlyOnceWith(["jdd-carre"]);
   });
+
+  it("shows labels and keeps adding by ID", async () => {
+    stubFetch({ "/api/sensors": { sensors: [{ name: "tm-a1b2c3", label: "Gazebo", kind: "timeseries" }] } });
+    const onChange = vi.fn();
+    const selected = [{ name: "tm-d4e5f6", label: "Garden", kind: "timeseries" }] as const;
+    render(<SensorPicker selected={[...selected]} hidden={[]} onChange={onChange} onHiddenChange={vi.fn()} />, {
+      wrapper: queryWrapper(),
+    });
+
+    expect(screen.getByRole("button", { name: "Toggle Garden" })).toBeTruthy();
+    await userEvent.type(screen.getByRole("combobox"), "gaz");
+    await userEvent.click(await screen.findByRole("option", { name: /Gazebo/ }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(["tm-d4e5f6", "tm-a1b2c3"]);
+  });
 });

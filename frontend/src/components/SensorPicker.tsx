@@ -1,12 +1,13 @@
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useSensorSearch } from "../hooks/useSensors";
+import { sensorTitle, type SensorRef } from "../types";
 
 // A list past this is a scroll, not a suggestion.
 const SUGGESTIONS = 20;
 
 interface Props {
-  selected: string[];
+  selected: SensorRef[];
   hidden: string[];
   onChange: (sensors: string[]) => void;
   onHiddenChange: (hidden: string[]) => void;
@@ -21,17 +22,18 @@ export function SensorPicker({ selected, hidden, onChange, onHiddenChange }: Pro
   const [active, setActive] = useState(-1);
   const listId = useId();
   const search = useSensorSearch(input, SUGGESTIONS);
+  const names = selected.map((s) => s.name);
 
   const add = (name = input.trim()) => {
-    if (!name || selected.includes(name)) return;
-    onChange([...selected, name]);
+    if (!name || names.includes(name)) return;
+    onChange([...names, name]);
     setInput("");
     setActive(-1);
     inputRef.current?.blur();
   };
 
   const remove = (name: string) => {
-    onChange(selected.filter((s) => s !== name));
+    onChange(names.filter((s) => s !== name));
     onHiddenChange(hidden.filter((h) => h !== name));
   };
 
@@ -39,8 +41,8 @@ export function SensorPicker({ selected, hidden, onChange, onHiddenChange }: Pro
     onHiddenChange(hidden.includes(name) ? hidden.filter((h) => h !== name) : [...hidden, name]);
 
   // A sensor with both kinds comes back twice; one suggestion is enough.
-  const names = new Set(search.data?.sensors.map((s) => s.name));
-  const suggestions = open && input.trim() ? [...names].filter((s) => !selected.includes(s)) : [];
+  const found = new Map(search.data?.sensors.map((s) => [s.name, s]));
+  const suggestions = open && input.trim() ? [...found.values()].filter((s) => !names.includes(s.name)) : [];
   // Late results can shrink the list under the highlight.
   const highlighted = active < suggestions.length ? active : -1;
 
@@ -52,7 +54,7 @@ export function SensorPicker({ selected, hidden, onChange, onHiddenChange }: Pro
       const step = e.key === "ArrowDown" ? 1 : -1;
       setActive(Math.min(Math.max(highlighted + step, -1), suggestions.length - 1));
     } else if (e.key === "Enter") {
-      add(suggestions[highlighted]);
+      add(suggestions[highlighted]?.name);
     } else if (e.key === "Escape") {
       setOpen(false);
       setActive(-1);
@@ -93,17 +95,18 @@ export function SensorPicker({ selected, hidden, onChange, onHiddenChange }: Pro
           >
             {suggestions.map((s, i) => (
               <li
-                key={s}
+                key={s.name}
                 id={`${listId}-${i}`}
                 role="option"
                 aria-selected={i === highlighted}
                 ref={i === highlighted ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
                 // Keep focus on the input, or its blur hides this list before the click lands.
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => add(s)}
+                onClick={() => add(s.name)}
                 className={`cursor-pointer px-2 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${i === highlighted ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
               >
-                {s}
+                {sensorTitle(s)}
+                {s.label && <span className="ml-2 text-xs text-zinc-500">{s.name}</span>}
               </li>
             ))}
           </ul>
@@ -122,23 +125,26 @@ export function SensorPicker({ selected, hidden, onChange, onHiddenChange }: Pro
         <p className="mt-3 text-sm text-zinc-500">{t("sensors.none")}</p>
       ) : (
         <ul className="mt-3 flex flex-wrap gap-2">
-          {selected.map((name) => {
+          {selected.map((s) => {
+            const { name } = s;
+            const title = sensorTitle(s);
             const isActive = !hidden.includes(name);
             return (
               <li key={name} className="flex items-center rounded-full text-sm overflow-hidden">
                 <button
                   type="button"
                   onClick={() => toggle(name)}
-                  aria-label={t("sensors.toggle", { name })}
+                  aria-label={t("sensors.toggle", { name: title })}
                   aria-pressed={isActive}
+                  title={s.label ? name : undefined}
                   className={`pl-3 pr-2 py-1 ${isActive ? "bg-blue-600 text-white" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"}`}
                 >
-                  {name}
+                  {title}
                 </button>
                 <button
                   type="button"
                   onClick={() => remove(name)}
-                  aria-label={t("sensors.remove", { name })}
+                  aria-label={t("sensors.remove", { name: title })}
                   className={`px-2 py-1 ${isActive ? "bg-blue-600 text-blue-200 hover:text-white" : "bg-zinc-100 text-zinc-400 hover:text-red-600 dark:bg-zinc-800 dark:text-zinc-500"}`}
                 >
                   ×

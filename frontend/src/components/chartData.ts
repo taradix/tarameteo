@@ -1,7 +1,7 @@
 import type { ChartDataset } from "chart.js";
 import { addDays, parseISO, startOfDay } from "date-fns";
 import { bandColorFor, colorFor } from "../colors";
-import type { AggregateReading, SensorRef, WeatherField, WeatherReading } from "../types";
+import { sensorTitle, type AggregateReading, type SensorRef, type WeatherField, type WeatherReading } from "../types";
 
 // These fields have min/avg/max structure in AggregateReading; all others are single values.
 const BAND_FIELDS = new Set<WeatherField>(["temperature", "humidity", "pressure"]);
@@ -60,7 +60,7 @@ export function buildDatasets(
       // When showing multiple fields, differentiate by sensor+field; otherwise by sensor alone.
       const colorKey = multiField ? `${sensor.name}-${field}` : sensor.name;
       const color = colorFor(colorKey);
-      const label = multiField ? `${sensor.name} — ${fieldLabel(field)}` : sensor.name;
+      const label = multiField ? `${sensorTitle(sensor)} — ${fieldLabel(field)}` : sensorTitle(sensor);
 
       if (sensor.kind === "timeseries") {
         datasets.push({
@@ -120,7 +120,7 @@ export function buildDatasets(
           // Use sensor color (not per-field) so precipitation matches other charts;
           // distinguish fields by line style (rain=solid, snow=dashed).
           const aggColor = colorFor(sensor.name);
-          const aggLabel = fields.indexOf(field) === 0 ? sensor.name : "";
+          const aggLabel = fields.indexOf(field) === 0 ? sensorTitle(sensor) : "";
           datasets.push({
             label: aggLabel,
             data: steps(aggData, (r) => singleAggValue(r, field)),
