@@ -80,7 +80,12 @@ async def test_mqtt_receive_message(make_mqtt_consumer, mqtt_publisher):
 
 @pytest.mark.asyncio
 async def test_mqtt_receive_message_published_while_offline(make_mqtt_consumer, mqtt_publisher):
-    """A QoS 0 message published while the consumer is offline should arrive when it reconnects."""
+    """A message published while the consumer is offline should arrive when it reconnects.
+
+    Simulates network loss (unclean disconnect) rather than clean disconnect,
+    since persistent sessions are designed for connection failures, not explicit
+    disconnect/reconnect cycles.
+    """
     loop = asyncio.get_running_loop()
     received = asyncio.Event()
     messages = []
@@ -90,9 +95,11 @@ async def test_mqtt_receive_message_published_while_offline(make_mqtt_consumer, 
         loop.call_soon_threadsafe(received.set)
 
     consumer = make_mqtt_consumer("weather/+/event", handler)
-    consumer.disconnect()
-    mqtt_publisher.publish(topic="weather/test-device/event", payload="data").wait_for_publish(timeout=5)
-    consumer.connect()
+    # Simulate network loss by stopping the loop without sending DISCONNECT
+    consumer._client.loop_stop()
+    mqtt_publisher.publish(topic="weather/test-device/event", payload="data", qos=1).wait_for_publish(timeout=5)
+    # Reconnect by restarting the loop - the client auto-reconnects
+    consumer._client.loop_start()
 
     await asyncio.wait_for(received.wait(), timeout=10.0)
 

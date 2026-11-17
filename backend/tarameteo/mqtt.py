@@ -79,6 +79,7 @@ class MQTTBase:
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.client_id,
             clean_session=self.clean_session,
+            protocol=mqtt.MQTTProtocolVersion.MQTTv311,
         )
         client.tls_set(
             ca_certs=self.cafile,
@@ -117,8 +118,11 @@ class MQTTBase:
 
     def connect(self):
         """Build the client, connect, and start background networking."""
-        self._client = self._build_client()
-        self._client.connect(self.host, self.port, self.keepalive)
+        if self._client is None:
+            self._client = self._build_client()
+            self._client.connect(self.host, self.port, self.keepalive)
+        else:
+            self._client.reconnect()
         self._client.loop_start()
         self._running = True
 
@@ -129,7 +133,6 @@ class MQTTBase:
         if self._client is not None:
             self._client.loop_stop()
             self._client.disconnect()
-            self._client = None
 
     def __enter__(self):
         self.connect()
