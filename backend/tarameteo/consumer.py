@@ -6,7 +6,6 @@ reading twice and need its own MQTT client id.
 
 import asyncio
 import logging
-from contextlib import suppress
 
 from pydantic import ValidationError
 from taraqueue import Queue
@@ -85,8 +84,9 @@ async def run(
         )
 
     def _log_handler_failure(future) -> None:
-        with suppress(asyncio.CancelledError):
-            exc = future.exception()
+        if future.cancelled():
+            return
+        exc = future.exception()
         if exc is not None:
             logger.error("Unhandled error in weather message handler", exc_info=exc)
 
