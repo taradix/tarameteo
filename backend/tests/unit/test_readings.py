@@ -56,6 +56,11 @@ def test_from_point_reverses_to_point(reading):
         '"latitude":46.81,"longitude":-71.21,"altitude":150.5,"rssi":-60,"retry_count":2}',
         {"altitude": 150.5, "rssi": -60, "retry_count": 2},
     ),
+    (
+        '{"timestamp":1767225600,"temperature":20.5,"humidity":50,"pressure":1013.25,'
+        '"latitude":46.81,"longitude":-71.21,"label":"Abri été"}',
+        {"label": "Abri été"},
+    ),
 ])
 def test_weather_reading_parses_firmware_payload(payload, expected):
     """The JSON a sensor publishes should parse into a reading."""

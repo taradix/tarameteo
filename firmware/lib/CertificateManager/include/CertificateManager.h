@@ -17,6 +17,8 @@ public:
     static const int MAX_KEY_SIZE = 4096;
     static const int MAX_CN_LENGTH = 64;
     static const uint32_t MAX_PASSKEY = 999999;
+    // Bytes of UTF-8, so always within the backend's 32 characters (readings.LABEL_MAX_LENGTH).
+    static const int MAX_LABEL_BYTES = 32;
 
     // Constructor with dependency injection
     CertificateManager(Preferences& prefs, IArduino* arduino);
@@ -33,7 +35,9 @@ public:
 
     // Provisioning
     void setWiFiManager(WiFiManager* wifiManager) { _wifiManager = wifiManager; }
-    bool applyProvisioning(const char* wifiSsid, const char* wifiPassword, float latitude, float longitude);
+    bool applyProvisioning(const char* wifiSsid, const char* wifiPassword, float latitude, float longitude,
+                           const char* label);
+    static bool isValidLabel(const char* label);
 
     // Getters
     const char* getLastError() const { return _lastError; }
@@ -42,10 +46,12 @@ public:
     uint32_t getPasskey() const { return _passkey; }
     float getLatitude() const { return _latitude; }
     float getLongitude() const { return _longitude; }
+    const char* getLabel() const { return _label; }  // Empty when the owner gave none
 
 private:
     char _lastError[128];
     char _cn[MAX_CN_LENGTH];
+    char _label[MAX_LABEL_BYTES + 1];
     uint32_t _passkey;
     float _latitude;
     float _longitude;
