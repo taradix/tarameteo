@@ -37,6 +37,7 @@ def issue_cert(request: IssueCertificateRequest) -> IssueCertificateResponse:
             client_auth=request.client_auth,
             server_auth=request.server_auth,
             ttl_days=request.ttl_days,
+            no_expiry=request.no_expiry,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

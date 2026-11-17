@@ -74,6 +74,7 @@ def init(
     *,
     common_name: str,
     ttl_days: int | None = None,
+    no_expiry: bool = False,
     key_algorithm: KeyAlgorithm,
     force: bool = False,
 ) -> InitResult:
@@ -101,6 +102,7 @@ def init(
             key_pem,
             subject=subject,
             ttl_days=ttl_days,
+            no_expiry=no_expiry,
         )
     except ValueError as e:
         return InitResult(
@@ -176,6 +178,7 @@ def issue(
     ca_client: CAClient,
     common_name: str,
     ttl_days: int | None = None,
+    no_expiry: bool = False,
     key_algorithm: KeyAlgorithm,
     client_auth: bool = True,
     server_auth: bool = False,
@@ -188,6 +191,7 @@ def issue(
     request = IssueCertificateRequest(
         csr_pem=csr_pem,
         ttl_days=ttl_days,
+        no_expiry=no_expiry,
         client_auth=client_auth,
         server_auth=server_auth,
     )
@@ -264,10 +268,16 @@ def make_args_parser():
         default="Root CA",
         help="Common name for the subject of the certificate (default: %(default)s)",
     )
-    init_parser.add_argument(
+    init_lifetime = init_parser.add_mutually_exclusive_group()
+    init_lifetime.add_argument(
         "--ttl-days",
         type=int,
         help="Certificate time-to-live in days (default: server default)",
+    )
+    init_lifetime.add_argument(
+        "--no-expiry",
+        action="store_true",
+        help="Certificate never expires (RFC 5280 notAfter 99991231235959Z)",
     )
     init_parser.add_argument(
         "--key-algorithm",
@@ -291,10 +301,16 @@ def make_args_parser():
         default=DEFAULT_API_TOKEN,
         help="Bearer token for the API",
     )
-    issue_parser.add_argument(
+    issue_lifetime = issue_parser.add_mutually_exclusive_group()
+    issue_lifetime.add_argument(
         "--ttl-days",
         type=ttl_days_arg,
         help="Certificate time-to-live in days (default: server default)",
+    )
+    issue_lifetime.add_argument(
+        "--no-expiry",
+        action="store_true",
+        help="Certificate never expires (RFC 5280 notAfter 99991231235959Z)",
     )
     issue_parser.add_argument(
         "--key-algorithm",
@@ -354,6 +370,7 @@ def main(argv=None) -> int:
                 cert_path=args.output_dir / "ca.pem",
                 common_name=args.common_name,
                 ttl_days=args.ttl_days,
+                no_expiry=args.no_expiry,
                 key_algorithm=args.key_algorithm,
                 force=args.force,
             )
@@ -369,6 +386,7 @@ def main(argv=None) -> int:
                     ca_client=ca_client,
                     common_name=args.device_id,
                     ttl_days=args.ttl_days,
+                    no_expiry=args.no_expiry,
                     key_algorithm=args.key_algorithm,
                     client_auth=not server_auth,
                     server_auth=server_auth,

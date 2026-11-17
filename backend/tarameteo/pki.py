@@ -32,6 +32,9 @@ from tarameteo.crypto import (
 
 DEFAULT_TTL_DAYS = 3650
 
+# RFC 5280 4.1.2.5: the notAfter for a certificate with no well-defined expiration date.
+NO_EXPIRY = datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC)
+
 
 class CertificateMaterial(BaseModel):
     """Material produced by issuing (or self-signing) an X.509 certificate."""
@@ -79,13 +82,11 @@ def sign_csr_pem(
     ca_key_pem: str,
     ca_cert_pem: str,
     ttl_days: int | None = None,
+    no_expiry: bool = False,
     client_auth: bool = True,
     server_auth: bool = False,
 ) -> CertificateMaterial:
     """Issue a leaf certificate from a CSR using a CA key+certificate."""
-    if ttl_days is None:
-        ttl_days = DEFAULT_TTL_DAYS
-
     csr = load_csr(csr_pem)
     ca_cert = load_cert(ca_cert_pem)
     ca_key = load_key(ca_key_pem)
@@ -99,6 +100,7 @@ def sign_csr_pem(
         issuer=ca_cert.subject,
         public_key=csr.public_key(),
         ttl_days=ttl_days,
+        no_expiry=no_expiry,
     )
 
     builder = _add_leaf_extensions(
@@ -126,11 +128,9 @@ def self_sign_ca_key_pem(
     *,
     subject: str,
     ttl_days: int | None = None,
+    no_expiry: bool = False,
 ) -> CertificateMaterial:
     """Create a self-signed CA certificate from a CA private key."""
-    if ttl_days is None:
-        ttl_days = DEFAULT_TTL_DAYS
-
     ca_key = load_key(ca_key_pem)
     name = _parse_subject(subject)
 
@@ -139,6 +139,7 @@ def self_sign_ca_key_pem(
         issuer=name,
         public_key=ca_key.public_key(),
         ttl_days=ttl_days,
+        no_expiry=no_expiry,
     )
 
     builder = _add_ca_extensions(
@@ -189,12 +190,16 @@ def _build_base_certificate(
     subject: x509.Name,
     issuer: x509.Name,
     public_key,
-    ttl_days: int,
+    ttl_days: int | None,
+    no_expiry: bool,
     now: datetime | None = None,
 ) -> x509.CertificateBuilder:
+    if no_expiry and ttl_days is not None:
+        raise ValueError("ttl_days and no_expiry are mutually exclusive")
+
     now = now or datetime.now(UTC)
     not_before = now - timedelta(minutes=2)
-    not_after = now + timedelta(days=ttl_days)
+    not_after = NO_EXPIRY if no_expiry else now + timedelta(days=ttl_days or DEFAULT_TTL_DAYS)
     serial = x509.random_serial_number()
 
     return (

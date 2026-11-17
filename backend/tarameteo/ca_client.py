@@ -35,6 +35,7 @@ class IssueCertificateRequest(BaseModel):
 
     csr_pem: str = Field(min_length=1)
     ttl_days: int | None = Field(None, ge=TTL_MIN, le=TTL_MAX)
+    no_expiry: bool = False
     client_auth: bool = True
     server_auth: bool = False
 

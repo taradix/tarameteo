@@ -428,6 +428,11 @@ export interface components {
             /** Ttl Days */
             ttl_days?: number | null;
             /**
+             * No Expiry
+             * @default false
+             */
+            no_expiry: boolean;
+            /**
              * Client Auth
              * @default true
              */

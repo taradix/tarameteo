@@ -1472,6 +1472,11 @@
             ],
             "title": "Ttl Days"
           },
+          "no_expiry": {
+            "type": "boolean",
+            "title": "No Expiry",
+            "default": false
+          },
           "client_auth": {
             "type": "boolean",
             "title": "Client Auth",
