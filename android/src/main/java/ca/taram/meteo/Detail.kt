@@ -1,6 +1,7 @@
 package ca.taram.meteo
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -79,11 +80,18 @@ class DetailModel(private val name: String, val aggregate: Boolean) : ViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SensorScreen(name: String, kind: String, model: DetailModel = viewModel { DetailModel(name, kind == "aggregate") }) {
+fun SensorScreen(
+    name: String,
+    kind: String,
+    label: String?,
+    model: DetailModel = viewModel { DetailModel(name, kind == "aggregate") },
+) {
     val state by model.state.collectAsStateWithLifecycle()
     val hours by model.hours.collectAsStateWithLifecycle()
     PullToRefreshBox(state.refreshing, model::refresh, Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            // The title bar shows the label, so the ID printed on the sticker goes here.
+            if (label != null) Box(Modifier.padding(start = 16.dp, top = 8.dp)) { Time(name) }
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (h in model.ranges) {
                     FilterChip(h == hours, { model.hours.value = h }, { Text(stringResource(RANGE_LABELS.getValue(h))) })

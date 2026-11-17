@@ -75,6 +75,15 @@ class ApiTest {
     }
 
     @Test
+    fun aSensorIsTitledByItsLabelElseItsId() = runBlocking {
+        body = """{"sensors": [
+            {"name": "tm-a1b2c3", "label": "Gazebo", "kind": "timeseries", "latitude": 1, "longitude": 2},
+            {"name": "tm-d4e5f6", "label": null, "kind": "timeseries", "latitude": 1, "longitude": 2}
+        ]}"""
+        assertEquals(listOf("Gazebo", "tm-d4e5f6"), api.listSensors().sensors.map { it.title })
+    }
+
+    @Test
     fun listSensorsWithoutFilters() = runBlocking {
         body = """{"sensors": []}"""
         api.listSensors()

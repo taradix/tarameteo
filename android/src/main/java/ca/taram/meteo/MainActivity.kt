@@ -57,7 +57,7 @@ class App : Application() {
 @Serializable object Sensors
 @Serializable object Alerts
 // The card passes the kind so the screen doesn't wait on the sensor list.
-@Serializable data class Detail(val name: String, val kind: String)
+@Serializable data class Detail(val name: String, val kind: String, val label: String? = null)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,7 +86,7 @@ fun Screens() {
                         when {
                             destination?.hasRoute<Sensors>() == true -> stringResource(R.string.sensors_title)
                             destination?.hasRoute<Alerts>() == true -> stringResource(R.string.alerts_title)
-                            destination?.hasRoute<Detail>() == true -> entry!!.toRoute<Detail>().name
+                            destination?.hasRoute<Detail>() == true -> entry!!.toRoute<Detail>().let { it.label ?: it.name }
                             else -> stringResource(R.string.app_name)
                         },
                     )
@@ -103,12 +103,12 @@ fun Screens() {
         },
     ) { padding ->
         NavHost(nav, Home, Modifier.padding(padding)) {
-            composable<Home> { Dashboard(pick, { nav.navigate(Detail(it.name, it.kind)) }) }
+            composable<Home> { Dashboard(pick, { nav.navigate(Detail(it.name, it.kind, it.label)) }) }
             composable<Sensors> { Picker() }
             composable<Alerts> { AlertsScreen() }
             composable<Detail> {
                 val route = it.toRoute<Detail>()
-                SensorScreen(route.name, route.kind)
+                SensorScreen(route.name, route.kind, route.label)
             }
         }
     }
