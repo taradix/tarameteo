@@ -51,6 +51,7 @@ def mqtt_publisher(mosquitto_service, make_certs):
         client_id="test-device",
         **make_certs("test-device"),
     ) as publisher:
+        assert publisher.wait_connected(), "publisher did not connect"
         yield publisher
 
 
@@ -66,6 +67,7 @@ async def test_mqtt_receive_message(make_mqtt_consumer, mqtt_publisher):
         loop.call_soon_threadsafe(received.set)
 
     make_mqtt_consumer("weather/+/event", handler)
+    await asyncio.sleep(0.1)  # Let subscription fully register in paho-mqtt
     mqtt_publisher.publish(topic="weather/test-device/event", payload="data")
 
     await asyncio.wait_for(received.wait(), timeout=10.0)
@@ -91,7 +93,9 @@ async def test_mqtt_receive_message_published_while_offline(make_mqtt_consumer, 
 
     consumer = make_mqtt_consumer("weather/+/event", handler)
     consumer._client.loop_stop()
+    await asyncio.sleep(1.0)  # Give broker time to mark session offline
     mqtt_publisher.publish(topic="weather/test-device/event", payload="data").wait_for_publish(timeout=5)
+    await asyncio.sleep(1.0)  # Give broker time to queue message for offline session
     consumer._client.loop_start()
 
     await asyncio.wait_for(received.wait(), timeout=10.0)
