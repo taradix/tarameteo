@@ -201,17 +201,10 @@ class SensorService:
             measurement=MEASUREMENT,
             start=start,
             stop=end,
-            tags=self._history_tags(name),
+            tags={SENSOR_TAG: name},
             limit=limit,
         )
         return [from_point(p) for p in points]
-
-    def _history_tags(self, name: str) -> dict[str, str]:
-        """Tags of the sensor's current history: a new label starts a new one, a move doesn't."""
-        # NOTE: a sensor silent for longer than LATEST_LOOKBACK has no current label, so it
-        # shows all its labels at once; look further back if that ever confuses someone.
-        label = self.get_label(name)
-        return {SENSOR_TAG: name} if label is None else {SENSOR_TAG: name, LABEL_TAG: label}
 
     def get_label(self, name: str) -> str | None:
         """The sensor's current label, if its latest reading has one."""
@@ -233,7 +226,7 @@ class SensorService:
         points = self.ts_reader.query_points(
             measurement=MEASUREMENT,
             start=now - STATS_WINDOW,
-            tags=self._history_tags(name),
+            tags={SENSOR_TAG: name},
         )
         if not points:
             return SensorStatistics(

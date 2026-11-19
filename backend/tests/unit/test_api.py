@@ -431,7 +431,7 @@ def test_sensor_weather_range(api_app, memory_writer, unique):
     ))
 
 
-def test_sensor_history_starts_over_on_rename_not_on_move(api_app, memory_writer, unique):
+def test_sensor_history_survives_rename_and_move(api_app, memory_writer, unique):
     name = unique("text")
     now = datetime.now(UTC)
 
@@ -447,12 +447,11 @@ def test_sensor_history_starts_over_on_rename_not_on_move(api_app, memory_writer
 
     read(3, "Gazebo", "45.5")
     read(2, "Gazebo", "46.5")
-    assert_that(history(), contains_exactly(3.0, 2.0))
-
     read(1, "Greenhouse", "46.5")
-    assert_that(history(), contains_exactly(1.0))
+
+    assert_that(history(), contains_exactly(3.0, 2.0, 1.0))
     assert_that(api_app.get(f"/api/sensors/{name}").json(), has_entries(
-        label="Greenhouse", statistics=has_entries(total_readings=1),
+        label="Greenhouse", statistics=has_entries(total_readings=3),
     ))
 
 
