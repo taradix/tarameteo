@@ -51,6 +51,7 @@ def mqtt_publisher(mosquitto_service, make_certs):
         client_id="test-device",
         **make_certs("test-device"),
     ) as publisher:
+        assert publisher.wait_connected(), "publisher did not connect"
         yield publisher
 
 
@@ -91,7 +92,9 @@ async def test_mqtt_receive_message_published_while_offline(make_mqtt_consumer, 
 
     consumer = make_mqtt_consumer("weather/+/event", handler)
     consumer._client.loop_stop()
+    await asyncio.sleep(0.5)  # Give broker time to process disconnect
     mqtt_publisher.publish(topic="weather/test-device/event", payload="data").wait_for_publish(timeout=5)
+    await asyncio.sleep(0.5)  # Give broker time to queue message
     consumer._client.loop_start()
 
     await asyncio.wait_for(received.wait(), timeout=10.0)
