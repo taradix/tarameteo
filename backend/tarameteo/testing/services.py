@@ -150,6 +150,6 @@ def influxdb_writer(influxdb_service):
 @pytest.fixture(scope="session")
 def mosquitto_service(compose_server):
     """Mosquitto service fixture."""
-    server = compose_server("mosquitto version 2.0.22 running")
+    server = compose_server("mosquitto version 2.0.* running")
     with server.run("mosquitto") as service:
         yield service

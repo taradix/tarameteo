@@ -40,7 +40,7 @@ def make_mqtt_consumer(mosquitto_service, make_certs, unique):
     yield _make
 
     for c in created:
-        c.disconnect()
+        c.disconnect(purge=True)
 
 
 @pytest.fixture

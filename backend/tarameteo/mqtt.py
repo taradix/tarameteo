@@ -126,13 +126,29 @@ class MQTTBase:
         self._client.loop_start()
         self._running = True
 
-    def disconnect(self):
-        """Stop networking loop and disconnect."""
+    def disconnect(self, purge: bool = False):
+        """Stop networking loop and disconnect.
+
+        Args:
+            purge: If True, purge the persistent session from the broker after
+                   disconnecting. Only relevant when clean_session=False.
+                   Connects with clean_session=True to tell the broker to
+                   discard stored session state (subscriptions, queued messages).
+        """
         self._running = False
         self._connected.clear()
         if self._client is not None:
             self._client.loop_stop()
             self._client.disconnect()
+
+            if purge and not self.clean_session:
+                # Reconnect with clean_session=True to purge broker state
+                self._client._clean_session = True
+                try:
+                    self._client.reconnect()
+                    self._client.disconnect()
+                finally:
+                    self._client._clean_session = self.clean_session
 
     def __enter__(self):
         self.connect()
