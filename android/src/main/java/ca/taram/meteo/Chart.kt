@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,6 +36,19 @@ import kotlin.math.floor
 
 private val SNOW = Color(0xFF90A4AE)
 private val AXIS = Color(0xFF555555)
+private val GRID = Color(0xFFE0E0E0)
+
+// Room left of the plot for the value labels, and below it for the time labels.
+private val VALUE_LABELS_WIDTH = 36.dp
+private val TIME_LABELS_HEIGHT = 18.dp
+private val CHART_HEIGHT = 180.dp
+private const val TIME_LABELS = 4
+private val LINE_WIDTH = 2.dp
+private val DOT_RADIUS = 5.dp
+private const val BAND_ALPHA = 0.2f
+// A bar takes this much of its point's slot, and fills this much of its width, leaving a gap between rain and snow.
+private const val BAR_FRACTION = 0.35f
+private const val BAR_FILL = 0.9f
 
 // LINE plots ys[0]; BAND plots ys = [avg, min, max] as a min–max band under the avg line; BARS plots ys = [rain, snow].
 enum class Plot { LINE, BAND, BARS }
@@ -52,7 +66,7 @@ class Frame(private val points: List<Point>, bars: Boolean, val width: Float, va
     val hi = ceil(values.maxOrNull() ?: 1.0).let { if (it <= lo) lo + 1 else it }
     // Bars get one equal slot per point, so the first and last fit.
     private val pad = if (bars) (width - left) / (2 * points.size) else 0f
-    val barWidth = (width - left) / points.size * 0.35f
+    val barWidth = (width - left) / points.size * BAR_FRACTION
 
     fun x(ms: Long) = left + pad + (ms - x0).toFloat() / span * (width - left - 2 * pad)
     fun y(v: Double) = ((hi - v) / (hi - lo) * (height - bottom)).toFloat()
@@ -60,7 +74,7 @@ class Frame(private val points: List<Point>, bars: Boolean, val width: Float, va
 }
 
 private fun Density.frame(points: List<Point>, plot: Plot, size: Size) =
-    Frame(points, plot == Plot.BARS, size.width, size.height, 36.dp.toPx(), 18.dp.toPx())
+    Frame(points, plot == Plot.BARS, size.width, size.height, VALUE_LABELS_WIDTH.toPx(), TIME_LABELS_HEIGHT.toPx())
 
 // Shows the latest point above the chart, or the held one while a finger stays on it.
 @Composable
@@ -69,13 +83,14 @@ fun WeatherChart(title: String, hours: Int, points: List<Point>, plot: Plot, dai
     val shown = pressed?.let(points::getOrNull) ?: points.lastOrNull()
     val measurer = rememberTextMeasurer()
     val axis = TextStyle(fontSize = 11.sp, color = AXIS)
+    val color = MaterialTheme.colorScheme.primary
     Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        val at = shown?.let { format(Instant.ofEpochMilli(it.x), if (daily) DAY else WHEN) }
+        val at = shown?.let { format(Instant.ofEpochMilli(it.x), if (daily) DATE_SKELETON else DATE_TIME_SKELETON) }
         Text(shown?.let { "${label(it)} · $at" } ?: " ", Modifier.padding(top = 2.dp), color = AXIS, fontSize = 13.sp)
         if (points.isEmpty()) return@Column
         Canvas(
-            Modifier.fillMaxWidth().padding(top = 8.dp).height(180.dp).pointerInput(points, plot) {
+            Modifier.fillMaxWidth().padding(top = 8.dp).height(CHART_HEIGHT).pointerInput(points, plot) {
                 val nearest = { offset: Offset -> frame(points, plot, size.toSize()).nearest(offset.x) }
                 detectDragGesturesAfterLongPress(
                     onDragStart = { pressed = nearest(it) },
@@ -88,45 +103,54 @@ fun WeatherChart(title: String, hours: Int, points: List<Point>, plot: Plot, dai
             val f = frame(points, plot, size)
             // Gridlines and labels at the bottom and top of the range.
             for (v in listOf(f.lo, f.hi)) {
-                drawLine(Color(0xFFE0E0E0), Offset(f.left, f.y(v)), Offset(size.width, f.y(v)))
+                drawLine(GRID, Offset(f.left, f.y(v)), Offset(size.width, f.y(v)))
                 val text = measurer.measure(num(v, 0), axis)
                 drawText(text, topLeft = Offset(0f, (f.y(v) - text.size.height / 2).coerceIn(0f, size.height - f.bottom)))
             }
-            // Four time labels, kept inside the canvas.
-            for (i in 0..3) {
-                val ms = points.first().x + (points.last().x - points.first().x) * i / 3
-                val text = measurer.measure(format(Instant.ofEpochMilli(ms), if (hours <= 24) TIME else DAY), axis)
+            // Evenly spaced time labels, kept inside the canvas.
+            for (i in 0 until TIME_LABELS) {
+                val ms = points.first().x + (points.last().x - points.first().x) * i / (TIME_LABELS - 1)
+                val text = measurer.measure(format(Instant.ofEpochMilli(ms), if (hours <= 24) TIME_SKELETON else DATE_SKELETON), axis)
                 val x = (f.x(ms) - text.size.width / 2).coerceIn(f.left, size.width - text.size.width)
                 drawText(text, topLeft = Offset(x, size.height - text.size.height))
             }
             when (plot) {
-                Plot.LINE -> line(f, points, 0)
+                Plot.LINE -> line(f, points, color)
                 Plot.BAND -> {
-                    val band = points.filter { it.ys[1] != null && it.ys[2] != null }
-                    val path = Path()
-                    band.forEachIndexed { i, p -> if (i == 0) path.moveTo(f.x(p.x), f.y(p.ys[1]!!)) else path.lineTo(f.x(p.x), f.y(p.ys[1]!!)) }
-                    band.asReversed().forEach { path.lineTo(f.x(it.x), f.y(it.ys[2]!!)) }
-                    drawPath(path, COLOR.copy(alpha = 0.2f))
-                    line(f, points, 0)
+                    band(f, points, color)
+                    line(f, points, color)
                 }
-                Plot.BARS -> for (p in points) {
-                    p.ys.forEachIndexed { i, v ->
-                        if (v == null) return@forEachIndexed
-                        val x = f.x(p.x) + (i - 1) * f.barWidth
-                        drawRect(if (i == 0) COLOR else SNOW, Offset(x, f.y(v)), Size(f.barWidth * 0.9f, f.y(0.0) - f.y(v)))
-                    }
-                }
+                Plot.BARS -> bars(f, points, color)
             }
-            shown?.takeIf { pressed != null }?.ys?.get(0)?.let { drawCircle(COLOR, 5.dp.toPx(), Offset(f.x(shown.x), f.y(it))) }
+            shown?.takeIf { pressed != null }?.ys?.get(0)?.let { drawCircle(color, DOT_RADIUS.toPx(), Offset(f.x(shown.x), f.y(it))) }
         }
     }
 }
 
+// Where ys[index] lands for each point that has one.
+private fun Frame.offsets(points: List<Point>, index: Int) = points.mapNotNull { p -> p.ys[index]?.let { Offset(x(p.x), y(it)) } }
+
+private fun path(offsets: List<Offset>) = Path().apply {
+    offsets.forEachIndexed { i, o -> if (i == 0) moveTo(o.x, o.y) else lineTo(o.x, o.y) }
+}
+
 // Lines join across missing values.
-private fun DrawScope.line(f: Frame, points: List<Point>, index: Int) {
-    val path = Path()
-    points.filter { it.ys[index] != null }.forEachIndexed { i, p ->
-        if (i == 0) path.moveTo(f.x(p.x), f.y(p.ys[index]!!)) else path.lineTo(f.x(p.x), f.y(p.ys[index]!!))
+private fun DrawScope.line(f: Frame, points: List<Point>, color: Color) =
+    drawPath(path(f.offsets(points, 0)), color, style = Stroke(LINE_WIDTH.toPx()))
+
+// Out along the minimums and back along the maximums, skipping days missing either.
+private fun DrawScope.band(f: Frame, points: List<Point>, color: Color) {
+    val band = points.filter { it.ys[1] != null && it.ys[2] != null }
+    drawPath(path(f.offsets(band, 1) + f.offsets(band, 2).asReversed()), color.copy(alpha = BAND_ALPHA))
+}
+
+// Rain left of the day, snow right of it.
+private fun DrawScope.bars(f: Frame, points: List<Point>, rain: Color) {
+    for (p in points) {
+        p.ys.forEachIndexed { i, v ->
+            if (v == null) return@forEachIndexed
+            val x = f.x(p.x) + (i - 1) * f.barWidth
+            drawRect(if (i == 0) rain else SNOW, Offset(x, f.y(v)), Size(f.barWidth * BAR_FILL, f.y(0.0) - f.y(v)))
+        }
     }
-    drawPath(path, COLOR, style = Stroke(2.dp.toPx()))
 }

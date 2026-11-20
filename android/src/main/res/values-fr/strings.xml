@@ -18,12 +18,12 @@
     <string name="alerts_none">Aucune alerte.</string>
     <string name="alerts_no_sensors">Ajoutez d\'abord un capteur pour y mettre une alerte.</string>
     <string name="alerts_blocked">Notifications désactivées : autorisez-les dans les paramètres, sinon les alertes ne s\'afficheront pas.</string>
-    <string name="alerts_field_temperature">Température</string>
-    <string name="alerts_field_humidity">Humidité</string>
-    <string name="alerts_field_pressure">Pression</string>
-    <string name="alerts_field_rain">Pluie</string>
-    <string name="alerts_field_snow">Neige</string>
-    <string name="alerts_field_offline">Aucune donnée depuis</string>
+    <string name="field_temperature">Température</string>
+    <string name="field_humidity">Humidité</string>
+    <string name="field_pressure">Pression</string>
+    <string name="field_rain">Pluie</string>
+    <string name="field_snow">Neige</string>
+    <string name="field_offline">Aucune donnée depuis</string>
     <string name="alerts_above">au-dessus de</string>
     <string name="alerts_below">en dessous de</string>
     <string name="alerts_threshold">Valeur</string>
@@ -35,9 +35,6 @@
     <string name="range_168">7 j</string>
     <string name="range_720">30 j</string>
     <string name="range_2160">90 j</string>
-    <string name="chart_temperature">Température</string>
-    <string name="chart_humidity">Humidité</string>
-    <string name="chart_pressure">Pression</string>
     <string name="chart_precipitation">Précipitations</string>
     <string name="chart_no_data">Aucune donnée dans cette plage.</string>
     <string name="card_range">min %1$s · max %2$s</string>
@@ -45,8 +42,14 @@
     <string name="card_precipitation">pluie %1$s mm · neige %2$s mm</string>
     <string name="card_rising">en hausse</string>
     <string name="card_falling">en baisse</string>
-    <string name="card_no_data">Aucune donnée dans les dernières 24 h.</string>
+    <string name="card_no_data_timeseries">Aucune donnée dans les dernières 24 h.</string>
+    <string name="card_no_data_aggregate">Aucune donnée dans les derniers 7 j.</string>
     <string name="card_ago_minutes">il y a %d min</string>
     <string name="card_ago_hours">il y a %d h</string>
     <string name="card_ago_days">il y a %d j</string>
+    <string name="error_network">Serveur injoignable : vérifiez la connexion.</string>
+    <string name="error_status">Le serveur a répondu par une erreur (%1$d).</string>
+    <string name="error_response">Réponse du serveur incomprise : une mise à jour de l\'application peut corriger cela.</string>
+    <string name="error_other">Une erreur est survenue (%1$s).</string>
 </resources>
+

@@ -20,12 +20,12 @@
     <string name="alerts_none">No alerts.</string>
     <string name="alerts_no_sensors">Add a sensor first to set an alert on it.</string>
     <string name="alerts_blocked">Notifications are off: allow them in settings or alerts won\'t show.</string>
-    <string name="alerts_field_temperature">Temperature</string>
-    <string name="alerts_field_humidity">Humidity</string>
-    <string name="alerts_field_pressure">Pressure</string>
-    <string name="alerts_field_rain">Rain</string>
-    <string name="alerts_field_snow">Snow</string>
-    <string name="alerts_field_offline">No readings for</string>
+    <string name="field_temperature">Temperature</string>
+    <string name="field_humidity">Humidity</string>
+    <string name="field_pressure">Pressure</string>
+    <string name="field_rain">Rain</string>
+    <string name="field_snow">Snow</string>
+    <string name="field_offline">No readings for</string>
     <string name="alerts_above">above</string>
     <string name="alerts_below">below</string>
     <string name="alerts_threshold">Value</string>
@@ -37,9 +37,6 @@
     <string name="range_168">7 d</string>
     <string name="range_720">30 d</string>
     <string name="range_2160">90 d</string>
-    <string name="chart_temperature">Temperature</string>
-    <string name="chart_humidity">Humidity</string>
-    <string name="chart_pressure">Pressure</string>
     <string name="chart_precipitation">Precipitation</string>
     <string name="chart_no_data">No data in range.</string>
     <string name="card_range">min %1$s · max %2$s</string>
@@ -47,8 +44,14 @@
     <string name="card_precipitation">rain %1$s mm · snow %2$s mm</string>
     <string name="card_rising">rising</string>
     <string name="card_falling">falling</string>
-    <string name="card_no_data">No data in the last 24 h.</string>
+    <string name="card_no_data_timeseries">No data in the last 24 h.</string>
+    <string name="card_no_data_aggregate">No data in the last 7 d.</string>
     <string name="card_ago_minutes">%d min ago</string>
     <string name="card_ago_hours">%d h ago</string>
     <string name="card_ago_days">%d d ago</string>
+    <string name="error_network">Can\'t reach the server: check the connection.</string>
+    <string name="error_status">The server answered with an error (%1$d).</string>
+    <string name="error_response">The server\'s answer wasn\'t understood: an app update may fix it.</string>
+    <string name="error_other">Something went wrong (%1$s).</string>
 </resources>
+
