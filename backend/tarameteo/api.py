@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from taraqueue import Queue, QueueEmpty
 
 from tarameteo import alert_text
-from tarameteo.alert_checker import CONFIRM_EXPIRY, Action, AlertService, run_offline_checks
+from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertAction, AlertService, run_offline_checks
 from tarameteo.alerts import Alert, AlertCreate, AlertRule, AlertStore, ManageRequest, PushAlert, PushTokenUpdate
 from tarameteo.ca_client import (
     CAClient,
@@ -304,7 +304,7 @@ INVALID_PAGE = alert_text.page("fr", alert_text.INVALID)
 GONE_PAGE = alert_text.page("fr", alert_text.GONE)
 
 
-def _token_alert(token: str, action: Action, alerts: AlertService, alert_store: AlertStore) -> Alert | HTMLResponse:
+def _token_alert(token: str, action: AlertAction, alerts: AlertService, alert_store: AlertStore) -> Alert | HTMLResponse:
     """The alert an email link points to, or the error page to show instead."""
     payload = alerts.verify(token, action)
     if payload is None:
@@ -327,7 +327,7 @@ def _alert_page(alert: Alert, service: SensorService, title: str, button: str | 
 def confirm_alert_page(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    alert = _token_alert(token, Action.confirm, alerts, alert_store)
+    alert = _token_alert(token, AlertAction.confirm, alerts, alert_store)
     if isinstance(alert, HTMLResponse):
         return alert
     if alert.confirmed:
@@ -339,7 +339,7 @@ def confirm_alert_page(
 def confirm_alert(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    alert = _token_alert(token, Action.confirm, alerts, alert_store)
+    alert = _token_alert(token, AlertAction.confirm, alerts, alert_store)
     if isinstance(alert, HTMLResponse):
         return alert
     alert_store.confirm(alert.id)
@@ -350,7 +350,7 @@ def confirm_alert(
 def unsubscribe_alert_page(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    alert = _token_alert(token, Action.unsubscribe, alerts, alert_store)
+    alert = _token_alert(token, AlertAction.unsubscribe, alerts, alert_store)
     if isinstance(alert, HTMLResponse):
         return alert
     return _alert_page(alert, service, "remove_title", "remove_button")
@@ -359,7 +359,7 @@ def unsubscribe_alert_page(
 # Also the one-click unsubscribe target for the List-Unsubscribe-Post header.
 @app.post("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
 def unsubscribe_alert(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
-    alert = _token_alert(token, Action.unsubscribe, alerts, alert_store)
+    alert = _token_alert(token, AlertAction.unsubscribe, alerts, alert_store)
     if isinstance(alert, HTMLResponse):
         return alert
     alert_store.delete(alert.id)
@@ -388,7 +388,7 @@ async def post_alert_manage(
 def alert_manage_page(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    payload = alerts.verify(token, Action.manage)
+    payload = alerts.verify(token, AlertAction.manage)
     if payload is None:
         return HTMLResponse(INVALID_PAGE, 400)
     email = payload["email"]
@@ -405,7 +405,7 @@ def alert_manage(
     alert_store: AlertStoreDep,
     alert: Annotated[str | None, Query(description="The alert to stop; all of them when left out")] = None,
 ) -> Response:
-    payload = alerts.verify(token, Action.manage)
+    payload = alerts.verify(token, AlertAction.manage)
     if payload is None:
         return HTMLResponse(INVALID_PAGE, 400)
     alert_store.delete_by_email(payload["email"], alert)
