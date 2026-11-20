@@ -148,7 +148,7 @@ private:
   NimBLECharacteristic *_commitChar;
   NimBLECharacteristic *_statusChar;
 
-  char _ssid[32];
+  char _ssid[33]; // 32-byte SSID max + NUL
   char _password[64];
   char _label[64]; // Longer than allowed, so applyProvisioning rejects a long label instead of cutting it
   volatile bool _committed;

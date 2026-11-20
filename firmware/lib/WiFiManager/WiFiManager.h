@@ -32,7 +32,7 @@ public:
     const char* getSSID() const { return _ssid; }
 
 private:
-    char _ssid[32];
+    char _ssid[33];  // 32-byte SSID max + NUL
     char _password[64];
     char _lastError[128];
     int _reconnectAttempts;
