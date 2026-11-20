@@ -74,6 +74,8 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     port = ["--port", args.port] if args.port else []
+    # NOTE: the last 24 MAC bits are unique within one Espressif OUI but not across
+    # them, and a re-run keeps the ID; check it against the API before big batches.
     sensor_id = f"tm-{board_mac(port)[-6:]}"
     passkey = 100000 + secrets.randbelow(900000)  # always 6 digits on the sticker
     offset, size = nvs_partition(PARTITIONS)
