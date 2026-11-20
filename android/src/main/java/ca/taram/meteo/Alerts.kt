@@ -45,26 +45,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.Locale
-
-// The fields the API watches, in the order the web form lists them.
-private val FIELDS = listOf(
-    "temperature" to R.string.alerts_field_temperature,
-    "humidity" to R.string.alerts_field_humidity,
-    "pressure" to R.string.alerts_field_pressure,
-    "rain" to R.string.alerts_field_rain,
-    "snow" to R.string.alerts_field_snow,
-    "offline" to R.string.alerts_field_offline,
-)
-
-private val UNITS = mapOf(
-    "temperature" to "°C", "humidity" to "%", "pressure" to "hPa", "rain" to "mm", "snow" to "mm", "offline" to "h",
-)
 
 // The server won't look further back than this for a missing reading, and says so with a 422.
 private const val OFFLINE_MAX = 30 * 24.0
@@ -72,7 +57,7 @@ private const val OFFLINE_MAX = 30 * 24.0
 // The alert's text comes from the server, written in the language the phone is set to.
 private fun language() = if (Locale.getDefault().language == "fr") "fr" else "en"
 
-data class AlertsState(val alerts: List<PushAlert>? = null, val error: String? = null, val busy: Boolean = false)
+data class AlertsState(val alerts: List<PushAlert>? = null, val error: IOException? = null, val busy: Boolean = false)
 
 class AlertsModel : ViewModel() {
     val state = MutableStateFlow(AlertsState(busy = true))
@@ -88,7 +73,7 @@ class AlertsModel : ViewModel() {
         } catch (_: IOException) {
             emptyMap()
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    }.stateIn(viewModelScope, WHILE_SHOWN, emptyMap())
 
     init {
         reload()
@@ -110,8 +95,13 @@ class AlertsModel : ViewModel() {
     private fun act(block: suspend () -> Unit) {
         viewModelScope.launch {
             state.value = state.value.copy(error = null, busy = true)
-            val failure = runCatching { block() }.exceptionOrNull()
-            state.value = state.value.copy(error = failure?.describe(), busy = false)
+            val failure = try {
+                block()
+                null
+            } catch (e: IOException) {
+                e
+            }
+            state.value = state.value.copy(error = failure, busy = false)
         }
     }
 }
@@ -142,7 +132,7 @@ fun AlertsScreen(model: AlertsModel = viewModel()) {
 
     LazyColumn(Modifier.fillMaxSize().imePadding()) {
         if (!allowed) item { Message(stringResource(R.string.alerts_blocked)) }
-        state.error?.let { item { Message(it) } }
+        state.error?.let { item { Message(describe(it)) } }
         items(state.alerts.orEmpty(), key = { it.id }) { alert ->
             AlertRow(alert, titles) { model.delete(alert) }
         }
@@ -151,13 +141,14 @@ fun AlertsScreen(model: AlertsModel = viewModel()) {
     }
 }
 
-// Reads like the alert's own text: "outdoor-north: temperature below -20 °C".
+// Reads like the alert's own text: "Gazebo: Temperature below -20 °C".
 @Composable
 private fun rule(alert: PushAlert, titles: Map<String, String>): String {
     val sensor = titles[alert.sensor] ?: alert.sensor
-    val field = FIELDS.firstOrNull { it.first == alert.field }?.let { stringResource(it.second) } ?: alert.field
-    val value = "${num(alert.threshold, if (alert.threshold % 1.0 == 0.0) 0 else 1)} ${UNITS[alert.field].orEmpty()}"
-    if (alert.field == "offline") return "$sensor: $field $value"
+    val known = Field.entries.firstOrNull { it.key == alert.field }
+    val field = known?.let { stringResource(it.label) } ?: alert.field
+    val value = "${num(alert.threshold, if (alert.threshold % 1.0 == 0.0) 0 else 1)} ${known?.unit.orEmpty()}"
+    if (known == Field.OFFLINE) return "$sensor: $field $value"
     val condition = stringResource(if (alert.condition == "above") R.string.alerts_above else R.string.alerts_below)
     return "$sensor: $field $condition $value"
 }
@@ -168,7 +159,7 @@ private fun AlertRow(alert: PushAlert, titles: Map<String, String>, onDelete: ()
     Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(vertical = 16.dp)) {
             Text(text, fontSize = 17.sp)
-            if (alert.triggered) Time(stringResource(R.string.alerts_triggered))
+            if (alert.triggered) Caption(stringResource(R.string.alerts_triggered))
         }
         val label = stringResource(R.string.alerts_delete, text)
         TextButton(onDelete, Modifier.semantics { contentDescription = label }) { Text("✕", fontSize = 18.sp) }
@@ -181,17 +172,17 @@ private fun AlertRow(alert: PushAlert, titles: Map<String, String>, onDelete: ()
 private fun NewAlert(sensors: List<String>, titles: Map<String, String>, busy: Boolean, onCreate: (AlertRule) -> Unit) {
     if (sensors.isEmpty()) return Message(stringResource(R.string.alerts_no_sensors))
     var sensor by remember(sensors) { mutableStateOf(sensors.first()) }
-    var field by remember { mutableStateOf(FIELDS.first().first) }
+    var field by remember { mutableStateOf(Field.TEMPERATURE) }
     var above by remember { mutableStateOf(false) }
     var threshold by remember { mutableStateOf("") }
-    val offline = field == "offline"
+    val offline = field == Field.OFFLINE
     // A French keyboard offers the decimal comma, and thresholds go below zero.
     val value = threshold.replace(',', '.').toDoubleOrNull()
 
     Column(Modifier.padding(16.dp)) {
         Text(stringResource(R.string.alerts_new), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Chips(sensors, sensor, { titles[it] ?: it }) { sensor = it }
-        Chips(FIELDS, FIELDS.first { it.first == field }, { stringResource(it.second) }) { field = it.first }
+        Chips(Field.entries, field, { stringResource(it.label) }) { field = it }
         // An offline alert is always "more than N hours", so there is nothing to choose.
         if (!offline) {
             Chips(listOf(false, true), above, { stringResource(if (it) R.string.alerts_above else R.string.alerts_below) }) {
@@ -203,13 +194,13 @@ private fun NewAlert(sensors: List<String>, titles: Map<String, String>, busy: B
             { threshold = it },
             Modifier.fillMaxWidth().padding(top = 8.dp),
             label = { Text(stringResource(if (offline) R.string.alerts_hours else R.string.alerts_threshold)) },
-            suffix = { Text(UNITS[field].orEmpty()) },
+            suffix = { Text(field.unit) },
             // NOTE: the phone keypad is the only one with a minus sign; Compose has no signed number type.
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             singleLine = true,
         )
         Button(
-            { onCreate(AlertRule(sensor, field, if (offline || above) "above" else "below", value!!, language())) },
+            { onCreate(AlertRule(sensor, field.key, if (offline || above) "above" else "below", value!!, language())) },
             Modifier.fillMaxWidth().padding(top = 8.dp),
             enabled = !busy && value != null && (!offline || value in 1.0..OFFLINE_MAX),
         ) { Text(stringResource(R.string.alerts_create)) }

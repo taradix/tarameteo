@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -40,10 +41,17 @@ class Push(context: Context) {
     // guide documents, so stay on them until the FID path is the default. Same for Messaging below.
     @Suppress("DEPRECATION")
     private suspend fun fetch(): String = suspendCancellableCoroutine { continuation ->
+        // A build without google-services.json has no FirebaseApp, and getInstance() throws instead.
+        val messaging = try {
+            FirebaseMessaging.getInstance()
+        } catch (e: IllegalStateException) {
+            throw IOException(e.message, e)
+        }
         // NOTE: hand-rolled await; kotlinx-coroutines-play-services is a dependency for these three lines.
-        FirebaseMessaging.getInstance().token
+        messaging.token
             .addOnSuccessListener { continuation.resume(it) }
-            .addOnFailureListener { continuation.resumeWithException(it) }
+            // An IOException, so callers handle FCM failing like the request failing.
+            .addOnFailureListener { continuation.resumeWithException(it as? IOException ?: IOException(it.message, it)) }
     }
 }
 
@@ -56,7 +64,11 @@ class Messaging : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         // NOTE: one attempt, no WorkManager; Push.token() retries it when the app next needs the token.
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching { push.token() }.onFailure { Log.w("Push", "Token move failed", it) }
+            try {
+                push.token()
+            } catch (e: IOException) {
+                Log.w("Push", "Token move failed", e)
+            }
         }
     }
 }

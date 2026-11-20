@@ -1,8 +1,8 @@
-// One module: the app lives at the project root.
+// One module: the app lives at the project root. The Kotlin plugins' version is in settings.gradle.kts.
 plugins {
     id("com.android.application") version "9.5.2"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.4.21"
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.gms.google-services") version "4.6.0" apply false
 }
 
@@ -71,18 +71,22 @@ android {
 }
 
 dependencies {
+    val coroutines = "1.11.0"
+    val lifecycle = "2.11.1"
     implementation("com.google.firebase:firebase-messaging:26.0.2")
     implementation(platform("androidx.compose:compose-bom:2026.11.01"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.1")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.1")
+    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:$lifecycle")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle")
     implementation("androidx.navigation:navigation-compose:2.10.2")
     implementation("com.google.maps.android:maps-compose:9.0.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines")
 }
 
 // Reads google-services.json into the resources the Firebase SDK looks for at startup.

@@ -1,6 +1,5 @@
 package ca.taram.meteo
 
-import android.text.format.DateFormat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,110 +19,70 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
-import java.text.NumberFormat
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import kotlin.time.Duration.Companion.minutes
 
-// Sensors report hourly and MELCCFP daily; pull to refresh covers the impatient.
-val REFETCH = 5.minutes
 // Two missed hourly readings.
 private val STALE = Duration.ofHours(3)
-private val GREY = Color(0xFF888888)
-val DIVIDER = Color(0xFFCCCCCC)
+// How far back a card looks; card_no_data_timeseries and card_no_data_aggregate name these.
+private val TIMESERIES_WINDOW = Duration.ofHours(24)
+private val AGGREGATE_WINDOW = Duration.ofDays(7)
 
-// weather for timeseries, daily for aggregates; null while it couldn't be fetched.
+// weather for timeseries, daily for aggregates, error when they couldn't be fetched.
 data class Card(
     val sensor: SensorEntry,
     val fetchedAt: Instant,
     val weather: List<WeatherReading>? = null,
     val daily: List<AggregateReading>? = null,
+    val error: IOException? = null,
 )
 
-data class DashboardState(val cards: List<Card> = emptyList(), val error: String? = null, val refreshing: Boolean = false)
+data class DashboardState(val cards: List<Card> = emptyList(), val error: IOException? = null, val refreshing: Boolean = false)
 
 class DashboardModel : ViewModel() {
-    private val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private var last = DashboardState(refreshing = true)
+    private val poll = Poll(viewModelScope, shown.names, DashboardState(refreshing = true), { it.copy(refreshing = true) }, ::load)
+    val state = poll.state
 
-    // Collected with the lifecycle, so polling stops in the background and refetches on return.
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val state = shown.names.transformLatest { names ->
-        if (names.isEmpty()) return@transformLatest emit(DashboardState().also { last = it })
-        while (true) {
-            emit(last.copy(refreshing = true))
-            last = load(names)
-            emit(last)
-            withTimeoutOrNull(REFETCH) { refreshes.first() }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), last)
-
-    fun refresh() {
-        refreshes.tryEmit(Unit)
-    }
+    fun refresh() = poll.refresh()
 
     private suspend fun load(names: Set<String>) = try {
-        val sensors = api.listSensors(names = names.sorted()).sensors.filter { it.kind in KINDS }
-        val now = Instant.now()
-        DashboardState(coroutineScope { sensors.map { async { card(it, now) } }.awaitAll() })
+        // No names would list every sensor.
+        if (names.isEmpty()) {
+            DashboardState()
+        } else {
+            val sensors = api.listSensors(names = names.sorted()).sensors.filter { it.kind in KINDS }
+            val now = Instant.now()
+            DashboardState(coroutineScope { sensors.map { async { card(it, now) } }.awaitAll() })
+        }
     } catch (e: IOException) {
-        DashboardState(error = e.describe())
+        DashboardState(error = e)
     }
 
     private suspend fun card(sensor: SensorEntry, now: Instant) = try {
         if (sensor.kind == "timeseries") {
-            Card(sensor, now, weather = api.getWeather(sensor.name, (now - Duration.ofHours(24)).toString()))
+            Card(sensor, now, weather = api.getWeather(sensor.name, (now - TIMESERIES_WINDOW).toString()))
         } else {
-            Card(sensor, now, daily = api.getWeatherAggregate(sensor.name, (now - Duration.ofDays(7)).toString()))
+            Card(sensor, now, daily = api.getWeatherAggregate(sensor.name, (now - AGGREGATE_WINDOW).toString()))
         }
     } catch (e: IOException) {
-        Card(sensor, now)
+        Card(sensor, now, error = e)
     }
 }
-
-fun Throwable.describe() = "${javaClass.simpleName}: $message"
-
-fun num(value: Double?, digits: Int): String = value?.let {
-    NumberFormat.getNumberInstance().apply {
-        minimumFractionDigits = digits
-        maximumFractionDigits = digits
-    }.format(it)
-} ?: "–"
-
-// Skeletons for format(): the locale picks the order and punctuation.
-const val DAY = "dMMM"
-const val TIME = "jjmm"
-const val WHEN = "dMMMjjmm"
-
-fun format(at: Instant, skeleton: String): String =
-    DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(java.util.Locale.getDefault(), skeleton))
-        .withZone(ZoneId.systemDefault()).format(at)
 
 private val AGO = mapOf(
     ChronoUnit.MINUTES to R.string.card_ago_minutes,
@@ -139,7 +98,7 @@ fun Dashboard(onChoose: () -> Unit, onOpen: (SensorEntry) -> Unit, model: Dashbo
     PullToRefreshBox(state.refreshing, model::refresh, Modifier.fillMaxSize()) {
         // Messages sit in the list too, so they can be pulled to retry.
         LazyColumn(Modifier.fillMaxSize()) {
-            state.error?.let { item { Message(it) } }
+            state.error?.let { item { Message(describe(it)) } }
             items(state.cards, key = { it.sensor.name }) { SensorCard(it) { onOpen(it.sensor) } }
             if (names.isEmpty()) {
                 item {
@@ -153,25 +112,20 @@ fun Dashboard(onChoose: () -> Unit, onOpen: (SensorEntry) -> Unit, model: Dashbo
 }
 
 @Composable
-fun Message(text: String) = Text(text, Modifier.fillMaxWidth().padding(16.dp), textAlign = TextAlign.Center)
-
-@Composable
 private fun SensorCard(card: Card, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp)) {
         Text(card.sensor.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        val data = if (card.sensor.kind == "timeseries") card.weather else card.daily
         when {
-            data == null -> Time("…")
-            data.isEmpty() -> Time(stringResource(R.string.card_no_data))
-            card.weather != null -> TimeseriesBody(summarize(card.weather)!!, card.fetchedAt)
-            else -> AggregateBody(card.daily!!.last())
+            card.error != null -> Caption(describe(card.error), WARNING)
+            card.weather != null ->
+                summarize(card.weather)?.let { TimeseriesBody(it, card.fetchedAt) }
+                    ?: Caption(stringResource(R.string.card_no_data_timeseries))
+            card.daily != null ->
+                card.daily.lastOrNull()?.let { AggregateBody(it) } ?: Caption(stringResource(R.string.card_no_data_aggregate))
         }
     }
     HorizontalDivider(color = DIVIDER)
 }
-
-@Composable
-fun Time(text: String, color: Color = GREY) = Text(text, Modifier.padding(top = 2.dp), color = color, fontSize = 13.sp)
 
 @Composable
 private fun Line(content: @Composable RowScope.() -> Unit) =
@@ -183,14 +137,15 @@ private fun TimeseriesBody(summary: Summary, now: Instant) {
     val latest = summary.latest
     val (unit, count) = age(latest.timestamp, now)
     val stale = Duration.between(instant(latest.timestamp), now) > STALE
-    Time(stringResource(AGO.getValue(unit), count), if (stale) Color(0xFFC62828) else GREY)
+    Caption(stringResource(AGO.getValue(unit), count), if (stale) WARNING else GREY)
     Line {
-        Text("${num(latest.temperature, 1)} °C", Modifier.alignByBaseline(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        Text(Field.TEMPERATURE.format(latest.temperature), Modifier.alignByBaseline(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
         TrendArrow(summary.temperatureTrend)
-        Text("  " + stringResource(R.string.card_range, num(summary.min, 1), num(summary.max, 1)), Modifier.alignByBaseline())
+        val digits = Field.TEMPERATURE.digits
+        Text("  " + stringResource(R.string.card_range, num(summary.min, digits), num(summary.max, digits)), Modifier.alignByBaseline())
     }
     Line {
-        Text("${num(latest.humidity, 0)} % · ${num(latest.pressure, 0)} hPa", Modifier.alignByBaseline())
+        Text("${Field.HUMIDITY.format(latest.humidity)} · ${Field.PRESSURE.format(latest.pressure)}", Modifier.alignByBaseline())
         TrendArrow(summary.pressureTrend)
     }
 }
@@ -198,16 +153,17 @@ private fun TimeseriesBody(summary: Summary, now: Instant) {
 @Composable
 private fun AggregateBody(reading: AggregateReading) {
     // Daily readings: the day matters, not the time.
-    Time(format(instant(reading.timestamp), DAY))
+    Caption(format(instant(reading.timestamp), DATE_SKELETON))
+    val digits = Field.TEMPERATURE.digits
     Line {
         Text(
             stringResource(
                 R.string.card_aggregate,
-                num(reading.temperatureMin, 1), num(reading.temperatureAvg, 1), num(reading.temperatureMax, 1),
+                num(reading.temperatureMin, digits), num(reading.temperatureAvg, digits), num(reading.temperatureMax, digits),
             ),
         )
     }
-    Line { Text(stringResource(R.string.card_precipitation, num(reading.rain, 1), num(reading.snow, 1))) }
+    Line { Text(stringResource(R.string.card_precipitation, num(reading.rain, Field.RAIN.digits), num(reading.snow, Field.SNOW.digits))) }
 }
 
 @Composable

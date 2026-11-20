@@ -4,6 +4,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.temporal.ChronoUnit
+import kotlin.math.abs
 
 enum class Trend { RISING, FALLING }
 
@@ -24,7 +25,7 @@ data class Summary(
 fun instant(timestamp: String): Instant = OffsetDateTime.parse(timestamp).toInstant()
 
 private fun trend(now: Double, then: Double?, step: Double): Trend? = when {
-    then == null || Math.abs(now - then) < step -> null
+    then == null || abs(now - then) < step -> null
     now > then -> Trend.RISING
     else -> Trend.FALLING
 }

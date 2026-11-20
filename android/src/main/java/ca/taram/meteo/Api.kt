@@ -82,6 +82,9 @@ val KINDS = setOf("timeseries", "aggregate")
 
 class ApiError(val status: Int, message: String) : IOException(message)
 
+// The server broke the contract; an IOException, so it fails like any other request instead of crashing.
+class BadResponse(cause: Throwable) : IOException(cause.message, cause)
+
 // Like encodeURIComponent: safe in a path segment as well as a query value.
 private fun encode(value: Any) = URLEncoder.encode(value.toString(), "UTF-8").replace("+", "%20")
 
@@ -122,7 +125,15 @@ class Api(private val base: String = BuildConfig.API_BASE) {
         }
 
     private suspend inline fun <reified T> get(path: String, token: String? = null): T =
-        withContext(Dispatchers.IO) { json.decodeFromString<T>(request(path, token = token)) }
+        withContext(Dispatchers.IO) {
+            val body = request(path, token = token)
+            // SerializationException is an IllegalArgumentException, which decodeFromString also throws for invalid values.
+            try {
+                json.decodeFromString<T>(body)
+            } catch (e: IllegalArgumentException) {
+                throw BadResponse(e)
+            }
+        }
 
     private fun weather(name: String, suffix: String, start: String) =
         "/api/sensors/${encode(name)}/weather$suffix${query("start" to start)}"

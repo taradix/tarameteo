@@ -21,14 +21,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
@@ -44,7 +37,7 @@ private val RANGE_LABELS = mapOf(
 data class DetailState(
     val weather: List<WeatherReading>? = null,
     val daily: List<AggregateReading>? = null,
-    val error: String? = null,
+    val error: IOException? = null,
     val refreshing: Boolean = false,
 )
 
@@ -52,29 +45,18 @@ class DetailModel(private val name: String, val aggregate: Boolean) : ViewModel(
     // Daily aggregates need longer ranges than hourly readings to show anything.
     val ranges = if (aggregate) listOf(7 * 24, 30 * 24, 90 * 24) else listOf(24, 7 * 24, 30 * 24)
     val hours = MutableStateFlow(ranges[0])
-    private val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private var last = DetailState(refreshing = true)
 
     // Keeps the current charts on screen while another range loads.
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val state = hours.transformLatest { h ->
-        while (true) {
-            emit(last.copy(refreshing = true))
-            last = load(h)
-            emit(last)
-            withTimeoutOrNull(REFETCH) { refreshes.first() }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), last)
+    private val poll = Poll(viewModelScope, hours, DetailState(refreshing = true), { it.copy(refreshing = true) }, ::load)
+    val state = poll.state
 
-    fun refresh() {
-        refreshes.tryEmit(Unit)
-    }
+    fun refresh() = poll.refresh()
 
     private suspend fun load(hours: Int) = try {
         val start = (Instant.now() - Duration.ofHours(hours.toLong())).toString()
         if (aggregate) DetailState(daily = api.getWeatherAggregate(name, start)) else DetailState(weather = api.getWeather(name, start))
     } catch (e: IOException) {
-        DetailState(error = e.describe())
+        DetailState(error = e)
     }
 }
 
@@ -91,7 +73,7 @@ fun SensorScreen(
     PullToRefreshBox(state.refreshing, model::refresh, Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             // The title bar shows the label, so the ID printed on the sticker goes here.
-            if (label != null) Box(Modifier.padding(start = 16.dp, top = 8.dp)) { Time(name) }
+            if (label != null) Box(Modifier.padding(start = 16.dp, top = 8.dp)) { Caption(name) }
             Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (h in model.ranges) {
                     FilterChip(h == hours, { model.hours.value = h }, { Text(stringResource(RANGE_LABELS.getValue(h))) })
@@ -99,8 +81,9 @@ fun SensorScreen(
             }
             val weather = state.weather
             val daily = state.daily
+            val error = state.error
             when {
-                state.error != null -> Message(state.error!!)
+                error != null -> Message(describe(error))
                 weather?.isEmpty() == true || daily?.isEmpty() == true -> Message(stringResource(R.string.chart_no_data))
                 weather != null -> TimeseriesCharts(weather, hours)
                 daily != null -> AggregateCharts(daily, hours)
@@ -112,14 +95,13 @@ fun SensorScreen(
 @Composable
 private fun TimeseriesCharts(readings: List<WeatherReading>, hours: Int) {
     val fields = listOf(
-        Triple(R.string.chart_temperature, "°C", 1) to WeatherReading::temperature,
-        Triple(R.string.chart_humidity, "%", 0) to WeatherReading::humidity,
-        Triple(R.string.chart_pressure, "hPa", 0) to WeatherReading::pressure,
+        Field.TEMPERATURE to WeatherReading::temperature,
+        Field.HUMIDITY to WeatherReading::humidity,
+        Field.PRESSURE to WeatherReading::pressure,
     )
-    for ((info, field) in fields) {
-        val (title, unit, digits) = info
-        val points = readings.map { Point(instant(it.timestamp).toEpochMilli(), listOf(field(it))) }
-        WeatherChart(stringResource(title), hours, points, Plot.LINE, daily = false) { "${num(it.ys[0], digits)} $unit" }
+    for ((field, value) in fields) {
+        val points = readings.map { Point(instant(it.timestamp).toEpochMilli(), listOf(value(it))) }
+        WeatherChart(stringResource(field.label), hours, points, Plot.LINE, daily = false) { field.format(it.ys[0]) }
     }
 }
 
@@ -132,10 +114,11 @@ private fun AggregateCharts(readings: List<AggregateReading>, hours: Int) {
     val precipitation = readings.map { Point(day(it), listOf(it.rain, it.snow)) }
     val aggregate = stringResource(R.string.card_aggregate)
     val rainSnow = stringResource(R.string.card_precipitation)
-    WeatherChart(stringResource(R.string.chart_temperature), hours, temperatures, Plot.BAND, daily = true) {
-        aggregate.format(num(it.ys[1], 1), num(it.ys[0], 1), num(it.ys[2], 1))
+    val digits = Field.TEMPERATURE.digits
+    WeatherChart(stringResource(Field.TEMPERATURE.label), hours, temperatures, Plot.BAND, daily = true) {
+        aggregate.format(num(it.ys[1], digits), num(it.ys[0], digits), num(it.ys[2], digits))
     }
     WeatherChart(stringResource(R.string.chart_precipitation), hours, precipitation, Plot.BARS, daily = true) {
-        rainSnow.format(num(it.ys[0], 1), num(it.ys[1], 1))
+        rainSnow.format(num(it.ys[0], Field.RAIN.digits), num(it.ys[1], Field.SNOW.digits))
     }
 }

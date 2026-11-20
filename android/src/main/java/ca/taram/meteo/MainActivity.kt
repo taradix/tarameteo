@@ -30,7 +30,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.serialization.Serializable
 
-val COLOR = Color(0xFF1976D2)
+// The theme's primary; screens read it from MaterialTheme.
+private val BRAND_BLUE = Color(0xFF1976D2)
 
 // The sensors picked for the dashboard; they stay on the phone.
 class Shown(context: Context) {
@@ -64,7 +65,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = COLOR)) { Screens() }
+            MaterialTheme(colorScheme = lightColorScheme(primary = BRAND_BLUE)) { Screens() }
         }
     }
 }

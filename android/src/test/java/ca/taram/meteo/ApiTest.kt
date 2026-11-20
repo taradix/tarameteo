@@ -9,13 +9,14 @@ import org.junit.Before
 import org.junit.Test
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
 
 class ApiTest {
     @Volatile private var status = "200 OK"
     @Volatile private var body = "[]"
     @Volatile private var sent = ""
-    private val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val requests = CopyOnWriteArrayList<String>()
 
     private lateinit var server: ServerSocket
     private lateinit var api: Api
@@ -149,5 +150,13 @@ class ApiTest {
         val error = assertThrows(ApiError::class.java) { runBlocking { api.listSensors() } }
         assertEquals(404, error.status)
         assertEquals("404 Not Found", error.message)
+    }
+
+    @Test
+    fun responsesBreakingTheContractThrowBadResponse() {
+        body = """{"sensors": [{"name": "a"}]}"""
+        assertThrows(BadResponse::class.java) { runBlocking { api.listSensors() } }
+        body = "<html>"
+        assertThrows(BadResponse::class.java) { runBlocking { api.listSensors() } }
     }
 }
