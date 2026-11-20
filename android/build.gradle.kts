@@ -71,6 +71,7 @@ android {
 }
 
 dependencies {
+    val coroutines = "1.11.0"
     val lifecycle = "2.11.1"
     implementation("com.google.firebase:firebase-messaging:26.0.2")
     implementation(platform("androidx.compose:compose-bom:2026.11.01"))
@@ -81,10 +82,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle")
     implementation("androidx.navigation:navigation-compose:2.10.2")
     implementation("com.google.maps.android:maps-compose:9.0.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines")
 }
 
 // Reads google-services.json into the resources the Firebase SDK looks for at startup.
