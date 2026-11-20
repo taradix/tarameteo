@@ -22,8 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.withTimeoutOrNull
-import java.net.ConnectException
-import java.net.NoRouteToHostException
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.text.NumberFormat
@@ -83,8 +82,8 @@ class Poll<K, S>(scope: CoroutineScope, keys: Flow<K>, initial: S, refreshing: (
 fun reason(error: Throwable): Pair<Int, List<Any>> = when (error) {
     is ApiError -> R.string.error_status to listOf(error.status)
     is BadResponse -> R.string.error_response to emptyList()
-    is UnknownHostException, is ConnectException, is NoRouteToHostException, is SocketTimeoutException ->
-        R.string.error_network to emptyList()
+    // SocketException covers refused and reset connections as well as unreachable networks.
+    is UnknownHostException, is SocketException, is SocketTimeoutException -> R.string.error_network to emptyList()
     else -> R.string.error_other to listOf(error.message ?: error.javaClass.simpleName)
 }
 
