@@ -14,7 +14,6 @@ from pydantic import (
     BaseModel,
     Field,
     ValidationError,
-    field_validator,
 )
 from yarl import URL
 
@@ -38,8 +37,6 @@ class IssueCertificateRequest(BaseModel):
     no_expiry: bool = False
     client_auth: bool = True
     server_auth: bool = False
-
-    _validate_ttl_days = field_validator("ttl_days")(validate_ttl_days)
 
 
 IssueCertificateResponse = CertificateMaterial

@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from taraqueue import Queue, QueueEmpty
 
 from tarameteo import alert_text
-from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertService, run_offline_checks
+from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertAction, AlertService, run_offline_checks
 from tarameteo.alerts import Alert, AlertCreate, AlertRule, AlertStore, ManageRequest, PushAlert, PushTokenUpdate
 from tarameteo.ca_client import (
     CAClient,
@@ -48,7 +48,7 @@ from tarameteo.ts import (
     TSReader,
 )
 
-logger = logging.getLogger("uvicorn")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -59,15 +59,7 @@ async def lifespan(app: FastAPI):
     app.state.ts_reader = None
     app.state.ts_writer = None
 
-    notifier = None
-    if os.environ.get("SMTP_HOST"):
-        notifier = SmtpNotifier(
-            host=os.environ["SMTP_HOST"],
-            port=int(os.environ.get("SMTP_PORT", "587")),
-            username=os.environ.get("SMTP_USERNAME", ""),
-            password=os.environ.get("SMTP_PASSWORD", ""),
-            from_address=os.environ.get("SMTP_FROM", "noreply@taram.ca"),
-        )
+    notifier = SmtpNotifier.from_env() if os.environ.get("SMTP_HOST") else None
     push = FcmNotifier.from_env() if os.environ.get("FCM_CREDENTIALS") else None
     # Alerts need a secret to sign links, and at least one way to send them.
     alerts = None
@@ -308,17 +300,25 @@ async def post_alert(
     return {"status": "confirmation_sent"}
 
 
-def _token_alert_id(token: str, action: str, alerts: AlertService) -> str | None:
-    payload = alerts.verify(token, action)
-    return payload and payload["alert_id"]
-
-
-def _html(content: str, status_code: int = 200) -> HTMLResponse:
-    return HTMLResponse(content, status_code=status_code)
-
-
 INVALID_PAGE = alert_text.page("fr", alert_text.INVALID)
 GONE_PAGE = alert_text.page("fr", alert_text.GONE)
+
+
+def _token_alert(token: str, action: AlertAction, alerts: AlertService, alert_store: AlertStore) -> Alert | HTMLResponse:
+    """The alert an email link points to, or the error page to show instead."""
+    payload = alerts.verify(token, action)
+    if payload is None:
+        return HTMLResponse(INVALID_PAGE, 400)
+    return alert_store.get(payload["alert_id"]) or HTMLResponse(GONE_PAGE, 404)
+
+
+def _alert_page(alert: Alert, service: SensorService, title: str, button: str | None = None) -> HTMLResponse:
+    """A page about the alert: the title from its language's text, with its rule filled in."""
+    text, rule = alert_text.TEXT[alert.language], alert_text.rule(alert, label=service.get_label(alert.sensor))
+    if button is None:
+        return HTMLResponse(alert_text.page(alert.language, text[title].format(rule=rule)))
+    return HTMLResponse(alert_text.page(alert.language, text[title], rule, button=text[button]))
+
 
 # Email links only show a button; acting on GET would let link scanners confirm or stop alerts.
 
@@ -327,58 +327,43 @@ GONE_PAGE = alert_text.page("fr", alert_text.GONE)
 def confirm_alert_page(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "confirm", alerts)
-    if alert_id is None:
-        return _html(INVALID_PAGE, 400)
-    alert = alert_store.get(alert_id)
-    if alert is None:
-        return _html(GONE_PAGE, 404)
-    text, rule = alert_text.TEXT[alert.language], alert_text.rule(alert, label=service.get_label(alert.sensor))
+    alert = _token_alert(token, AlertAction.confirm, alerts, alert_store)
+    if isinstance(alert, HTMLResponse):
+        return alert
     if alert.confirmed:
-        return _html(alert_text.page(alert.language, text["confirmed"].format(rule=rule)))
-    return _html(alert_text.page(alert.language, text["confirm_title"], rule, button=text["confirm_button"]))
+        return _alert_page(alert, service, "confirmed")
+    return _alert_page(alert, service, "confirm_title", "confirm_button")
 
 
 @app.post("/api/alerts/confirm/{token}", response_class=HTMLResponse)
 def confirm_alert(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "confirm", alerts)
-    if alert_id is None:
-        return _html(INVALID_PAGE, 400)
-    alert_store.confirm(alert_id)
-    alert = alert_store.get(alert_id)
-    if alert is None:
-        return _html(GONE_PAGE, 404)
-    text, rule = alert_text.TEXT[alert.language], alert_text.rule(alert, label=service.get_label(alert.sensor))
-    return _html(alert_text.page(alert.language, text["confirmed"].format(rule=rule)))
+    alert = _token_alert(token, AlertAction.confirm, alerts, alert_store)
+    if isinstance(alert, HTMLResponse):
+        return alert
+    alert_store.confirm(alert.id)
+    return _alert_page(alert, service, "confirmed")
 
 
 @app.get("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
 def unsubscribe_alert_page(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "unsubscribe", alerts)
-    if alert_id is None:
-        return _html(INVALID_PAGE, 400)
-    alert = alert_store.get(alert_id)
-    if alert is None:
-        return _html(GONE_PAGE, 404)
-    text, rule = alert_text.TEXT[alert.language], alert_text.rule(alert, label=service.get_label(alert.sensor))
-    return _html(alert_text.page(alert.language, text["remove_title"], rule, button=text["remove_button"]))
+    alert = _token_alert(token, AlertAction.unsubscribe, alerts, alert_store)
+    if isinstance(alert, HTMLResponse):
+        return alert
+    return _alert_page(alert, service, "remove_title", "remove_button")
 
 
 # Also the one-click unsubscribe target for the List-Unsubscribe-Post header.
 @app.post("/api/alerts/unsubscribe/{token}", response_class=HTMLResponse)
 def unsubscribe_alert(token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep) -> HTMLResponse:
-    alert_id = _token_alert_id(token, "unsubscribe", alerts)
-    if alert_id is None:
-        return _html(INVALID_PAGE, 400)
-    alert = alert_store.get(alert_id)
-    if alert is None:
-        return _html(GONE_PAGE, 404)
-    alert_store.delete(alert_id)
-    return _html(alert_text.page(alert.language, alert_text.TEXT[alert.language]["removed"]))
+    alert = _token_alert(token, AlertAction.unsubscribe, alerts, alert_store)
+    if isinstance(alert, HTMLResponse):
+        return alert
+    alert_store.delete(alert.id)
+    return HTMLResponse(alert_text.page(alert.language, alert_text.TEXT[alert.language]["removed"]))
 
 
 # One manage email per address this often, so the form can't flood an inbox.
@@ -403,13 +388,13 @@ async def post_alert_manage(
 def alert_manage_page(
     token: str, alerts: AlertServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> HTMLResponse:
-    payload = alerts.verify(token, "manage")
+    payload = alerts.verify(token, AlertAction.manage)
     if payload is None:
-        return _html(INVALID_PAGE, 400)
+        return HTMLResponse(INVALID_PAGE, 400)
     email = payload["email"]
     email_alerts = alert_store.list_by_email(email)
     labels = service.get_labels([a.sensor for a in email_alerts])
-    return _html(alert_text.manage_page(payload["language"], email, email_alerts, labels))
+    return HTMLResponse(alert_text.manage_page(payload["language"], email, email_alerts, labels))
 
 
 @app.post("/api/alerts/manage/{token}")
@@ -420,9 +405,9 @@ def alert_manage(
     alert_store: AlertStoreDep,
     alert: Annotated[str | None, Query(description="The alert to stop; all of them when left out")] = None,
 ) -> Response:
-    payload = alerts.verify(token, "manage")
+    payload = alerts.verify(token, AlertAction.manage)
     if payload is None:
-        return _html(INVALID_PAGE, 400)
+        return HTMLResponse(INVALID_PAGE, 400)
     alert_store.delete_by_email(payload["email"], alert)
     # Back to the list, as a GET, so reloading doesn't post again.
     return RedirectResponse(request.url.path, status_code=303)
@@ -474,7 +459,7 @@ def delete_push_alert(alert_id: str, token: PushTokenDep, alert_store: AlertStor
 
 @app.exception_handler(Exception)
 async def exception_handler(request: Request, exc: Exception):
-    logger.exception(f"Unhandled exception at {request.url}")
+    logger.exception("Unhandled exception at %s", request.url)
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error"},

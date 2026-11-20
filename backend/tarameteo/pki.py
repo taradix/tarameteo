@@ -1,6 +1,5 @@
 """CSRs, X.509 certs, CA/issuance, chains, profiles/policy."""
 
-from contextlib import suppress
 from datetime import (
     UTC,
     datetime,
@@ -314,13 +313,10 @@ def _add_subject_and_authority_key_ids(
         x509.SubjectKeyIdentifier.from_public_key(subject_public_key),
         critical=False,
     )
-    with suppress(Exception):
-        builder = builder.add_extension(
-            x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_public_key),
-            critical=False,
-        )
-
-    return builder
+    return builder.add_extension(
+        x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_public_key),
+        critical=False,
+    )
 
 
 def _sign_builder(

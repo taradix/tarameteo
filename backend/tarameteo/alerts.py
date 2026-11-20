@@ -20,8 +20,6 @@ class Condition(StrEnum):
 # "offline": no reading for more than threshold hours.
 AlertField = Literal["temperature", "humidity", "pressure", "rain", "snow", "offline"]
 
-ALERT_FIELDS: list[AlertField] = ["temperature", "humidity", "pressure", "rain", "snow", "offline"]
-
 # Sensor readings are only looked this far back, so an offline alert can't wait longer.
 OFFLINE_MAX_HOURS = 30 * 24
 
@@ -150,19 +148,11 @@ class AlertStore:
         return self.db.execute(query).scalar_one()
 
     def list_by_email(self, email: str) -> list[Alert]:
-        rows = self.db.execute(
-            select(AlertRow).where(_same_email(email)).order_by(AlertRow.sensor, AlertRow.created_at)
-        ).scalars().all()
-        return [self._row_to_alert(row) for row in rows]
+        return self._list_for(_same_email(email))
 
     def delete_by_email(self, email: str, alert_id: str | None = None) -> int:
         """Delete one of the email's alerts, or all of them."""
-        query = delete(AlertRow).where(_same_email(email))
-        if alert_id is not None:
-            query = query.where(AlertRow.id == alert_id)
-        result = self.db.execute(query)
-        self.db.commit()
-        return result.rowcount
+        return self._delete_for(_same_email(email), alert_id)
 
     # An email alert's push_token is NULL, which never equals a token, so these can't touch one.
     def count_by_token(self, token: str) -> int:
@@ -171,10 +161,7 @@ class AlertStore:
         ).scalar_one()
 
     def list_by_token(self, token: str) -> list[Alert]:
-        rows = self.db.execute(
-            select(AlertRow).where(AlertRow.push_token == token).order_by(AlertRow.sensor, AlertRow.created_at)
-        ).scalars().all()
-        return [self._row_to_alert(row) for row in rows]
+        return self._list_for(AlertRow.push_token == token)
 
     def set_token(self, old: str, new: str) -> int:
         """Point the token's alerts at the new token FCM gave the install."""
@@ -184,12 +171,7 @@ class AlertStore:
 
     def delete_by_token(self, token: str, alert_id: str | None = None) -> int:
         """Delete one of the token's alerts, or all of them (the install is gone)."""
-        query = delete(AlertRow).where(AlertRow.push_token == token)
-        if alert_id is not None:
-            query = query.where(AlertRow.id == alert_id)
-        result = self.db.execute(query)
-        self.db.commit()
-        return result.rowcount
+        return self._delete_for(AlertRow.push_token == token, alert_id)
 
     def get(self, alert_id: str) -> Alert | None:
         row = self.db.execute(
@@ -219,19 +201,20 @@ class AlertStore:
         self.db.execute(update(AlertRow).where(AlertRow.id == alert_id).values(**values))
         self.db.commit()
 
+    def _list_for(self, recipient) -> list[Alert]:
+        rows = self.db.execute(
+            select(AlertRow).where(recipient).order_by(AlertRow.sensor, AlertRow.created_at)
+        ).scalars().all()
+        return [self._row_to_alert(row) for row in rows]
+
+    def _delete_for(self, recipient, alert_id: str | None) -> int:
+        query = delete(AlertRow).where(recipient)
+        if alert_id is not None:
+            query = query.where(AlertRow.id == alert_id)
+        result = self.db.execute(query)
+        self.db.commit()
+        return result.rowcount
+
     @staticmethod
     def _row_to_alert(row: AlertRow) -> Alert:
-        return Alert(
-            id=row.id,
-            email=row.email,
-            push_token=row.push_token,
-            sensor=row.sensor,
-            field=row.field,
-            condition=Condition(row.condition),
-            threshold=row.threshold,
-            language=row.language,
-            confirmed=row.confirmed,
-            triggered=row.triggered,
-            created_at=row.created_at,
-            last_triggered_at=row.last_triggered_at,
-        )
+        return Alert.model_validate(row, from_attributes=True)

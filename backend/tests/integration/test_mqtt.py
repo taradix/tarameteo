@@ -1,6 +1,7 @@
 """Integration tests for the MQTT module."""
 
 import asyncio
+import json
 
 import pytest
 from hamcrest import (
@@ -10,9 +11,9 @@ from hamcrest import (
 )
 
 from tarameteo.mqtt import (
+    MQTTBase,
     MQTTConsumer,
     MQTTMessage,
-    MQTTPublisher,
 )
 
 
@@ -40,18 +41,20 @@ def make_mqtt_consumer(mosquitto_service, make_certs, unique):
     yield _make
 
     for c in created:
-        c.disconnect(purge=True)
+        c.disconnect()
 
 
 @pytest.fixture
 def mqtt_publisher(mosquitto_service, make_certs):
-    with MQTTPublisher(
+    """A connected paho client, publishing as a device would."""
+    with MQTTBase(
         host=mosquitto_service.ip,
         port=8883,
         client_id="test-device",
         **make_certs("test-device"),
-    ) as publisher:
-        yield publisher
+    ) as base:
+        assert base.wait_connected(), "publisher did not connect"
+        yield base._client
 
 
 @pytest.mark.asyncio
@@ -66,7 +69,7 @@ async def test_mqtt_receive_message(make_mqtt_consumer, mqtt_publisher):
         loop.call_soon_threadsafe(received.set)
 
     make_mqtt_consumer("weather/+/event", handler)
-    mqtt_publisher.publish(topic="weather/test-device/event", payload="data")
+    mqtt_publisher.publish(topic="weather/test-device/event", payload=json.dumps("data"))
 
     await asyncio.wait_for(received.wait(), timeout=10.0)
 
@@ -91,7 +94,7 @@ async def test_mqtt_receive_message_published_while_offline(make_mqtt_consumer, 
 
     consumer = make_mqtt_consumer("weather/+/event", handler)
     consumer._client.loop_stop()
-    mqtt_publisher.publish(topic="weather/test-device/event", payload="data").wait_for_publish(timeout=5)
+    mqtt_publisher.publish(topic="weather/test-device/event", payload=json.dumps("data")).wait_for_publish(timeout=5)
     consumer._client.loop_start()
 
     await asyncio.wait_for(received.wait(), timeout=10.0)

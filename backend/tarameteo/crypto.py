@@ -1,9 +1,5 @@
-"""Crypto keys, algorithms, signing privimitives, serialization."""
+"""Crypto keys, algorithms, signing primitives, serialization."""
 
-from datetime import (
-    UTC,
-    datetime,
-)
 from enum import Enum
 
 from attrs import (
@@ -38,23 +34,6 @@ class KeySpec:
 
 
 DEFAULT_KEY_SPEC = KeySpec()
-
-
-def cert_expires_at(cert_pem: str) -> datetime:
-    """Datetime when the certificate expires."""
-    cert = load_cert(cert_pem)
-    return cert.not_valid_after_utc
-
-
-def cert_is_current(cert_pem: str, now: datetime | None = None) -> bool:
-    """True if the certificate is within its validity window."""
-    now = now or datetime.now(UTC)
-
-    cert = load_cert(cert_pem)
-    not_before = cert.not_valid_before_utc
-    not_after = cert.not_valid_after_utc
-
-    return not_before <= now <= not_after
 
 
 def generate_key_pem(key_spec: KeySpec = DEFAULT_KEY_SPEC) -> str:

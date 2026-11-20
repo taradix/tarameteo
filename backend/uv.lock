@@ -179,15 +179,6 @@ wheels = [
 ]
 
 [[package]]
-name = "configargparse"
-version = "1.10.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/01/77/0ca08089aff2548621a27575d64cb0c0e0e3694e4798211381a65d48dda7/configargparse-1.10.1.tar.gz", hash = "sha256:8ee7c4429e6402b881c9a85569eb9484db2f63260718b45c67c59625284371c8", size = 105108, upload-time = "2026-11-17T02:53:08.97Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/55/39/9707df0301c21fa8b20894c9958f747e6ccb9bc2c10a576e8251a0ecf44e/configargparse-1.10.1-py3-none-any.whl", hash = "sha256:148ffe1ba93304bbcb4a832f513e6d51c08d214215f1e943954f6d01f2394621", size = 49435, upload-time = "2026-11-17T02:53:07.73Z" },
-]
-
-[[package]]
 name = "coverage"
 version = "7.17.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1362,7 +1353,6 @@ dependencies = [
     { name = "alembic" },
     { name = "attrs" },
     { name = "beautifulsoup4" },
-    { name = "configargparse" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -1372,6 +1362,7 @@ dependencies = [
     { name = "pydantic", extra = ["email"] },
     { name = "sqlalchemy" },
     { name = "taraqueue" },
+    { name = "urllib3" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "yarl" },
 ]
@@ -1395,7 +1386,6 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.14.1,<2.0.0" },
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "beautifulsoup4", specifier = ">=4.12.0,<5.0.0" },
-    { name = "configargparse", specifier = ">=1.7.1,<2.0.0" },
     { name = "coverage", marker = "extra == 'test'", specifier = ">=7.2.3,<8.0.0" },
     { name = "cryptography", specifier = ">=50.0.0,<50.1.0" },
     { name = "fastapi", specifier = ">=0.109.0" },
@@ -1412,6 +1402,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'check'", specifier = ">=0.15.0,<1.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.37,<3.0.0" },
     { name = "taraqueue", specifier = ">=0.6.2" },
+    { name = "urllib3", specifier = ">=2.0.0,<3.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
     { name = "yarl", specifier = ">=1.22.0,<2.0.0" },
 ]

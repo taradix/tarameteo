@@ -17,7 +17,7 @@ from tarameteo.mqtt import (
     MQTTMessage,
 )
 from tarameteo.readings import WeatherReading
-from tarameteo.ts import TSWriter
+from tarameteo.ts import TS_ERRORS, TSWriter
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ async def weather_handler(
     try:
         domain, device_id, category = message.topic.split("/")
     except ValueError:
-        logger.warning(f"Invalid topic format: {message.topic}")
+        logger.warning("Invalid topic format: %s", message.topic)
         return
 
     if domain != "weather" or category != "event":
-        logger.warning(f"Invalid topic: {message.topic}")
+        logger.warning("Invalid topic: %s", message.topic)
         return
 
     try:
@@ -47,16 +47,15 @@ async def weather_handler(
 
     try:
         await ingest([reading], ts_writer, queue, alerts=alerts)
-    except ValueError:
-        logger.exception("Error storing weather data")
+    except TS_ERRORS:
+        logger.exception("Error storing weather data for sensor %s", device_id)
         return
 
+    # The firmware leaves rssi out when it has none.
+    rssi = "" if reading.rssi is None else f", RSSI={reading.rssi}dBm"
     logger.info(
-        f"Stored weather data for sensor {device_id}: "
-        f"T={reading.temperature}°C"
-        f", H={reading.humidity}%"
-        f", P={reading.pressure}hPa"
-        + (f", RSSI={reading.rssi}dBm" if reading.rssi else "")
+        "Stored weather data for sensor %s: T=%s°C, H=%s%%, P=%shPa%s",
+        device_id, reading.temperature, reading.humidity, reading.pressure, rssi,
     )
 
 

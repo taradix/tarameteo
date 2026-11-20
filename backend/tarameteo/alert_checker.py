@@ -1,8 +1,9 @@
-"""Alert emails: threshold checks on readings, and the links in every alert email."""
+"""Alert emails and pushes: threshold checks on readings, and the links in every alert email."""
 
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 from attrs import define
 
@@ -24,13 +25,21 @@ from tarameteo.ts import TSPoint, TSReader
 logger = logging.getLogger(__name__)
 
 # How far back past the threshold a value must go to count as normal again, so a reading
-# wobbling around the threshold doesn't send an email each time it crosses.
+# wobbling around the threshold doesn't notify each time it crosses.
 MARGINS = {"temperature": 1.0, "humidity": 5.0, "pressure": 1.0, "rain": 1.0, "snow": 1.0}
 
 CONFIRM_EXPIRY = timedelta(days=1)
 # The manage link in alert emails lasts longer than a requested one: the email may be read days later.
 ALERT_MANAGE_EXPIRY = timedelta(days=7)
 MANAGE_EXPIRY = timedelta(hours=1)
+
+
+class AlertAction(StrEnum):
+    """What an email link does: its path under /api/alerts/, and the action its token is signed for."""
+
+    confirm = "confirm"
+    unsubscribe = "unsubscribe"
+    manage = "manage"
 
 
 def _crossed(value: float, alert: Alert) -> bool:
@@ -61,21 +70,21 @@ class AlertService:
     base_url: str
     push: Notifier | None = None
 
-    def _url(self, action: str, payload: dict, expires_in: timedelta | None = None) -> str:
+    def _url(self, action: AlertAction, payload: dict, expires_in: timedelta | None = None) -> str:
         token = sign_token({**payload, "action": action}, self.secret, expires_in=expires_in and expires_in.total_seconds())
         return f"{self.base_url}/api/alerts/{action}/{token}"
 
-    def verify(self, token: str, action: str) -> dict | None:
+    def verify(self, token: str, action: AlertAction) -> dict | None:
         """The token's payload, if it's valid and signed for this action."""
         payload = verify_token(token, self.secret)
         return payload if payload and payload.get("action") == action else None
 
     async def send_confirm(self, alert: Alert, label: str | None = None) -> None:
-        url = self._url("confirm", {"alert_id": alert.id}, CONFIRM_EXPIRY)
+        url = self._url(AlertAction.confirm, {"alert_id": alert.id}, CONFIRM_EXPIRY)
         await self.notifier.send(alert.email, *alert_text.email(alert, "confirm", url, label=label))
 
     async def send_manage(self, email: str, language: str) -> None:
-        url = self._url("manage", {"email": email.lower(), "language": language}, MANAGE_EXPIRY)
+        url = self._url(AlertAction.manage, {"email": email.lower(), "language": language}, MANAGE_EXPIRY)
         text = alert_text.TEXT[language]
         await self.notifier.send(email, text["manage_subject"], text["manage_body"].format(url=url))
 
@@ -89,29 +98,29 @@ class AlertService:
             subject, body = alert_text.push(alert, key, value, label)
         else:
             notifier, recipient = self.notifier, alert.email
-            url = self._url("unsubscribe", {"alert_id": alert.id})
-            manage = self._url("manage", {"email": who.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
+            url = self._url(AlertAction.unsubscribe, {"alert_id": alert.id})
+            manage = self._url(AlertAction.manage, {"email": who.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
             subject, body = alert_text.email(alert, key, url, value, manage, label)
             # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
             headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
         if notifier is None:
-            logger.error(f"Alert {alert.id} can't be sent: no notifier for {who}")
+            logger.error("Alert %s can't be sent: no notifier for %s", alert.id, who)
             return
         try:
             await notifier.send(recipient, subject, body, headers)
         except Unregistered:
             # The install is gone, so none of its alerts can ever be delivered.
-            logger.info(f"Dropped {alert_store.delete_by_token(alert.push_token)} alerts of an unregistered install")
+            logger.info("Dropped %d alerts of an unregistered install", alert_store.delete_by_token(alert.push_token))
             return
         except Exception:
             # The state stays, so the next check tries again.
-            logger.exception(f"Failed to send alert {alert.id} to {who}")
+            logger.exception("Failed to send alert %s to %s", alert.id, who)
             return
         alert_store.set_triggered(alert.id, key in ("alert", "offline"), datetime.now(UTC))
-        logger.info(f"Alert {alert.id} sent {key} to {who}")
+        logger.info("Alert %s sent %s to %s", alert.id, key, who)
 
     async def check(self, reading: Reading, alert_store: AlertStore) -> None:
-        """Email once when a value crosses its threshold, and once when it's back to normal."""
+        """Notify once when a value crosses its threshold, and once when it's back to normal."""
         for alert in alert_store.list_by_sensor(reading.sensor):
             if alert.field == "offline":
                 # Sources re-send their last reading on startup, so only a recent one means it's back.
@@ -127,7 +136,7 @@ class AlertService:
                 await self._notify(alert, "normal", value, alert_store, reading.label)
 
     async def check_offline(self, last_seen: dict[str, TSPoint], alert_store: AlertStore) -> None:
-        """Email once when a sensor's last reading is older than its alert's hours; check() says when it's back."""
+        """Notify once when a sensor's last reading is older than its alert's hours; check() says when it's back."""
         now = datetime.now(UTC)
         for alert in alert_store.list_offline():
             seen = last_seen.get(alert.sensor)

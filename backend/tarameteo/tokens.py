@@ -54,7 +54,7 @@ def verify_token(token: str, secret: str) -> dict | None:
     padded = encoded + "=" * (-len(encoded) % 4)
     try:
         data = json.loads(urlsafe_b64decode(padded))
-    except (ValueError, json.JSONDecodeError):
+    except ValueError:
         return None
 
     exp = data.pop("exp", None)
