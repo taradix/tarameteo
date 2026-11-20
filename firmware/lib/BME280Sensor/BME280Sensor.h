@@ -22,7 +22,6 @@ public:
                  float seaLevelPressure = 1013.25f);
 
     bool begin();
-    bool isAvailable() const { return _available; }
     float getTemperature() const;
     float getPressure() const;
     float getHumidity() const;

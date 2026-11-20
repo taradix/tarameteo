@@ -8,14 +8,6 @@
 // Adapter that wraps real Arduino functions
 class ArduinoAdapter : public IArduino {
 public:
-    unsigned long millis() override {
-        return ::millis();
-    }
-
-    void delay(unsigned long ms) override {
-        ::delay(ms);
-    }
-
     void log(const char* message) override {
         Serial.println(message);
     }
@@ -27,10 +19,6 @@ public:
         vsnprintf(buffer, sizeof(buffer), format, args);
         va_end(args);
         Serial.println(buffer);
-    }
-
-    void restart() override {
-        ESP.restart();
     }
 };
 

@@ -31,7 +31,9 @@ public:
     _lat = latitude;
     _lon = longitude;
 
-    NimBLEDevice::init(deviceName);
+    if (!NimBLEDevice::init(deviceName)) {
+      return false;
+    }
 
     // Static passkey pairing: bonding + MITM protection + LE Secure Connections.
     // The device has no display, so it only supplies a fixed passkey the app enters.
@@ -67,8 +69,7 @@ public:
                                                 NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
     _statusChar->setValue("idle");
 
-    service->start();
-
+    // No service->start() (deprecated in NimBLE 2): advertising starts the GATT server.
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(BleProvisioningUUID::SERVICE);
     // Flags + the 128-bit UUID take 21 of the 31 advertising bytes, too few
@@ -77,8 +78,7 @@ public:
     scanResponse.setName(deviceName);
     adv->setScanResponseData(scanResponse);
     adv->enableScanResponse(true);
-    NimBLEDevice::startAdvertising();
-    return true;
+    return NimBLEDevice::startAdvertising();
   }
 
   void stop() override { NimBLEDevice::deinit(true); }

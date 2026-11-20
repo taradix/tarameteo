@@ -43,15 +43,6 @@ public:
     char caCert[2048];
     char certificate[2048];
     char privateKey[2048];
-
-    void reset() {
-        caCertSet = false;
-        certificateSet = false;
-        privateKeySet = false;
-        caCert[0] = '\0';
-        certificate[0] = '\0';
-        privateKey[0] = '\0';
-    }
 };
 
 #endif // MOCK_WIFI_CLIENT_H

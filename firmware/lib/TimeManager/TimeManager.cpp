@@ -4,28 +4,17 @@
 // 2020-01-01T00:00:00Z: the backend treats earlier timestamps as unsynced.
 static constexpr time_t MIN_VALID_EPOCH = 1577836800;
 
-TimeManager::TimeManager(int ntpTimeoutMs, unsigned long syncIntervalMs)
-    : _timeSynced(false), _lastSyncTime(0), _ntpTimeoutMs(ntpTimeoutMs), _syncIntervalMs(syncIntervalMs) {
+TimeManager::TimeManager(unsigned long ntpTimeoutMs) : _timeSynced(false), _ntpTimeoutMs(ntpTimeoutMs) {
   _lastError[0] = '\0';
 }
 
-bool TimeManager::begin() {
-  // Configure time zone (0 = UTC, adjust as needed)
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  return true;
-}
-
+// Called once per wake: deep sleep restarts the program, so there is no
+// periodic resync to schedule.
 bool TimeManager::syncTime() {
-  // Only sync if we haven't synced recently
-  if (_timeSynced && (millis() - _lastSyncTime < _syncIntervalMs)) {
-    return true;
-  }
+  // UTC, no daylight saving
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
-  return syncTimeWithNTP();
-}
-
-bool TimeManager::syncTimeWithNTP() {
-  // Wait for the SNTP client started in begin() to set the clock
+  // Wait for the SNTP client to set the clock
   unsigned long startTime = millis();
   while (time(nullptr) < MIN_VALID_EPOCH) {
     if (millis() - startTime > _ntpTimeoutMs) {
@@ -36,7 +25,6 @@ bool TimeManager::syncTimeWithNTP() {
   }
 
   _timeSynced = true;
-  _lastSyncTime = millis();
   return true;
 }
 

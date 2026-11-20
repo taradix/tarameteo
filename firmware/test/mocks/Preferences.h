@@ -21,7 +21,7 @@ public:
     }
 
     size_t putString(const char* key, const char* value) {
-        if (_readOnly) return 0;
+        if (!writable(key)) return 0;
         _storage[std::string(key)] = std::string(value);
         return strlen(value);
     }
@@ -38,7 +38,7 @@ public:
     }
 
     size_t putULong(const char* key, unsigned long value) {
-        if (_readOnly) return 0;
+        if (!writable(key)) return 0;
         _ulongs[std::string(key)] = value;
         return sizeof(unsigned long);
     }
@@ -50,7 +50,7 @@ public:
     }
 
     size_t putInt(const char* key, int value) {
-        if (_readOnly) return 0;
+        if (!writable(key)) return 0;
         _ints[std::string(key)] = value;
         return sizeof(int);
     }
@@ -62,7 +62,7 @@ public:
     }
 
     size_t putFloat(const char* key, float value) {
-        if (_readOnly) return 0;
+        if (!writable(key)) return 0;
         _floats[std::string(key)] = value;
         return sizeof(float);
     }
@@ -82,17 +82,23 @@ public:
         _ulongs.clear();
         _ints.clear();
         _floats.clear();
+        _failKey.clear();
         return true;
     }
 
-    // Helper for tests to inject data
-    void _mockSetString(const char* key, const char* value) {
-        _storage[std::string(key)] = std::string(value);
+    // Test knob: every put* to this key returns 0, like a full NVS partition.
+    void failWritesTo(const char* key) {
+        _failKey = key;
     }
 
 private:
+    bool writable(const char* key) const {
+        return !_readOnly && _failKey != key;
+    }
+
     std::string _namespace;
     bool _readOnly = false;
+    std::string _failKey;
     std::map<std::string, std::string> _storage;
     std::map<std::string, unsigned long> _ulongs;
     std::map<std::string, int> _ints;

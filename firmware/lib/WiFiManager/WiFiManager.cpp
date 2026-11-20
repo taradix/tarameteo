@@ -8,39 +8,21 @@
 #include <WiFi.h>
 #endif
 
-WiFiManager::WiFiManager(const char *ssid, const char *password, int connectTimeoutMs) : _reconnectAttempts(0), _connectTimeoutMs(connectTimeoutMs) {
+WiFiManager::WiFiManager(int connectTimeoutMs) : _connectTimeoutMs(connectTimeoutMs) {
   _lastError[0] = '\0';
   _ssid[0] = '\0';
   _password[0] = '\0';
-
-  // If credentials provided, use them (backward compatibility)
-  if (ssid && password) {
-    strncpy(_ssid, ssid, sizeof(_ssid) - 1);
-    _ssid[sizeof(_ssid) - 1] = '\0';
-    strncpy(_password, password, sizeof(_password) - 1);
-    _password[sizeof(_password) - 1] = '\0';
-    Serial.println("WiFiManager: Using credentials from constructor");
-  }
-  // Otherwise, they will be loaded from NVS in begin()
 }
 
 WiFiManager::~WiFiManager() { _prefs.end(); }
 
 bool WiFiManager::begin() {
-  // If no credentials were provided in constructor, try to load from NVS
-  if (strlen(_ssid) == 0) {
-    if (!loadFromNVS()) {
-      updateLastError("No WiFi credentials found in NVS or constructor");
-      return false; // Don't set WiFi mode yet - might need provisioning
-    }
-    Serial.println("WiFiManager: Loaded credentials from NVS");
+  if (!loadFromNVS()) {
+    setError("No WiFi credentials found in NVS");
+    return false; // Don't set WiFi mode yet - might need provisioning
   }
 
-  // Only set to STA mode if we have credentials
-  if (strlen(_ssid) > 0) {
-    WiFi.mode(WIFI_STA);
-  }
-
+  WiFi.mode(WIFI_STA);
   return true;
 }
 
@@ -52,17 +34,9 @@ bool WiFiManager::tryConnect(const char *ssid, const char *password) {
 }
 
 bool WiFiManager::reconnect() {
-  if (_reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    updateLastError("Maximum reconnection attempts reached");
-    return false;
-  }
-
-  _reconnectAttempts++;
-
   // Try to reconnect with exponential backoff
   for (int attempt = 0; attempt < MAX_RECONNECT_ATTEMPTS; attempt++) {
     if (isConnected() || attemptConnection(_ssid, _password)) {
-      _reconnectAttempts = 0; // Reset counter on successful connection
       return true;
     }
 
@@ -71,7 +45,7 @@ bool WiFiManager::reconnect() {
     }
   }
 
-  snprintf(_lastError, sizeof(_lastError), "Failed to reconnect after %d attempts", _reconnectAttempts);
+  snprintf(_lastError, sizeof(_lastError), "Failed to reconnect after %d attempts", MAX_RECONNECT_ATTEMPTS);
   return false;
 }
 
@@ -85,7 +59,7 @@ bool WiFiManager::attemptConnection(const char *ssid, const char *password) {
   unsigned long startTime = millis();
   while (WiFi.status() != WL_CONNECTED) {
     if (millis() - startTime > (unsigned long)_connectTimeoutMs) {
-      updateLastError("Connection timeout");
+      setError("Connection timeout");
       return false;
     }
     delay(100);
@@ -95,18 +69,13 @@ bool WiFiManager::attemptConnection(const char *ssid, const char *password) {
   // Wait until the stack has assigned a non-zero local IP before returning.
   while (WiFi.localIP() == IPAddress(0, 0, 0, 0)) {
     if (millis() - startTime > (unsigned long)_connectTimeoutMs) {
-      updateLastError("DHCP timeout");
+      setError("DHCP timeout");
       return false;
     }
     delay(100);
   }
 
   return true;
-}
-
-void WiFiManager::disconnect() {
-  WiFi.disconnect();
-  _reconnectAttempts = 0;
 }
 
 bool WiFiManager::isConnected() const { return WiFi.status() == WL_CONNECTED; }
@@ -120,7 +89,7 @@ const char *WiFiManager::getIP() const {
   return ipStr;
 }
 
-void WiFiManager::updateLastError(const char *error) {
+void WiFiManager::setError(const char *error) {
   strncpy(_lastError, error, sizeof(_lastError) - 1);
   _lastError[sizeof(_lastError) - 1] = '\0';
 }
@@ -151,19 +120,19 @@ bool WiFiManager::loadFromNVS() {
 
 bool WiFiManager::saveToNVS() {
   if (!_prefs.begin("tarameteo_wifi", false)) { // Read-write mode
-    updateLastError("Failed to open NVS for writing");
+    setError("Failed to open NVS for writing");
     return false;
   }
 
   if (_prefs.putString("ssid", _ssid) == 0) {
     _prefs.end();
-    updateLastError("Failed to save SSID to NVS");
+    setError("Failed to save SSID to NVS");
     return false;
   }
 
   if (_prefs.putString("password", _password) == 0) {
     _prefs.end();
-    updateLastError("Failed to save password to NVS");
+    setError("Failed to save password to NVS");
     return false;
   }
 
@@ -172,10 +141,18 @@ bool WiFiManager::saveToNVS() {
   return true;
 }
 
+bool WiFiManager::isValidSsid(const char *ssid) {
+  return ssid && ssid[0] != '\0' && strlen(ssid) <= MAX_SSID_BYTES;
+}
+
+bool WiFiManager::isValidPassword(const char *password) {
+  return password && password[0] != '\0' && strlen(password) <= MAX_PASSWORD_BYTES;
+}
+
 bool WiFiManager::storeCredentials(const char *ssid, const char *password) {
-  if (!ssid || !password || strlen(ssid) == 0 || strlen(password) == 0 || strlen(ssid) > MAX_SSID_BYTES ||
-      strlen(password) > MAX_PASSWORD_BYTES) {
-    updateLastError("Invalid WiFi credentials");
+  // Guards the buffers below; applyProvisioning has already checked both.
+  if (!isValidSsid(ssid) || !isValidPassword(password)) {
+    setError("Invalid WiFi credentials");
     return false;
   }
 

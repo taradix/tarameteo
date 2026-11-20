@@ -17,7 +17,6 @@
 
 // Time Management (NTP)
 #define NTP_TIMEOUT_MS      10000  // 10 seconds timeout for NTP sync
-#define NTP_SYNC_INTERVAL_MS 86400000  // 24 hours between syncs (86400000 ms = 24 hours)
 
 // Advanced Settings
 #define WIFI_TIMEOUT_MS     30000  // 30 seconds

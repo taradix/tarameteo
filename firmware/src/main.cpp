@@ -19,7 +19,6 @@
 #include "TimeManager.h"
 #include "WiFiManager.h"
 #include "config.h"
-#include <Arduino.h>
 #include <Preferences.h>
 #include <cmath>
 #include <esp_sleep.h>
@@ -30,11 +29,13 @@
 // BLE provisioning transport
 #include "NimBLEProvisionerAdapter.h"
 
+static constexpr unsigned long SERIAL_START_DELAY_MS = 1000;
+
 // Global objects
 BME280Sensor sensor(BME280_ADDRESS, BME280_SDA, BME280_SCL, SEA_LEVEL_PRESSURE);
 
-// WiFi credentials and sensor name will be loaded from NVS (supports "flash once, provision many")
-WiFiManager wifiManager(nullptr, nullptr, WIFI_TIMEOUT_MS);
+// WiFi credentials are loaded from NVS (supports "flash once, provision many")
+WiFiManager wifiManager(WIFI_TIMEOUT_MS);
 
 // CertificateManager dependencies (must be global to persist)
 Preferences certPrefs;
@@ -43,7 +44,7 @@ CertificateManager certManager(certPrefs, &arduinoAdapter);
 
 MqttClient mqttClient(MQTT_SERVER, MQTT_PORT, &certManager);
 PowerManager powerManager(SLEEP_DURATION);
-TimeManager timeManager(NTP_TIMEOUT_MS, NTP_SYNC_INTERVAL_MS);
+TimeManager timeManager(NTP_TIMEOUT_MS);
 
 void printStatus(const char *component, bool success, const char *error = nullptr) {
   Serial.print(component);
@@ -57,12 +58,13 @@ void printStatus(const char *component, bool success, const char *error = nullpt
 
 void setup() {
   Serial.begin(115200);
-  delay(1000); // Give serial connection time to start
+  delay(SERIAL_START_DELAY_MS);
 
-  // On a cold boot (power-on or manual reset, not a deep-sleep wakeup), hold
-  // briefly so the serial upload tool has time to connect before we potentially
-  // sleep on an error.
-  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
+  // A cold boot is a power-on or manual reset, not a deep-sleep wakeup. Hold
+  // briefly then, so the serial upload tool has time to connect before we
+  // potentially sleep on an error.
+  const bool coldBoot = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED;
+  if (coldBoot) {
     Serial.printf("Cold boot — %d ms upload window...\n", BOOT_DELAY_MS);
     delay(BOOT_DELAY_MS);
   }
@@ -105,11 +107,19 @@ void setup() {
   // which has no host build, so the analysis (clang-tidy, -DUNIT_TEST) pass
   // skips this device-only glue.
 #ifndef UNIT_TEST
-  bool coldBoot = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED;
+  // How long provisioning waits: a board without WiFi credentials has nothing else to do.
+  constexpr unsigned long UNPROVISIONED_WINDOW_MS = 5 * 60 * 1000;
+  constexpr unsigned long COLD_BOOT_WINDOW_MS = 2 * 60 * 1000;
+  // Yields so the watchdog doesn't fire
+  constexpr unsigned long BLE_POLL_INTERVAL_MS = 10;
+  // Lets the client receive the last status
+  constexpr unsigned long FINAL_NOTIFY_DELAY_MS = 1000;
+  // Lets the serial log drain before ESP.restart()
+  constexpr unsigned long RESTART_DELAY_MS = 2000;
   if (wifiManager.needsProvisioning() || coldBoot) {
     // Advertise the sensor ID printed on the sticker next to the passkey.
     const char *deviceName = certManager.getCN();
-    unsigned long windowMs = wifiManager.needsProvisioning() ? 300000 : 120000;
+    unsigned long windowMs = wifiManager.needsProvisioning() ? UNPROVISIONED_WINDOW_MS : COLD_BOOT_WINDOW_MS;
 
     Serial.println("===========================================");
     Serial.println("PROVISIONING MODE (BLE)");
@@ -121,38 +131,36 @@ void setup() {
     Serial.println("===========================================");
 
     NimBLEProvisionerAdapter ble;
-    if (!ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLatitude(),
-                   certManager.getLongitude())) {
-      Serial.println("Failed to start BLE provisioning!");
-      delay(5000);
-      ESP.restart();
-    }
-
     bool saved = false;
-    unsigned long startTime = millis();
-    while (!saved && (millis() - startTime) < windowMs) {
-      if (ble.poll()) {
-        ble.notifyStatus("provisioning");
-        saved = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
-                                              ble.label());
-        ble.notifyStatus(certManager.getProvisioningStatus());
-        if (!saved) {
-          Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
+    // A provisioned board skips the window when BLE fails: restarting would
+    // be another cold boot, so it would fail again and never publish.
+    if (ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLatitude(),
+                  certManager.getLongitude())) {
+      unsigned long startTime = millis();
+      while (!saved && (millis() - startTime) < windowMs) {
+        if (ble.poll()) {
+          ble.notifyStatus("provisioning");
+          saved = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
+                                                ble.label());
+          ble.notifyStatus(certManager.getProvisioningStatus());
+          if (!saved) {
+            Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
+          }
         }
+        delay(BLE_POLL_INTERVAL_MS);
       }
-      delay(10); // Small delay to prevent watchdog issues
+      delay(FINAL_NOTIFY_DELAY_MS);
+    } else {
+      Serial.println("Failed to start BLE provisioning!");
     }
-
-    // Give the client time to receive the final notification.
-    delay(1000);
-    ble.stop();
+    ble.stop(); // Frees the BLE stack before the WiFi needs the radio
 
     if (saved) {
       // No restart: that would be a cold boot, opening the window again.
       Serial.println("\nProvisioning completed!");
     } else if (wifiManager.needsProvisioning()) {
-      Serial.println("\nProvisioning timeout. Rebooting...");
-      delay(2000);
+      Serial.println("\nProvisioning failed. Rebooting...");
+      delay(RESTART_DELAY_MS);
       ESP.restart();
     }
   }
@@ -169,13 +177,7 @@ void setup() {
   Serial.printf("Connected to %s (IP: %s)\n", wifiManager.getSSID(), wifiManager.getIP());
   Serial.printf("WiFi RSSI: %d dBm\n", wifiManager.getRSSI());
 
-  // Initialize time manager and sync before TLS, which checks the broker certificate dates
-  if (!timeManager.begin()) {
-    printStatus("Time Manager", false, timeManager.getLastError());
-    powerManager.sleep();
-  }
-  printStatus("Time Manager", true);
-
+  // Sync before TLS, which checks the broker certificate dates
   Serial.println("Synchronizing time with NTP servers...");
   if (!timeManager.syncTime()) {
     printStatus("Time Sync", false, timeManager.getLastError());
@@ -214,19 +216,11 @@ void setup() {
 }
 
 void loop() {
-  // Check sensor availability
-  if (!sensor.isAvailable()) {
-    printStatus("Sensor Check", false, sensor.getLastError());
-    powerManager.sleep();
-  }
-
   // Check WiFi connection
   if (!wifiManager.isConnected()) {
     Serial.println("WiFi disconnected, attempting to reconnect...");
     if (!wifiManager.reconnect()) {
       printStatus("WiFi Reconnect", false, wifiManager.getLastError());
-      Serial.printf("Reconnect attempts: %d/%d\n", wifiManager.getReconnectAttempts(),
-                    WiFiManager::MAX_RECONNECT_ATTEMPTS);
       powerManager.sleep();
     }
     printStatus("WiFi Reconnect", true);
@@ -273,10 +267,8 @@ void loop() {
   Serial.println("\nPublishing data to MQTT broker...");
   if (!mqttClient.publishWeatherData(data)) {
     printStatus("Data Publish", false, mqttClient.getLastError());
-    Serial.printf("Retry count: %d/%d\n", mqttClient.getRetryCount(), MqttClient::MAX_RETRIES);
   } else {
     printStatus("Data Publish", true);
-    Serial.printf("Data published successfully to topic: weather/%s/event\n", certManager.getSensorName());
   }
 
   // Disconnect from MQTT (reduces power consumption during sleep)

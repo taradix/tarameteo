@@ -2,6 +2,7 @@
 #define CERTIFICATE_MANAGER_H
 
 #include <Preferences.h>
+#include <stdint.h>
 #include "IWiFiClient.h"
 #include "IArduino.h"
 
@@ -45,8 +46,7 @@ public:
 
     // Getters
     const char* getLastError() const { return _lastError; }
-    const char* getCN() const { return _cn; }
-    const char* getSensorName() const { return _cn; }  // Sensor name IS the CN
+    const char* getCN() const { return _cn; }  // The sensor ID
     uint32_t getPasskey() const { return _passkey; }
     float getLatitude() const { return _latitude; }
     float getLongitude() const { return _longitude; }
