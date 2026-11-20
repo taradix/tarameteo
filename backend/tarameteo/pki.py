@@ -191,11 +191,12 @@ def _build_base_certificate(
     public_key,
     ttl_days: int | None,
     no_expiry: bool,
+    now: datetime | None = None,
 ) -> x509.CertificateBuilder:
     if no_expiry and ttl_days is not None:
         raise ValueError("ttl_days and no_expiry are mutually exclusive")
 
-    now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
     not_before = now - timedelta(minutes=2)
     not_after = NO_EXPIRY if no_expiry else now + timedelta(days=ttl_days or DEFAULT_TTL_DAYS)
     serial = x509.random_serial_number()
