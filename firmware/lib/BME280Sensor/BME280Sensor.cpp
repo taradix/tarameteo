@@ -1,4 +1,5 @@
 #include "BME280Sensor.h"
+#include <I2CAddressList.h>
 #include <cmath>
 
 BME280Sensor::BME280Sensor(uint8_t address, int8_t sda, int8_t scl, float seaLevelPressure)
@@ -10,21 +11,17 @@ bool BME280Sensor::begin() {
   Wire.begin(_sda, _scl);
 
   if (!_bme.begin(_address)) {
-    char found[64] = "none";
-    size_t len = 0;
+    uint8_t found[126];
+    size_t count = 0;
     for (uint8_t addr = 1; addr < 127; addr++) {
       Wire.beginTransmission(addr);
       if (Wire.endTransmission() == 0) {
-        int n = snprintf(found + len, sizeof(found) - len, len > 0 ? ", 0x%02X" : "0x%02X", addr);
-        if (n < 0 || static_cast<size_t>(n) >= sizeof(found) - len) {
-          break; // List is full; snprintf left it truncated and terminated.
-        }
-        len += static_cast<size_t>(n);
+        found[count++] = addr;
       }
     }
-    snprintf(_lastError, sizeof(_lastError),
-             "Could not find BME280 at 0x%02X (SDA: %d, SCL: %d) — I2C devices found: %s",
-             _address, _sda, _scl, found);
+    snprintf(_lastError, sizeof(_lastError), "Could not find BME280 at 0x%02X (SDA: %d, SCL: %d) — I2C devices found: ",
+             _address, _sda, _scl);
+    appendI2CAddresses(_lastError, sizeof(_lastError), found, count);
     return false;
   }
 
