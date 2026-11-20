@@ -1,8 +1,12 @@
 FROM alpine:3.24
 
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
 RUN apk add --no-cache nginx \
   python3 \
-  py3-jinja2
+  py3-pip && \
+  pip install --upgrade pip && \
+  pip install Jinja2
 
 RUN mkdir -p /etc/nginx/includes \
   && ln -sf /dev/stdout /var/log/nginx/access.log \
