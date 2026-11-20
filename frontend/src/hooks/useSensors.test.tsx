@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useSensorList, useSensorSearch, useWeather } from "./useSensors";
 import { queryWrapper, stubEventSource, stubFetch } from "../test/utils";
@@ -15,7 +15,7 @@ describe("useSensorList", () => {
     const fetch = stubFetch({ "/api/sensors": { sensors } });
     const { result } = renderHook(() => useSensorList(["ts", "agg"]), { wrapper: queryWrapper() });
     await waitFor(() => expect(result.current.data).toEqual({ sensors }));
-    expect(fetch).toHaveBeenCalledWith("/api/sensors?names=agg&names=ts");
+    expect(fetch).toHaveBeenCalledWith("/api/sensors?names=agg&names=ts", undefined);
   });
 
   it("doesn't fetch without a selection", () => {
@@ -35,7 +35,7 @@ describe("useSensorSearch", () => {
     rerender({ input: " t" });
     rerender({ input: " ts " });
     await waitFor(() => expect(result.current.data).toEqual({ sensors }));
-    expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/sensors?q=ts&limit=20");
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/sensors?q=ts&limit=20", undefined);
   });
 });
 
@@ -55,7 +55,7 @@ describe("useWeather", () => {
     expect(result.current.readings).toEqual([reading("ts", "t1")]);
     expect(result.current.aggregates).toEqual([reading("agg", "t2")]);
     expect(result.current.error).toBeNull();
-    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("end=2026-01-02T00%3A00%3A00.000Z"));
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("end=2026-01-02T00%3A00%3A00.000Z"), undefined);
     expect(sources).toHaveLength(0);
   });
 
@@ -63,10 +63,10 @@ describe("useWeather", () => {
     stubFetch({ "/api/sensors/agg/weather/aggregate": [] });
     stubEventSource();
     const { result } = renderHook(() => useWeather(sensors, "start", new Date()), { wrapper: queryWrapper() });
-    await waitFor(() => expect(result.current.error).toMatchObject({ status: 404 }));
+    await waitFor(() => expect(result.current.error).toMatchObject({ message: "404 Not Found" }));
   });
 
-  it("appends streamed readings in live mode and closes streams on unmount", async () => {
+  it("streams only timeseries in live mode, skips bad frames, and closes streams on unmount", async () => {
     stubFetch({
       "/api/sensors/ts/weather": [reading("ts", "t1")],
       "/api/sensors/agg/weather/aggregate": [],
@@ -77,20 +77,50 @@ describe("useWeather", () => {
     });
 
     await waitFor(() => expect(result.current.readings).toHaveLength(1));
-    expect(sources.map((s) => s.url)).toEqual([
-      "/api/sensors/ts/weather/stream",
-      "/api/sensors/agg/weather/stream",
-    ]);
+    expect(sources.map((s) => s.url)).toEqual(["/api/sensors/ts/weather/stream"]);
 
     act(() => {
+      sources[0].onmessage?.(new MessageEvent("message", { data: "not json" }));
       sources[0].emit(reading("ts", "t2"));
-      sources[1].emit(reading("agg", "t3"));
     });
-    expect(result.current.readings).toEqual([reading("ts", "t1"), reading("ts", "t2")]);
-    expect(result.current.aggregates).toEqual([reading("agg", "t3")]);
+    await waitFor(() => expect(result.current.readings).toEqual([reading("ts", "t1"), reading("ts", "t2")]));
 
     unmount();
     expect(sources.every((s) => s.closed)).toBe(true);
+  });
+
+  it("drops streamed readings when the range moves", async () => {
+    stubFetch({ "/api/sensors/ts/weather": [] });
+    const sources = stubEventSource();
+    const { result, rerender } = renderHook(({ start }) => useWeather(sensors, start, null), {
+      wrapper: queryWrapper(),
+      initialProps: { start: "a" },
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    act(() => sources[0].emit(reading("ts", "t1")));
+    await waitFor(() => expect(result.current.readings).toHaveLength(1));
+
+    rerender({ start: "b" });
+    expect(result.current.readings).toEqual([]);
+    expect(sources[0].closed).toBe(true);
+    expect(sources).toHaveLength(2);
+  });
+
+  it("keeps streamed readings when a sensor is added", async () => {
+    stubFetch({ "/api/sensors/ts/weather": [], "/api/sensors/ts2/weather": [] });
+    const sources = stubEventSource();
+    const { result, rerender } = renderHook(({ picked }) => useWeather(picked, "start", null), {
+      wrapper: queryWrapper(),
+      initialProps: { picked: [sensors[0]] },
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    act(() => sources[0].emit(reading("ts", "t1")));
+    await waitFor(() => expect(result.current.readings).toHaveLength(1));
+
+    rerender({ picked: [sensors[0], { name: "ts2", kind: "timeseries" }] });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.readings).toEqual([reading("ts", "t1")]);
   });
 
   it("does not stream without sensors", () => {
@@ -98,5 +128,44 @@ describe("useWeather", () => {
     const sources = stubEventSource();
     renderHook(() => useWeather([], "start", null), { wrapper: queryWrapper() });
     expect(sources).toHaveLength(0);
+  });
+});
+
+describe("useWeather polling", () => {
+  const NOW = new Date("2026-01-02T12:00:00Z");
+  const POLL_MS = 30_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Paths fetched within ms of rendering, without their query strings.
+  async function fetchedAfter(ms: number, end: Date | null) {
+    const fetch = stubFetch({ "/api/sensors/ts/weather": [], "/api/sensors/agg/weather/aggregate": [] });
+    stubEventSource();
+    renderHook(() => useWeather(sensors, "2026-01-01T00:00:00Z", end), { wrapper: queryWrapper() });
+    await vi.advanceTimersByTimeAsync(ms);
+    return fetch.mock.calls.map(([url]) => String(url).split("?")[0]);
+  }
+
+  it("polls only aggregates in live mode, since timeseries stream", async () => {
+    const fetched = await fetchedAfter(POLL_MS, null);
+    expect(fetched.filter((p) => p.endsWith("/aggregate"))).toHaveLength(2);
+    expect(fetched.filter((p) => p.endsWith("/ts/weather"))).toHaveLength(1);
+  });
+
+  it("polls a range ending in the future until one fetch past its end", async () => {
+    const fetched = await fetchedAfter(3 * POLL_MS, new Date(NOW.getTime() + POLL_MS / 2));
+    expect(fetched).toHaveLength(4);
+  });
+
+  it("fetches an ended range once", async () => {
+    const fetched = await fetchedAfter(POLL_MS, new Date("2026-01-02T00:00:00Z"));
+    expect(fetched).toHaveLength(2);
   });
 });

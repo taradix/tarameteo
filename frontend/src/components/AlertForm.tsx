@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { sensorTitle, type AlertCreate, type SensorRef } from "../types";
@@ -7,6 +7,8 @@ type AlertField = AlertCreate["field"];
 
 const ALERT_FIELDS: AlertField[] = ["temperature", "humidity", "pressure", "rain", "snow", "offline"];
 const CONDITIONS = ["below", "above"] as const;
+// Matches OFFLINE_MAX_HOURS in backend/tarameteo/alerts.py, which rejects longer offline alerts.
+const OFFLINE_MAX_HOURS = 30 * 24;
 
 // Emails come in the language of the page they were asked from.
 const emailLanguage = (language?: string) => (language === "fr" ? "fr" : "en");
@@ -60,56 +62,37 @@ export function AlertsDialog({ sensors }: { sensors: SensorRef[] }) {
 }
 
 function AlertForm({ sensors, onClose }: { sensors: SensorRef[]; onClose: () => void }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [sensor, setSensor] = useState(sensors[0]?.name ?? "");
   const [field, setField] = useState<AlertField>("temperature");
   const [condition, setCondition] = useState<"above" | "below">("below");
   const [threshold, setThreshold] = useState("");
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   // Offline: "no reading for more than N hours".
   const offline = field === "offline";
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setStatus("sending");
-    try {
-      await api.createAlert({
+  return (
+    <EmailForm
+      title={t("alerts.title")}
+      submit={t("alerts.submit")}
+      sent={t("alerts.confirmationSent")}
+      error={t("alerts.error")}
+      onClose={onClose}
+      send={(email, language) => api.createAlert({
         email,
         sensor,
         field,
         condition: offline ? "above" : condition,
         threshold: Number(threshold),
-        language: emailLanguage(i18n.resolvedLanguage),
-      });
-      setStatus("sent");
-    } catch {
-      setStatus("error");
-    }
-  };
-
-  if (status === "sent") {
-    return (
-      <div className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800">
-        {t("alerts.confirmationSent")}
-        <button type="button" onClick={onClose} className="ml-2 underline">
-          {t("alerts.close")}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-3 text-sm">
-      <h3 className="font-semibold">{t("alerts.title")}</h3>
-
+        language,
+      })}
+    >
       <div className="flex flex-wrap gap-2">
         <select value={sensor} onChange={(e) => setSensor(e.target.value)} className="border rounded px-2 py-1">
           {sensors.map((s) => <option key={s.name} value={s.name}>{sensorTitle(s)}</option>)}
         </select>
 
         <select value={field} onChange={(e) => setField(e.target.value as AlertField)} className="border rounded px-2 py-1">
-          {ALERT_FIELDS.map((f) => <option key={f} value={f}>{t(`alerts.fields.${f}`)}</option>)}
+          {ALERT_FIELDS.map((f) => <option key={f} value={f}>{t(f === "offline" ? "alerts.offline" : `fields.${f}`)}</option>)}
         </select>
 
         {!offline && (
@@ -122,7 +105,7 @@ function AlertForm({ sensors, onClose }: { sensors: SensorRef[]; onClose: () => 
           type="number"
           step="any"
           min={offline ? 1 : undefined}
-          max={offline ? 720 : undefined}
+          max={offline ? OFFLINE_MAX_HOURS : undefined}
           value={threshold}
           onChange={(e) => setThreshold(e.target.value)}
           placeholder={offline ? t("alerts.hours") : t("alerts.threshold")}
@@ -131,42 +114,38 @@ function AlertForm({ sensors, onClose }: { sensors: SensorRef[]; onClose: () => 
           className="border rounded px-2 py-1 w-24"
         />
       </div>
-
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder={t("alerts.email")}
-        required
-        className="border rounded px-2 py-1 w-full"
-      />
-
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={status === "sending"}
-          className="bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
-        >
-          {status === "sending" ? t("alerts.sending") : t("alerts.submit")}
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-zinc-500 hover:text-zinc-700 underline"
-        >
-          {t("alerts.cancel")}
-        </button>
-      </div>
-
-      {status === "error" && (
-        <p className="text-red-600">{t("alerts.error")}</p>
-      )}
-    </form>
+    </EmailForm>
   );
 }
 
 // No accounts: the link to see and stop your alerts comes by email.
 function ManageAlerts({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <EmailForm
+      title={t("alerts.manage")}
+      submit={t("alerts.manageSubmit")}
+      sent={t("alerts.manageSent")}
+      error={t("alerts.manageError")}
+      onClose={onClose}
+      send={(email, language) => api.manageAlerts({ email, language })}
+    />
+  );
+}
+
+interface EmailFormProps {
+  title: string;
+  submit: string;
+  sent: string;
+  error: string;
+  onClose: () => void;
+  send: (email: string, language: AlertCreate["language"]) => Promise<unknown>;
+  // Fields asked before the email address.
+  children?: ReactNode;
+}
+
+// A form that ends in an email address: it sends, then says it's sent or failed.
+function EmailForm({ title, submit, sent, error, onClose, send, children }: EmailFormProps) {
   const { t, i18n } = useTranslation();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -175,7 +154,7 @@ function ManageAlerts({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     setStatus("sending");
     try {
-      await api.manageAlerts({ email, language: emailLanguage(i18n.resolvedLanguage) });
+      await send(email, emailLanguage(i18n.resolvedLanguage));
       setStatus("sent");
     } catch {
       setStatus("error");
@@ -185,7 +164,7 @@ function ManageAlerts({ onClose }: { onClose: () => void }) {
   if (status === "sent") {
     return (
       <div className="rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800">
-        {t("alerts.manageSent")}
+        {sent}
         <button type="button" onClick={onClose} className="ml-2 underline">
           {t("alerts.close")}
         </button>
@@ -195,7 +174,8 @@ function ManageAlerts({ onClose }: { onClose: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3 text-sm">
-      <h3 className="font-semibold">{t("alerts.manage")}</h3>
+      <h3 className="font-semibold">{title}</h3>
+      {children}
       <input
         type="email"
         value={email}
@@ -211,13 +191,13 @@ function ManageAlerts({ onClose }: { onClose: () => void }) {
           disabled={status === "sending"}
           className="bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
         >
-          {status === "sending" ? t("alerts.sending") : t("alerts.manageSubmit")}
+          {status === "sending" ? t("alerts.sending") : submit}
         </button>
         <button type="button" onClick={onClose} className="text-zinc-500 hover:text-zinc-700 underline">
           {t("alerts.cancel")}
         </button>
       </div>
-      {status === "error" && <p className="text-red-600">{t("alerts.manageError")}</p>}
+      {status === "error" && <p className="text-red-600">{error}</p>}
     </form>
   );
 }

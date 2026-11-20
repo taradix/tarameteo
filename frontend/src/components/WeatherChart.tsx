@@ -19,6 +19,11 @@ import zoomPlugin from "chartjs-plugin-zoom";
 import type { AggregateReading, SensorRef, WeatherField, WeatherReading } from "../types";
 import { buildDatasets, extendedRange, type Point } from "./chartData";
 
+// Enough ticks to read the axis without crowding a phone.
+const MAX_TICKS = 8;
+// Points kept per dataset; more than this is past what the chart's width can show.
+const DECIMATION_SAMPLES = 500;
+
 ChartJS.register(
   TimeScale, LinearScale, PointElement, LineElement, Filler,
   Tooltip, Legend, Decimation, zoomPlugin,
@@ -33,12 +38,12 @@ interface Props {
   aggregates: AggregateReading[];
   start: Date;
   end: Date | null;
+  loading?: boolean;
   onRangeExtend?: (start: Date, end: Date | null) => void;
 }
 
-export function WeatherChart({ title, unit, fields, sensors, readings, aggregates, start, end, onRangeExtend }: Props) {
+export function WeatherChart({ title, unit, fields, sensors, readings, aggregates, start, end, loading, onRangeExtend }: Props) {
   const { t } = useTranslation();
-  const chartRef = useRef<ChartJS<"line">>(null);
 
   const startRef = useRef(start);
   const endRef = useRef(end);
@@ -58,8 +63,8 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
   }, []);
 
   const data = useMemo<ChartData<"line", Point[]>>(
-    () => ({ datasets: buildDatasets(sensors, fields, readings, aggregates) }),
-    [readings, aggregates, sensors, fields],
+    () => ({ datasets: buildDatasets(sensors, fields, readings, aggregates, (f) => t(`fields.${f}`)) }),
+    [readings, aggregates, sensors, fields, t],
   );
 
   const options = useMemo<ChartOptions<"line">>(
@@ -79,7 +84,7 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
               day: "MM/dd",
             },
           },
-          ticks: { maxTicksLimit: 8 },
+          ticks: { maxTicksLimit: MAX_TICKS },
         },
         y: {
           title: { display: true, text: unit },
@@ -96,7 +101,7 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
         decimation: {
           enabled: true,
           algorithm: "lttb",
-          samples: 500,
+          samples: DECIMATION_SAMPLES,
         },
         tooltip: {
           callbacks: {
@@ -124,10 +129,10 @@ export function WeatherChart({ title, unit, fields, sensors, readings, aggregate
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
       {hasData ? (
         <div className="h-64">
-          <Line ref={chartRef} data={data} options={options} />
+          <Line data={data} options={options} />
         </div>
       ) : (
-        <p className="text-sm text-zinc-500">{t("chart.noData")}</p>
+        <p className="text-sm text-zinc-500">{t(loading ? "chart.loading" : "chart.noData")}</p>
       )}
     </div>
   );

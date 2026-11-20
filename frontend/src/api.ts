@@ -8,54 +8,42 @@ export interface SensorFilter {
   limit?: number;
 }
 
+type Params = Record<string, string | number | string[] | undefined>;
+
+const weatherPath = (name: string) => `${BASE}/api/sensors/${encodeURIComponent(name)}/weather`;
+
 // Arrays repeat the key (names=a&names=b), as FastAPI expects.
-async function get<T>(path: string, params?: Record<string, string | number | string[] | undefined>): Promise<T> {
-  const url = new URL(`${BASE}${path}`, window.location.origin);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined) [v].flat().forEach((x) => url.searchParams.append(k, String(x)));
-    }
+function withQuery(path: string, params: Params): string {
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined) [v].flat().forEach((x) => query.append(k, String(x)));
   }
-  const res = await fetch(url.toString().replace(window.location.origin, ""));
+  const qs = query.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+    throw new Error(`${res.status} ${res.statusText}`);
   }
   return res.json() as Promise<T>;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+const post = <T>(path: string, body: unknown) =>
+  request<T>(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
-  }
-  return res.json() as Promise<T>;
-}
-
-export class ApiError extends Error {
-  readonly status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-    this.name = "ApiError";
-  }
-}
 
 export const api = {
-  listSensors: (filter: SensorFilter = {}) => get<SensorList>("/api/sensors", { ...filter }),
-  getWeather: (name: string, start: string, end?: string, limit?: number) =>
-    get<WeatherReading[]>(
-      `/api/sensors/${encodeURIComponent(name)}/weather`,
-      { start, end, limit },
-    ),
-  getWeatherAggregate: (name: string, start: string, end?: string, limit?: number) =>
-    get<AggregateReading[]>(
-      `/api/sensors/${encodeURIComponent(name)}/weather/aggregate`,
-      { start, end, limit },
-    ),
+  listSensors: (filter: SensorFilter = {}) => request<SensorList>(withQuery(`${BASE}/api/sensors`, { ...filter })),
+  getWeather: (name: string, start: string, end?: string) =>
+    request<WeatherReading[]>(withQuery(weatherPath(name), { start, end })),
+  getWeatherAggregate: (name: string, start: string, end?: string) =>
+    request<AggregateReading[]>(withQuery(`${weatherPath(name)}/aggregate`, { start, end })),
+  streamUrl: (name: string) => `${weatherPath(name)}/stream`,
   manageAlerts: (request: ManageRequest) =>
     post<{ status: string }>("/api/alerts/manage", request),
   createAlert: (alert: AlertCreate) =>

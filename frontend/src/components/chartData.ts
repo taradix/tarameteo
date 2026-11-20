@@ -31,11 +31,6 @@ function singleAggValue(r: AggregateReading, field: WeatherField): number | null
   return map[field] ?? null;
 }
 
-// Capitalise the field name for use in multi-field dataset labels.
-function fieldLabel(field: WeatherField): string {
-  return field.charAt(0).toUpperCase() + field.slice(1);
-}
-
 // Each daily aggregate becomes a flat step spanning its day.
 function steps(aggData: AggregateReading[], value: (r: AggregateReading) => number | null): Point[] {
   return aggData.flatMap((r) => {
@@ -46,98 +41,82 @@ function steps(aggData: AggregateReading[], value: (r: AggregateReading) => numb
   });
 }
 
+type Dataset = ChartDataset<"line", Point[]>;
+
+// Points are pre-parsed and drawn as straight lines between them.
+function dataset(label: string, data: Point[], color: string, extra: Partial<Dataset> = {}): Dataset {
+  return {
+    label, data, borderColor: color, backgroundColor: color,
+    fill: false, pointRadius: 0, tension: 0, parsing: false, ...extra,
+  };
+}
+
+function timeseriesDatasets(sensor: SensorRef, field: WeatherField, readings: WeatherReading[], label: string, color: string) {
+  const data = readings
+    .filter((r) => r.sensor === sensor.name && r[field] != null)
+    .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: r[field] as number }))
+    .sort((a, b) => a.x - b.x);
+  return [dataset(label, data, color)];
+}
+
+function aggregateDatasets(
+  sensor: SensorRef,
+  field: WeatherField,
+  aggData: AggregateReading[],
+  label: string,
+  colorKey: string,
+  first: boolean,
+): Dataset[] {
+  if (BAND_FIELDS.has(field)) {
+    const band = bandColorFor(colorKey);
+    return [
+      // Max boundary — fills down to the immediately following min dataset.
+      dataset("", steps(aggData, (r) => bandValues(r, field).max), band, { fill: "+1" }),
+      // Min boundary.
+      dataset("", steps(aggData, (r) => bandValues(r, field).min), band, { backgroundColor: "transparent" }),
+      // Avg line — the one shown in the legend.
+      dataset(label, steps(aggData, (r) => bandValues(r, field).avg), colorFor(colorKey), { borderDash: [4, 4] }),
+    ];
+  }
+  // Single aggregate value (rain, snow, …).
+  // Use sensor color (not per-field) so precipitation matches other charts;
+  // distinguish fields by line style (rain=solid, snow=dashed).
+  return [
+    dataset(
+      first ? sensorTitle(sensor) : "",
+      steps(aggData, (r) => singleAggValue(r, field)),
+      colorFor(sensor.name),
+      field === "snow" ? { borderDash: [4, 4] } : {},
+    ),
+  ];
+}
+
+// fieldLabel names a field in multi-field legends.
 export function buildDatasets(
   sensors: SensorRef[],
   fields: WeatherField[],
   readings: WeatherReading[],
   aggregates: AggregateReading[],
-): ChartDataset<"line", Point[]>[] {
-  const datasets: ChartDataset<"line", Point[]>[] = [];
+  fieldLabel: (field: WeatherField) => string,
+): Dataset[] {
   const multiField = fields.length > 1;
 
-  for (const sensor of sensors) {
-    for (const field of fields) {
+  return sensors.flatMap((sensor) => {
+    const aggData = sensor.kind === "aggregate"
+      ? aggregates
+        .filter((r) => r.sensor === sensor.name)
+        .sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime())
+      : [];
+
+    return fields.flatMap((field, i) => {
       // When showing multiple fields, differentiate by sensor+field; otherwise by sensor alone.
       const colorKey = multiField ? `${sensor.name}-${field}` : sensor.name;
-      const color = colorFor(colorKey);
       const label = multiField ? `${sensorTitle(sensor)} — ${fieldLabel(field)}` : sensorTitle(sensor);
-
-      if (sensor.kind === "timeseries") {
-        datasets.push({
-          label,
-          data: readings
-            .filter((r) => r.sensor === sensor.name && r[field] != null)
-            .map((r) => ({ x: parseISO(r.timestamp).getTime(), y: r[field] as number }))
-            .sort((a, b) => a.x - b.x),
-          borderColor: color,
-          backgroundColor: color,
-          pointRadius: 0,
-          tension: 0,
-          parsing: false,
-        });
-      } else {
-        const aggData = aggregates
-          .filter((r) => r.sensor === sensor.name)
-          .sort((a, b) => parseISO(a.timestamp).getTime() - parseISO(b.timestamp).getTime());
-
-        if (BAND_FIELDS.has(field)) {
-          // Max boundary — fills down to the immediately following min dataset.
-          datasets.push({
-            label: "",
-            data: steps(aggData, (r) => bandValues(r, field).max),
-            borderColor: bandColorFor(colorKey),
-            backgroundColor: bandColorFor(colorKey),
-            fill: "+1",
-            pointRadius: 0,
-            tension: 0,
-            parsing: false,
-          });
-          // Min boundary.
-          datasets.push({
-            label: "",
-            data: steps(aggData, (r) => bandValues(r, field).min),
-            borderColor: bandColorFor(colorKey),
-            backgroundColor: "transparent",
-            fill: false,
-            pointRadius: 0,
-            tension: 0,
-            parsing: false,
-          });
-          // Avg line — the one shown in the legend.
-          datasets.push({
-            label,
-            data: steps(aggData, (r) => bandValues(r, field).avg),
-            borderColor: color,
-            backgroundColor: color,
-            borderDash: [4, 4],
-            fill: false,
-            pointRadius: 0,
-            tension: 0,
-            parsing: false,
-          });
-        } else {
-          // Single aggregate value (rain, snow, …).
-          // Use sensor color (not per-field) so precipitation matches other charts;
-          // distinguish fields by line style (rain=solid, snow=dashed).
-          const aggColor = colorFor(sensor.name);
-          const aggLabel = fields.indexOf(field) === 0 ? sensorTitle(sensor) : "";
-          datasets.push({
-            label: aggLabel,
-            data: steps(aggData, (r) => singleAggValue(r, field)),
-            borderColor: aggColor,
-            backgroundColor: aggColor,
-            ...(field === "snow" ? { borderDash: [4, 4] } : {}),
-            fill: false,
-            pointRadius: 0,
-            tension: 0,
-            parsing: false,
-          });
-        }
-      }
-    }
-  }
-
-  return datasets;
+      return sensor.kind === "timeseries"
+        ? timeseriesDatasets(sensor, field, readings, label, colorFor(colorKey))
+        : aggregateDatasets(sensor, field, aggData, label, colorKey, i === 0);
+    });
+  });
 }
 
 // After a pan/zoom past the loaded data, return the widened range, or null if

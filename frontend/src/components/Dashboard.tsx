@@ -7,18 +7,19 @@ import { AlertsDialog } from "./AlertForm";
 import { RangePicker } from "./DateRangePicker";
 import { SensorPicker } from "./SensorPicker";
 import { WeatherChart } from "./WeatherChart";
-import LanguageToggle from "./LanguageToggle";
+import { LanguageToggle } from "./LanguageToggle";
+
+// Module-level so each chart's fields keep their identity across renders.
+const CHARTS: { fields: WeatherField[]; titleKey: string; unit: string }[] = [
+  { fields: ["temperature"], titleKey: "fields.temperature", unit: "°C" },
+  { fields: ["humidity"], titleKey: "fields.humidity", unit: "%" },
+  { fields: ["pressure"], titleKey: "fields.pressure", unit: "hPa" },
+  { fields: ["rain", "snow"], titleKey: "chart.precipitation", unit: "mm" },
+];
 
 export function Dashboard() {
   const { t } = useTranslation();
   const [{ sensors, hidden, preset, start, end }, setParams] = useDashboardState();
-
-  const CHARTS: { fields: WeatherField[]; title: string; unit: string }[] = [
-    { fields: ["temperature"], title: t("chart.temperature"), unit: "°C" },
-    { fields: ["humidity"], title: t("chart.humidity"), unit: "%" },
-    { fields: ["pressure"], title: t("chart.pressure"), unit: "hPa" },
-    { fields: ["rain", "snow"], title: t("chart.precipitation"), unit: "mm" },
-  ];
 
   const sensorList = useSensorList(sensors);
 
@@ -66,12 +67,12 @@ export function Dashboard() {
         preset={preset}
         start={start}
         end={end}
-        onChange={(changes) => setParams(changes)}
+        onChange={setParams}
       />
 
-      {weather.error && (
+      {(sensorList.error || weather.error) && (
         <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-          {String((weather.error as Error).message)}
+          {t("dashboard.error")}
         </p>
       )}
 
@@ -82,7 +83,7 @@ export function Dashboard() {
           {CHARTS.map((c) => (
             <WeatherChart
               key={c.fields.join(",")}
-              title={c.title}
+              title={t(c.titleKey)}
               unit={c.unit}
               fields={c.fields}
               sensors={visibleEntries}
@@ -90,6 +91,7 @@ export function Dashboard() {
               aggregates={weather.aggregates}
               start={start}
               end={end}
+              loading={weather.isLoading}
               onRangeExtend={handleRangeExtend}
             />
           ))}

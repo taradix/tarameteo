@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { format, parseISO } from "date-fns";
+import { isPreset, PRESETS } from "../hooks/useDashboardState";
 
 interface Props {
   preset: string;
@@ -9,24 +10,12 @@ interface Props {
   onChange: (params: { preset?: string | null; start?: Date | null; end?: Date | null }) => void;
 }
 
-const PRESET_KEYS = ["today", "yesterday", "7d", "30d"] as const;
-type PresetKey = (typeof PRESET_KEYS)[number];
-
 const LOCAL_FORMAT = "yyyy-MM-dd'T'HH:mm";
 
 export function RangePicker({ preset, start, end, onChange }: Props) {
   const { t } = useTranslation();
   const [customExpanded, setCustomExpanded] = useState(false);
-
-  const PRESETS: { key: PresetKey; label: string }[] = [
-    { key: "today",     label: t("dateRange.today")     },
-    { key: "yesterday", label: t("dateRange.yesterday") },
-    { key: "7d",        label: t("dateRange.last7d")    },
-    { key: "30d",       label: t("dateRange.last30d")   },
-  ];
-
-  const isKnownPreset = PRESET_KEYS.some((k) => k === preset);
-  const isCustom = !isKnownPreset;
+  const isCustom = !isPreset(preset);
   const showCustom = isCustom || customExpanded;
 
   const btnClass = (active: boolean) =>
@@ -40,14 +29,14 @@ export function RangePicker({ preset, start, end, onChange }: Props) {
     <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
       <h2 className="mb-3 text-lg font-semibold">{t("dateRange.title")}</h2>
       <div className="flex flex-wrap gap-2">
-        {PRESETS.map(({ key, label }) => (
+        {Object.keys(PRESETS).map((key) => (
           <button
             key={key}
             type="button"
             onClick={() => { onChange({ preset: key, start: null, end: null }); setCustomExpanded(false); }}
             className={btnClass(preset === key)}
           >
-            {label}
+            {t(`dateRange.${key}`)}
           </button>
         ))}
         <button

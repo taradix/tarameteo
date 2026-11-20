@@ -6,10 +6,13 @@ import "./i18n";
 import App from "./App";
 import "./index.css";
 
+// Remounting a chart within this reuses its data instead of refetching.
+const STALE_MS = 15_000;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 15_000,
+      staleTime: STALE_MS,
       refetchOnWindowFocus: false,
     },
   },

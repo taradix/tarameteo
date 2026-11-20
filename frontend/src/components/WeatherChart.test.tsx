@@ -54,6 +54,24 @@ describe("WeatherChart", () => {
       );
       expect(screen.getByText(/no data in range/i)).toBeInTheDocument();
     });
+
+    it("says it's loading rather than empty while readings load", () => {
+      render(
+        <WeatherChart
+          title="Temperature"
+          unit="°C"
+          fields={["temperature"]}
+          sensors={[{ name: "outdoor", kind: "timeseries" }]}
+          readings={[]}
+          aggregates={[]}
+          start={at(5)}
+          end={at(10)}
+          loading
+        />,
+      );
+      expect(screen.getByText("Loading…")).toBeInTheDocument();
+      expect(screen.queryByText(/no data/i)).not.toBeInTheDocument();
+    });
   });
 
   describe("with timeseries data", () => {

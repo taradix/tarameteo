@@ -1,28 +1,31 @@
 {
-  "app": {
-    "title": "TaraMeteo"
-  },
   "language": {
-    "toggle": "Changer de langue"
+    "toggle": "Switch to English"
+  },
+  "fields": {
+    "temperature": "Température",
+    "humidity": "Humidité",
+    "pressure": "Pression",
+    "rain": "Pluie",
+    "snow": "Neige"
   },
   "dashboard": {
     "title": "Tableau de bord météo",
     "timezone": "Fuseau horaire : {{timezone}}",
-    "noSensors": "Ajoutez un capteur pour voir les graphiques."
+    "noSensors": "Ajoutez un capteur pour voir les graphiques.",
+    "error": "Impossible de charger les données météo. Veuillez réessayer plus tard."
   },
   "chart": {
-    "temperature": "Température",
-    "humidity": "Humidité",
-    "pressure": "Pression",
     "precipitation": "Précipitations",
+    "loading": "Chargement…",
     "noData": "Aucune donnée dans cette plage."
   },
   "dateRange": {
     "title": "Plage de dates",
     "today": "Aujourd'hui",
     "yesterday": "Hier",
-    "last7d": "7 derniers jours",
-    "last30d": "30 derniers jours",
+    "7d": "7 derniers jours",
+    "30d": "30 derniers jours",
     "custom": "Personnalisé",
     "start": "Début",
     "end": "Fin",
@@ -39,14 +42,7 @@
   "alerts": {
     "create": "Créer une alerte",
     "title": "Nouvelle alerte météo",
-    "fields": {
-      "temperature": "Température",
-      "humidity": "Humidité",
-      "pressure": "Pression",
-      "rain": "Pluie",
-      "snow": "Neige",
-      "offline": "Aucune donnée depuis"
-    },
+    "offline": "Aucune donnée depuis",
     "conditions": {
       "above": "au-dessus de",
       "below": "en dessous de"
