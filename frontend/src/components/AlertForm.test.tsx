@@ -11,7 +11,7 @@ afterEach(async () => {
 
 describe("AlertsDialog", () => {
   it("opens the create form and closes on cancel", async () => {
-    render(<AlertsDialog sensors={["garden"]} />);
+    render(<AlertsDialog sensors={[{ name: "garden", kind: "timeseries" }]} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Set alert/ }));
     expect(screen.getByText("New weather alert")).toBeTruthy();
@@ -23,7 +23,7 @@ describe("AlertsDialog", () => {
 
   it("asks hours, not above or below, for an offline alert", async () => {
     const fetch = stubFetch({ "/api/alerts": { status: "confirmation_sent" } });
-    render(<AlertsDialog sensors={["garden"]} />);
+    render(<AlertsDialog sensors={[{ name: "garden", kind: "timeseries" }]} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Set alert/ }));
     await userEvent.selectOptions(screen.getByDisplayValue("Temperature"), "offline");

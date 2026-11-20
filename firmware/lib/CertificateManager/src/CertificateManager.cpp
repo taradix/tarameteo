@@ -18,6 +18,7 @@ CertificateManager::CertificateManager(Preferences &prefs, IArduino *arduino)
       _clientCert(nullptr), _clientKey(nullptr), _caCert(nullptr) {
   _lastError[0] = '\0';
   _cn[0] = '\0';
+  _label[0] = '\0';
 }
 
 CertificateManager::~CertificateManager() {
@@ -105,8 +106,12 @@ bool CertificateManager::loadFromNVS() {
   _passkey = _prefs.getULong("passkey", 0);
   _latitude = _prefs.getFloat("latitude", 0.0f);
   _longitude = _prefs.getFloat("longitude", 0.0f);
+  _label[0] = '\0';
+  if (_prefs.isKey("label")) {
+    _prefs.getString("label", _label, sizeof(_label));
+  }
 
-  _arduino->logf("CertificateManager: Loaded identity, lat=%.6f, lon=%.6f", _latitude, _longitude);
+  _arduino->logf("CertificateManager: Loaded identity, lat=%.6f, lon=%.6f, label=%s", _latitude, _longitude, _label);
 
   return true;
 }
@@ -204,7 +209,7 @@ bool CertificateManager::extractCNFromCert(const char *certPem) {
 // Validates and persists what the BLE transport received. On failure sets
 // _lastError and returns false.
 bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wifiPassword, float latitude,
-                                           float longitude) {
+                                           float longitude, const char *label) {
   if (!wifiSsid || !wifiPassword || strlen(wifiSsid) == 0 || strlen(wifiPassword) == 0) {
     setError("WiFi SSID and password must not be empty");
     return false;
@@ -217,12 +222,18 @@ bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wif
     setError("Invalid longitude: must be between -180 and 180");
     return false;
   }
+  if (!isValidLabel(label)) {
+    setError("Invalid label: at most 32 bytes of UTF-8, no control characters");
+    return false;
+  }
 
-  // Store location in NVS
+  // Store location and label in NVS
   _latitude = latitude;
   _longitude = longitude;
   _prefs.putFloat("latitude", _latitude);
   _prefs.putFloat("longitude", _longitude);
+  memcpy(_label, label, strlen(label) + 1); // isValidLabel checked it fits
+  _prefs.putString("label", _label);
 
 #ifndef UNIT_TEST
   if (!_wifiManager || !_wifiManager->storeCredentials(wifiSsid, wifiPassword)) {
@@ -238,6 +249,48 @@ bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wif
   _arduino->log("CertificateManager: WiFi credentials stored successfully (mock)");
 #endif
 
+  return true;
+}
+
+// The backend drops a whole reading whose label isn't well-formed UTF-8 or has
+// control characters (labels reach email subjects), so reject it up front.
+bool CertificateManager::isValidLabel(const char *label) {
+  if (!label || strlen(label) > MAX_LABEL_BYTES) {
+    return false;
+  }
+  const unsigned char *s = reinterpret_cast<const unsigned char *>(label);
+  while (*s) {
+    unsigned char c = *s++;
+    if (c < 0x20 || c == 0x7f) {
+      return false;
+    }
+    if (c < 0x80) {
+      continue;
+    }
+    // Lead byte: how many continuation bytes follow, and the first one's range (Unicode table 3-7).
+    int more;
+    unsigned char lo = 0x80;
+    unsigned char hi = 0xbf;
+    if (c >= 0xc2 && c <= 0xdf) {
+      more = 1;
+    } else if (c >= 0xe0 && c <= 0xef) {
+      more = 2;
+      lo = (c == 0xe0) ? 0xa0 : lo; // overlong
+      hi = (c == 0xed) ? 0x9f : hi; // surrogates
+    } else if (c >= 0xf0 && c <= 0xf4) {
+      more = 3;
+      lo = (c == 0xf0) ? 0x90 : lo; // overlong
+      hi = (c == 0xf4) ? 0x8f : hi; // past U+10FFFF
+    } else {
+      return false;
+    }
+    for (; more > 0; more--, lo = 0x80, hi = 0xbf) {
+      if (*s < lo || *s > hi) { // also stops at the terminating NUL
+        return false;
+      }
+      s++;
+    }
+  }
   return true;
 }
 

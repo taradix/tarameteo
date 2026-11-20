@@ -192,6 +192,10 @@ bool MqttClient::buildPayload(const WeatherData &data, char *buffer, size_t size
   doc["latitude"] = data.latitude;
   doc["longitude"] = data.longitude;
 
+  if (data.label[0] != '\0') {
+    doc["label"] = data.label;
+  }
+
   if (data.altitude != 0) {
     doc["altitude"] = data.altitude;
   }

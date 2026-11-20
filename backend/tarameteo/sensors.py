@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from tarameteo.readings import (
     AGGREGATE_MEASUREMENT,
+    LABEL_TAG,
     MEASUREMENT,
     SENSOR_TAG,
     AggregateReading,
@@ -22,6 +23,7 @@ from tarameteo.readings import (
     from_point,
 )
 from tarameteo.ts import (
+    TS_ERRORS,
     TSPoint,
     TSReader,
 )
@@ -38,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 class SensorEntry(BaseModel):
     name: str
+    label: str | None = Field(None, description="The owner's name for the sensor; show it instead of name when set")
     kind: SensorKind
     latitude: float
     longitude: float
@@ -105,6 +108,7 @@ class SensorInfo(BaseModel):
     """Full sensor record returned by GET /api/sensors/{name}."""
 
     name: str
+    label: str | None = Field(None, description="The owner's name for the sensor; show it instead of name when set")
     latitude: float
     longitude: float
     statistics: SensorStatistics
@@ -134,7 +138,7 @@ class SensorService:
             wanted = set(names)
             sensors = [s for s in sensors if s.name in wanted]
         if q is not None:
-            sensors = [s for s in sensors if q.casefold() in s.name.casefold()]
+            sensors = [s for s in sensors if any(q.casefold() in n.casefold() for n in (s.name, s.label) if n)]
         if bbox is not None:
             sensors = [s for s in sensors if bbox.contains(s.latitude, s.longitude)]
         if near is not None:
@@ -174,18 +178,17 @@ class SensorService:
         return sorted(sensors, key=lambda s: (s.name, s.kind))
 
     def _list_located(self, measurement: str, kind: SensorKind, start: datetime) -> list[SensorEntry]:
-        # Points come oldest first, so a sensor that moved keeps its latest location.
-        locations: dict[str, tuple[float, float]] = {}
+        # Points come oldest first, so a sensor that moved or was renamed keeps its latest location and label.
+        latest: dict[str, SensorEntry] = {}
         for p in self.ts_reader.last_points(measurement=measurement, start=start):
             name, lat, lon = (p.tags.get(k) for k in (SENSOR_TAG, "latitude", "longitude"))
             if name is None or lat is None or lon is None:
                 logger.warning("Skipping %s series without sensor name or location: %s", measurement, p.tags)
                 continue
-            locations[name] = (float(lat), float(lon))
-        return [
-            SensorEntry(name=name, kind=kind, latitude=lat, longitude=lon)
-            for name, (lat, lon) in locations.items()
-        ]
+            latest[name] = SensorEntry(
+                name=name, label=p.tags.get(LABEL_TAG), kind=kind, latitude=float(lat), longitude=float(lon),
+            )
+        return list(latest.values())
 
     def get_weather(
         self,
@@ -203,6 +206,25 @@ class SensorService:
             limit=limit,
         )
         return [from_point(p) for p in points]
+
+    # The label only names the sensor and its ID does too, so a store failure falls back to the ID.
+    def get_label(self, name: str) -> str | None:
+        """The sensor's current label, if its latest reading has one."""
+        try:
+            latest = self.get_latest(name)
+        except TS_ERRORS:
+            logger.warning("No label for %s, the time series store failed", name, exc_info=True)
+            return None
+        return latest.label if latest is not None else None
+
+    def get_labels(self, names: Sequence[str]) -> dict[str, str | None]:
+        """Like get_label for many sensors, in one scan."""
+        try:
+            sensors = self.list_sensors(names=names).sensors
+        except TS_ERRORS:
+            logger.warning("No labels for %s, the time series store failed", names, exc_info=True)
+            return {}
+        return {s.name: s.label for s in sensors}
 
     def get_latest(self, name: str) -> WeatherReading | None:
         point = self.ts_reader.latest(
@@ -270,6 +292,7 @@ class SensorService:
         if latest is not None:
             return SensorInfo(
                 name=name,
+                label=latest.label,
                 latitude=latest.latitude,
                 longitude=latest.longitude,
                 statistics=self.get_statistics(name),

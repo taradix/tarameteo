@@ -200,7 +200,8 @@ void test_ble_provision_valid_payload(void) {
   ble.setPayload("my-network", "my-password", 45.504f, -73.617f);
 
   TEST_ASSERT_TRUE(ble.poll());
-  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
+                                      ble.label());
   ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
 
   TEST_ASSERT_TRUE(ok);
@@ -219,7 +220,8 @@ void test_ble_provision_rejects_bad_latitude(void) {
   ble.setPayload("my-network", "my-password", 999.0f, -73.617f);
 
   TEST_ASSERT_TRUE(ble.poll());
-  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
+                                      ble.label());
   ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
 
   TEST_ASSERT_FALSE(ok);
@@ -236,7 +238,8 @@ void test_ble_provision_rejects_empty_credentials(void) {
   ble.setPayload("", "my-password", 45.504f, -73.617f);
 
   TEST_ASSERT_TRUE(ble.poll());
-  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
+                                      ble.label());
   ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
 
   TEST_ASSERT_FALSE(ok);
@@ -251,7 +254,7 @@ void test_ble_provision_location_persists_across_instances(void) {
     WiFiManager wifiMgr;
     certMgr1.setWiFiManager(&wifiMgr);
 
-    TEST_ASSERT_TRUE(certMgr1.applyProvisioning("my-network", "my-password", 45.504f, -73.617f));
+    TEST_ASSERT_TRUE(certMgr1.applyProvisioning("my-network", "my-password", 45.504f, -73.617f, "Gazebo"));
   }
 
   CertificateManager certMgr2(testPrefs, &mockArduino);
@@ -259,6 +262,41 @@ void test_ble_provision_location_persists_across_instances(void) {
 
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLatitude());
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLongitude());
+  TEST_ASSERT_EQUAL_STRING("Gazebo", certMgr2.getLabel());
+}
+
+void test_ble_provision_rejects_bad_label(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  const char *bad[] = {
+      "Gazebo\nBcc: x@example.com",           // control character, into an email subject
+      "123456789012345678901234567890123",    // 33 bytes
+      "\xc3",                                 // cut-off UTF-8
+      "\xed\xa0\x80",                         // surrogate
+  };
+  for (const char *label : bad) {
+    TEST_ASSERT_FALSE_MESSAGE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, label), label);
+    TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Invalid label") != NULL);
+  }
+  TEST_ASSERT_EQUAL_STRING("", certMgr.getLabel());
+}
+
+void test_ble_provision_accepts_utf8_and_empty_labels(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  // 16 two-byte characters: 32 bytes, the most there is room for.
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f,
+                                             "éééééééééééééééé"));
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, "Abri 🌧"));
+  TEST_ASSERT_EQUAL_STRING("Abri 🌧", certMgr.getLabel());
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, ""));
+  TEST_ASSERT_EQUAL_STRING("", certMgr.getLabel());
 }
 
 void test_ble_poll_empty_when_no_payload(void) {
@@ -291,6 +329,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_ble_provision_rejects_bad_latitude);
   RUN_TEST(test_ble_provision_rejects_empty_credentials);
   RUN_TEST(test_ble_provision_location_persists_across_instances);
+  RUN_TEST(test_ble_provision_rejects_bad_label);
+  RUN_TEST(test_ble_provision_accepts_utf8_and_empty_labels);
   RUN_TEST(test_ble_poll_empty_when_no_payload);
 
   return UNITY_END();

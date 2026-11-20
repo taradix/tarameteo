@@ -10,9 +10,16 @@ from tarameteo import alert_text
 from tarameteo.alerts import OFFLINE_MAX_HOURS, Alert, AlertStore, Condition
 from tarameteo.db import SessionLocal
 from tarameteo.notifier import Notifier, Unregistered
-from tarameteo.readings import AGGREGATE_MEASUREMENT, MEASUREMENT, SENSOR_TAG, AggregateReading, Reading
+from tarameteo.readings import (
+    AGGREGATE_MEASUREMENT,
+    LABEL_TAG,
+    MEASUREMENT,
+    SENSOR_TAG,
+    AggregateReading,
+    Reading,
+)
 from tarameteo.tokens import sign_token, verify_token
-from tarameteo.ts import TSReader
+from tarameteo.ts import TSPoint, TSReader
 
 logger = logging.getLogger(__name__)
 
@@ -63,26 +70,28 @@ class AlertService:
         payload = verify_token(token, self.secret)
         return payload if payload and payload.get("action") == action else None
 
-    async def send_confirm(self, alert: Alert) -> None:
+    async def send_confirm(self, alert: Alert, label: str | None = None) -> None:
         url = self._url("confirm", {"alert_id": alert.id}, CONFIRM_EXPIRY)
-        await self.notifier.send(alert.email, *alert_text.email(alert, "confirm", url))
+        await self.notifier.send(alert.email, *alert_text.email(alert, "confirm", url, label=label))
 
     async def send_manage(self, email: str, language: str) -> None:
         url = self._url("manage", {"email": email.lower(), "language": language}, MANAGE_EXPIRY)
         text = alert_text.TEXT[language]
         await self.notifier.send(email, text["manage_subject"], text["manage_body"].format(url=url))
 
-    async def _notify(self, alert: Alert, key: str, value: float | None, alert_store: AlertStore) -> None:
+    async def _notify(
+        self, alert: Alert, key: str, value: float | None, alert_store: AlertStore, label: str | None,
+    ) -> None:
         # The token is a secret, so it stays out of the logs; the app unsubscribes in-app, not by link.
         who = alert.email or "push"
         if alert.push_token:
             notifier, recipient, headers = self.push, alert.push_token, None
-            subject, body = alert_text.push(alert, key, value)
+            subject, body = alert_text.push(alert, key, value, label)
         else:
             notifier, recipient = self.notifier, alert.email
             url = self._url("unsubscribe", {"alert_id": alert.id})
             manage = self._url("manage", {"email": who.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
-            subject, body = alert_text.email(alert, key, url, value, manage)
+            subject, body = alert_text.email(alert, key, url, value, manage, label)
             # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
             headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
         if notifier is None:
@@ -107,24 +116,25 @@ class AlertService:
             if alert.field == "offline":
                 # Sources re-send their last reading on startup, so only a recent one means it's back.
                 if alert.triggered and datetime.now(UTC) - reading.timestamp <= timedelta(hours=alert.threshold):
-                    await self._notify(alert, "online", None, alert_store)
+                    await self._notify(alert, "online", None, alert_store, reading.label)
                 continue
             value = _value(reading, alert)
             if value is None:
                 continue
             if not alert.triggered and _crossed(value, alert):
-                await self._notify(alert, "alert", value, alert_store)
+                await self._notify(alert, "alert", value, alert_store, reading.label)
             elif alert.triggered and _cleared(value, alert):
-                await self._notify(alert, "normal", value, alert_store)
+                await self._notify(alert, "normal", value, alert_store, reading.label)
 
-    async def check_offline(self, last_seen: dict[str, datetime], alert_store: AlertStore) -> None:
+    async def check_offline(self, last_seen: dict[str, TSPoint], alert_store: AlertStore) -> None:
         """Email once when a sensor's last reading is older than its alert's hours; check() says when it's back."""
         now = datetime.now(UTC)
         for alert in alert_store.list_offline():
             seen = last_seen.get(alert.sensor)
-            hours = (now - seen).total_seconds() / 3600 if seen else alert.threshold
+            hours = (now - seen.timestamp).total_seconds() / 3600 if seen else alert.threshold
             if seen is None or hours > alert.threshold:
-                await self._notify(alert, "offline", round(hours), alert_store)
+                label = seen.tags.get(LABEL_TAG) if seen else None
+                await self._notify(alert, "offline", round(hours), alert_store, label)
 
     async def check_reading(self, reading: Reading) -> None:
         """Check a reading against its sensor's alerts in a session of its own."""
@@ -138,13 +148,14 @@ class AlertService:
 OFFLINE_EVERY = timedelta(minutes=10)
 
 
-def last_seen(ts_reader: TSReader, start: datetime) -> dict[str, datetime]:
-    """Each sensor's latest reading time, live or aggregate."""
-    seen: dict[str, datetime] = {}
+def last_seen(ts_reader: TSReader, start: datetime) -> dict[str, TSPoint]:
+    """Each sensor's latest point, live or aggregate."""
+    seen: dict[str, TSPoint] = {}
     for measurement in (MEASUREMENT, AGGREGATE_MEASUREMENT):
         for p in ts_reader.last_points(measurement=measurement, start=start):
-            if name := p.tags.get(SENSOR_TAG):
-                seen[name] = max(seen.get(name, p.timestamp), p.timestamp)
+            name = p.tags.get(SENSOR_TAG)
+            if name and (name not in seen or p.timestamp > seen[name].timestamp):
+                seen[name] = p
     return seen
 
 

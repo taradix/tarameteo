@@ -158,7 +158,7 @@ fun Message(text: String) = Text(text, Modifier.fillMaxWidth().padding(16.dp), t
 @Composable
 private fun SensorCard(card: Card, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp)) {
-        Text(card.sensor.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(card.sensor.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         val data = if (card.sensor.kind == "timeseries") card.weather else card.daily
         when {
             data == null -> Time("…")

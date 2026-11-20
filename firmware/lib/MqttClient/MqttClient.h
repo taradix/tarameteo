@@ -19,6 +19,7 @@ struct WeatherData {
     int retryCount;
     float latitude;
     float longitude;
+    const char* label;  // Empty when the owner gave none
 };
 
 class MqttClient {

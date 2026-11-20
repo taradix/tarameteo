@@ -43,8 +43,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.util.Locale
 
 // The fields the API watches, in the order the web form lists them.
@@ -72,6 +77,18 @@ data class AlertsState(val alerts: List<PushAlert>? = null, val error: String? =
 class AlertsModel : ViewModel() {
     val state = MutableStateFlow(AlertsState(busy = true))
     var asked = false
+
+    // The dashboard's sensors by ID, for their titles; an ID is still readable if this fails.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val titles = shown.names.mapLatest { names ->
+        // No names would list every sensor.
+        if (names.isEmpty()) return@mapLatest emptyMap()
+        try {
+            api.listSensors(names = names.sorted()).sensors.associate { it.name to it.title }
+        } catch (_: IOException) {
+            emptyMap()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     init {
         reload()
@@ -105,6 +122,7 @@ fun AlertsScreen(model: AlertsModel = viewModel()) {
     val context = LocalContext.current
     val state by model.state.collectAsStateWithLifecycle()
     val names by shown.names.collectAsStateWithLifecycle()
+    val titles by model.titles.collectAsStateWithLifecycle()
     // Before 33 there is nothing to ask for: notifications are granted at install.
     var allowed by remember {
         mutableStateOf(
@@ -126,26 +144,27 @@ fun AlertsScreen(model: AlertsModel = viewModel()) {
         if (!allowed) item { Message(stringResource(R.string.alerts_blocked)) }
         state.error?.let { item { Message(it) } }
         items(state.alerts.orEmpty(), key = { it.id }) { alert ->
-            AlertRow(alert) { model.delete(alert) }
+            AlertRow(alert, titles) { model.delete(alert) }
         }
         if (state.alerts?.isEmpty() == true) item { Message(stringResource(R.string.alerts_none)) }
-        item { NewAlert(names.sorted(), state.busy, model::create) }
+        item { NewAlert(names.sorted(), titles, state.busy, model::create) }
     }
 }
 
 // Reads like the alert's own text: "outdoor-north: temperature below -20 °C".
 @Composable
-private fun rule(alert: PushAlert): String {
+private fun rule(alert: PushAlert, titles: Map<String, String>): String {
+    val sensor = titles[alert.sensor] ?: alert.sensor
     val field = FIELDS.firstOrNull { it.first == alert.field }?.let { stringResource(it.second) } ?: alert.field
     val value = "${num(alert.threshold, if (alert.threshold % 1.0 == 0.0) 0 else 1)} ${UNITS[alert.field].orEmpty()}"
-    if (alert.field == "offline") return "${alert.sensor}: $field $value"
+    if (alert.field == "offline") return "$sensor: $field $value"
     val condition = stringResource(if (alert.condition == "above") R.string.alerts_above else R.string.alerts_below)
-    return "${alert.sensor}: $field $condition $value"
+    return "$sensor: $field $condition $value"
 }
 
 @Composable
-private fun AlertRow(alert: PushAlert, onDelete: () -> Unit) {
-    val text = rule(alert)
+private fun AlertRow(alert: PushAlert, titles: Map<String, String>, onDelete: () -> Unit) {
+    val text = rule(alert, titles)
     Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(vertical = 16.dp)) {
             Text(text, fontSize = 17.sp)
@@ -159,7 +178,7 @@ private fun AlertRow(alert: PushAlert, onDelete: () -> Unit) {
 
 // The sensors on the dashboard are the ones worth alerting on, so the picker stays the one place to choose.
 @Composable
-private fun NewAlert(sensors: List<String>, busy: Boolean, onCreate: (AlertRule) -> Unit) {
+private fun NewAlert(sensors: List<String>, titles: Map<String, String>, busy: Boolean, onCreate: (AlertRule) -> Unit) {
     if (sensors.isEmpty()) return Message(stringResource(R.string.alerts_no_sensors))
     var sensor by remember(sensors) { mutableStateOf(sensors.first()) }
     var field by remember { mutableStateOf(FIELDS.first().first) }
@@ -171,7 +190,7 @@ private fun NewAlert(sensors: List<String>, busy: Boolean, onCreate: (AlertRule)
 
     Column(Modifier.padding(16.dp)) {
         Text(stringResource(R.string.alerts_new), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-        Chips(sensors, sensor, { it }) { sensor = it }
+        Chips(sensors, sensor, { titles[it] ?: it }) { sensor = it }
         Chips(FIELDS, FIELDS.first { it.first == field }, { stringResource(it.second) }) { field = it.first }
         // An offline alert is always "more than N hours", so there is nothing to choose.
         if (!offline) {

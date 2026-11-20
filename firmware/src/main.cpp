@@ -112,12 +112,12 @@ void setup() {
     Serial.println("WiFi credentials not found!");
     Serial.printf("Open the TaraMeteo app and connect to: %s\n", deviceName);
     Serial.println("Pair with the passkey printed on the sticker.");
-    Serial.println("Then enter WiFi credentials and sensor location.");
+    Serial.println("Then enter WiFi credentials, sensor name and location.");
     Serial.println("Device will wait up to 5 minutes for provisioning...");
     Serial.println("===========================================");
 
     NimBLEProvisionerAdapter ble;
-    if (!ble.begin(deviceName, certManager.getPasskey())) {
+    if (!ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel())) {
       Serial.println("Failed to start BLE provisioning!");
       delay(5000);
       ESP.restart();
@@ -126,7 +126,8 @@ void setup() {
     unsigned long startTime = millis();
     while (wifiManager.needsProvisioning() && (millis() - startTime) < 300000) {
       if (ble.poll()) {
-        bool ok = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude());
+        bool ok = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
+                                                ble.label());
         ble.notifyStatus(ok ? "ok" : certManager.getLastError());
         if (!ok) {
           Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
@@ -234,7 +235,8 @@ void loop() {
       timeManager.getCurrentTimestamp(),
       0, // retryCount will be updated by MQTT client
       certManager.getLatitude(),
-      certManager.getLongitude()
+      certManager.getLongitude(),
+      certManager.getLabel()
   };
 
   // Validate sensor readings

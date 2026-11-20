@@ -50,13 +50,13 @@ export function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <AlertsDialog sensors={sensors} />
+          <AlertsDialog sensors={selectedEntries} />
           <LanguageToggle />
         </div>
       </header>
 
       <SensorPicker
-        selected={sensors}
+        selected={selectedEntries}
         hidden={hidden}
         onChange={(next) => setParams({ sensors: next })}
         onHiddenChange={(next) => setParams({ hidden: next })}

@@ -262,7 +262,7 @@ fun Picker(model: PickerModel = viewModel()) {
                         key(sensor.kind, sensor.name) {
                             Marker(
                                 state = rememberUpdatedMarkerState(LatLng(sensor.latitude, sensor.longitude)),
-                                contentDescription = sensor.name,
+                                contentDescription = sensor.title,
                                 icon = if (sensor.name in names) BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE) else null,
                                 onClick = {
                                     selected = sensor
@@ -313,10 +313,11 @@ private fun ClusterBubble(count: Int) = Text(
 private fun SensorRow(sensor: SensorEntry, names: Set<String>, onClick: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)) {
-            Text(sensor.name, fontSize = 17.sp)
+            Text(sensor.title, fontSize = 17.sp)
+            if (sensor.label != null) Time(sensor.name)
             sensor.distanceKm?.let { Time("${num(it, if (it < 10) 1 else 0)} km") }
         }
-        val label = stringResource(R.string.sensors_toggle, sensor.name)
+        val label = stringResource(R.string.sensors_toggle, sensor.title)
         Switch(sensor.name in names, { shown.toggle(sensor.name) }, Modifier.semantics { contentDescription = label })
     }
     HorizontalDivider(color = DIVIDER)

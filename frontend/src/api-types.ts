@@ -273,6 +273,8 @@ export interface components {
         AggregateReading: {
             /** Sensor */
             sensor: string;
+            /** Label */
+            label?: string | null;
             /**
              * Timestamp
              * Format: date-time
@@ -505,6 +507,11 @@ export interface components {
             /** Name */
             name: string;
             /**
+             * Label
+             * @description The owner's name for the sensor; show it instead of name when set
+             */
+            label?: string | null;
+            /**
              * Kind
              * @enum {string}
              */
@@ -526,6 +533,11 @@ export interface components {
         SensorInfo: {
             /** Name */
             name: string;
+            /**
+             * Label
+             * @description The owner's name for the sensor; show it instead of name when set
+             */
+            label?: string | null;
             /** Latitude */
             latitude: number;
             /** Longitude */
@@ -588,6 +600,11 @@ export interface components {
              * @description Sensor name
              */
             sensor: string;
+            /**
+             * Label
+             * @description The owner's name for the sensor
+             */
+            label?: string | null;
             /**
              * Timestamp
              * Format: date-time

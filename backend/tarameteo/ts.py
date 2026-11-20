@@ -30,6 +30,9 @@ from urllib3.exceptions import HTTPError
 Scalar = int | float | bool | str
 Aggregate = Literal["mean", "min", "max", "sum", "count", "last", "first"]
 
+# What a store call raises once its retries run out or the error isn't transient.
+TS_ERRORS = (ApiException, HTTPError)
+
 
 def _transient(error: ApiException | HTTPError) -> bool:
     """Whether trying again could help: Influx down or overloaded, not a bad token or request."""
@@ -43,7 +46,7 @@ def _with_retries[T](call: Callable[[], T], max_retries: int, backoff_seconds: f
     for attempt in range(max_retries):
         try:
             return call()
-        except (ApiException, HTTPError) as error:
+        except TS_ERRORS as error:
             if not _transient(error):
                 raise
             sleep(backoff_seconds * 2**attempt)

@@ -1,13 +1,14 @@
 """Give a board its identity: issue a never-expiring cert and flash it into NVS.
 
-Picks a random sensor ID (the cert CN) and BLE passkey, issues the cert through
-the CA, then writes cert, key, CA and passkey into the nvs partition, which an
-app-only flash never touches. Overwrites the whole partition: run it once per
-new board, since a second run gives the board a new ID.
+Uses the board's MAC as its sensor ID (the cert CN), picks a random BLE passkey,
+issues the cert through the CA, then writes cert, key, CA and passkey into the
+nvs partition, which an app-only flash never touches. Overwrites the whole
+partition: a second run keeps the ID but issues a fresh cert and passkey.
 
 Needs PKI_API_TOKEN (the CA_TOKEN) and the board on USB.
 """
 
+import re
 import secrets
 import subprocess
 import sys
@@ -41,6 +42,18 @@ def nvs_partition(partitions: Path) -> tuple[str, str]:
     raise SystemExit(f"No nvs partition in {partitions}")
 
 
+def board_mac(port: list[str]) -> str:
+    """Base MAC from eFuse, as 12 lowercase hex digits."""
+    out = subprocess.run(
+        [sys.executable, "-m", "esptool", "--chip", "esp32c3", *port, "read-mac"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    match = re.search(r"MAC:\s*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})", out, re.IGNORECASE)
+    if match is None:
+        raise SystemExit(f"No MAC in esptool output:\n{out}")
+    return match.group(1).replace(":", "").lower()
+
+
 def nvs_csv(key: Path, cert: Path, ca_cert: Path, passkey: int) -> str:
     """Input for esp_idf_nvs_partition_gen; keys match CertificateManager::loadFromNVS."""
     return "\n".join([
@@ -60,9 +73,10 @@ def main(argv=None) -> int:
     parser.add_argument("--api-token", default=DEFAULT_API_TOKEN, help="Bearer token for the CA")
     args = parser.parse_args(argv)
 
-    # NOTE: 24 random bits, so collisions stay unlikely up to a few thousand
-    # boards; check the ID against the API before flashing if batches get big.
-    sensor_id = f"tm-{secrets.token_hex(3)}"
+    port = ["--port", args.port] if args.port else []
+    # NOTE: the last 24 MAC bits are unique within one Espressif OUI but not across
+    # them, and a re-run keeps the ID; check it against the API before big batches.
+    sensor_id = f"tm-{board_mac(port)[-6:]}"
     passkey = 100000 + secrets.randbelow(900000)  # always 6 digits on the sticker
     offset, size = nvs_partition(PARTITIONS)
 
@@ -94,7 +108,6 @@ def main(argv=None) -> int:
             [sys.executable, "-m", "esp_idf_nvs_partition_gen", "generate", str(csv_path), str(image), size],
             check=True,
         )
-        port = ["--port", args.port] if args.port else []
         subprocess.run(
             [sys.executable, "-m", "esptool", "--chip", "esp32c3", *port, "write-flash", offset, str(image)],
             check=True,

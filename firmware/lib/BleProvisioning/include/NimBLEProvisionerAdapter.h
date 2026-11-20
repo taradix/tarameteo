@@ -18,9 +18,13 @@ public:
   NimBLEProvisionerAdapter() : _committed(false), _lat(0.0f), _lon(0.0f), _statusChar(nullptr) {
     _ssid[0] = '\0';
     _password[0] = '\0';
+    _label[0] = '\0';
   }
 
-  bool begin(const char *deviceName, uint32_t passkey) override {
+  bool begin(const char *deviceName, uint32_t passkey, const char *label) override {
+    // A client that never writes Label keeps the current one.
+    copyString(_label, sizeof(_label), reinterpret_cast<const uint8_t *>(label), strlen(label));
+
     NimBLEDevice::init(deviceName);
 
     // Static passkey pairing: bonding + MITM protection + LE Secure Connections.
@@ -43,6 +47,12 @@ public:
 
     _locationChar = service->createCharacteristic(BleProvisioningUUID::LOCATION, writeSecure);
     _locationChar->setCallbacks(new FieldCallback(this, Field::Location));
+
+    _labelChar = service->createCharacteristic(
+        BleProvisioningUUID::LABEL,
+        writeSecure | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
+    _labelChar->setValue(_label);
+    _labelChar->setCallbacks(new FieldCallback(this, Field::Label));
 
     _commitChar = service->createCharacteristic(BleProvisioningUUID::COMMIT, writeSecure);
     _commitChar->setCallbacks(new FieldCallback(this, Field::Commit));
@@ -74,6 +84,7 @@ public:
   const char *password() override { return _password; }
   float latitude() override { return _lat; }
   float longitude() override { return _lon; }
+  const char *label() override { return _label; }
 
   void notifyStatus(const char *status) override {
     if (_statusChar) {
@@ -83,7 +94,7 @@ public:
   }
 
 private:
-  enum class Field { Ssid, Password, Location, Commit };
+  enum class Field { Ssid, Password, Location, Label, Commit };
 
   // Copies a written field into the matching buffer. On Commit, raises the flag
   // poll() watches. Bounds are enforced against the fixed buffers.
@@ -100,6 +111,9 @@ private:
         memcpy(&_lat, data, 4);
         memcpy(&_lon, data + 4, 4);
       }
+      break;
+    case Field::Label:
+      copyString(_label, sizeof(_label), data, len);
       break;
     case Field::Commit:
       _committed = true;
@@ -130,11 +144,13 @@ private:
   NimBLECharacteristic *_ssidChar;
   NimBLECharacteristic *_passwordChar;
   NimBLECharacteristic *_locationChar;
+  NimBLECharacteristic *_labelChar;
   NimBLECharacteristic *_commitChar;
   NimBLECharacteristic *_statusChar;
 
   char _ssid[32];
   char _password[64];
+  char _label[64]; // Longer than allowed, so applyProvisioning rejects a long label instead of cutting it
   volatile bool _committed;
   float _lat;
   float _lon;

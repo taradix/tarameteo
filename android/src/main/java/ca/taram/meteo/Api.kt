@@ -18,7 +18,11 @@ data class SensorEntry(
     val latitude: Double,
     val longitude: Double,
     @SerialName("distance_km") val distanceKm: Double? = null,
-)
+    val label: String? = null,
+) {
+    // What people see: the owner's label, else the ID.
+    val title get() = label ?: name
+}
 
 @Serializable
 data class SensorList(val sensors: List<SensorEntry>, val truncated: Boolean = false)

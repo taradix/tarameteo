@@ -44,6 +44,12 @@ describe("buildDatasets", () => {
     expect(ds.label).toBe("ts");
   });
 
+  it("names a labelled sensor by its label, and finds its readings by ID", () => {
+    const [ds] = buildDatasets([{ ...ts, label: "Gazebo" }], ["temperature"], [reading("ts", 9, 1, 10)], []);
+    expect(ds.label).toBe("Gazebo");
+    expect(ds.data).toHaveLength(1);
+  });
+
   it("draws band aggregates as max, min, then avg steps over each day", () => {
     const aggregates: AggregateReading[] = [
       { sensor: "agg", timestamp: iso(8, 23), temperature_min: 1, temperature_avg: 2, temperature_max: 3 },

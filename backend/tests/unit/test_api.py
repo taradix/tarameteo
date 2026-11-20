@@ -27,13 +27,14 @@ from hamcrest import (
     not_none,
     only_contains,
 )
+from influxdb_client.rest import ApiException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from tarameteo.alert_checker import AlertService
 from tarameteo.alerts import Alert, AlertStore
-from tarameteo.api import app, get_alert_store, stream_sensor_weather
+from tarameteo.api import app, get_alert_store, get_ts_reader, stream_sensor_weather
 from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
@@ -188,6 +189,20 @@ def test_sensors_list_uses_latest_location(api_app, memory_writer, unique):
     assert_that(response.json()["sensors"], contains_exactly(
         has_entries(name=name, latitude=46.0, longitude=-74.0),
     ))
+
+
+def test_sensors_list_uses_latest_label_and_searches_it(api_app, memory_writer, unique):
+    name = unique("text")
+    now = datetime.now(UTC)
+    memory_writer.write_point(
+        "weather", make_weather(), tags={**located(name), "label": "Gazebo"}, timestamp=now - timedelta(hours=1),
+    )
+    memory_writer.write_point("weather", make_weather(), tags={**located(name), "label": "Greenhouse"}, timestamp=now)
+
+    response = api_app.get("/api/sensors", params={"q": "greenHOUSE"})
+
+    assert_that(response.json()["sensors"], contains_exactly(has_entries(name=name, label="Greenhouse")))
+    assert_that(api_app.get("/api/sensors", params={"q": "gazebo"}).json()["sensors"], equal_to([]))
 
 
 def test_sensors_list_skips_sensor_without_location(api_app, memory_writer, unique):
@@ -417,6 +432,30 @@ def test_sensor_weather_range(api_app, memory_writer, unique):
     ))
 
 
+def test_sensor_history_survives_rename_and_move(api_app, memory_writer, unique):
+    name = unique("text")
+    now = datetime.now(UTC)
+
+    def read(hours_ago, label, latitude):
+        memory_writer.write_point(
+            "weather", make_weather(temperature=float(hours_ago)),
+            tags={**located(name, latitude), "label": label}, timestamp=now - timedelta(hours=hours_ago),
+        )
+
+    def history():
+        response = api_app.get(f"/api/sensors/{name}/weather", params={"start": (now - timedelta(days=1)).isoformat()})
+        return [r["temperature"] for r in response.json()]
+
+    read(3, "Gazebo", "45.5")
+    read(2, "Gazebo", "46.5")
+    read(1, "Greenhouse", "46.5")
+
+    assert_that(history(), contains_exactly(3.0, 2.0, 1.0))
+    assert_that(api_app.get(f"/api/sensors/{name}").json(), has_entries(
+        label="Greenhouse", statistics=has_entries(total_readings=3),
+    ))
+
+
 def test_sensor_weather_aggregate(api_app, memory_writer, unique):
     name = unique("text")
     start = datetime(2026, 1, 1, tzinfo=UTC)
@@ -616,6 +655,43 @@ def test_alert_manage_lists_and_stops_the_address_alerts(alert_api):
 
     assert_that(client.post(link).text, contains_string("Aucune alerte n&#x27;est envoyée à cette adresse."))
     assert_that(store.get("a3"), not_none())
+
+
+def test_alert_texts_name_the_sensor_by_its_label(alert_api, memory_writer):
+    client, _, notifier = alert_api
+    memory_writer.write_point(
+        "weather", make_weather(), tags={**located("outdoor"), "label": "Gazebo"}, timestamp=datetime.now(UTC),
+    )
+
+    client.post("/api/alerts", json=NEW_ALERT)
+    assert_that(notifier.send.call_args.args[2], contains_string("Gazebo: temperature below -20 °C"))
+    assert_that(client.get(_link(notifier)).text, contains_string("Gazebo: temperature below -20 °C"))
+
+    client.post("/api/alerts/manage", json={"email": NEW_ALERT["email"], "language": "en"})
+    assert_that(client.get(_link(notifier)).text, contains_string("Gazebo: temperature below -20 °C"))
+
+
+class DownReader:
+    """A TSReader whose Influx is down."""
+
+    def query_points(self, *args, **kwargs):
+        raise ApiException(status=503)
+
+    latest = last_points = query_points
+
+
+def test_alert_pages_name_the_sensor_by_its_id_when_the_store_fails(alert_api):
+    client, store, _ = alert_api
+    store.create(Alert(id="a1", **NEW_ALERT))
+    # api_app drops the override when the test ends.
+    app.dependency_overrides[get_ts_reader] = DownReader
+    confirm = "/api/alerts/confirm/" + sign_token({"alert_id": "a1", "action": "confirm"}, "s")
+    unsubscribe = "/api/alerts/unsubscribe/" + sign_token({"alert_id": "a1", "action": "unsubscribe"}, "s")
+    manage = "/api/alerts/manage/" + sign_token({"email": NEW_ALERT["email"], "language": "en", "action": "manage"}, "s")
+
+    for response in client.get(confirm), client.post(confirm), client.get(unsubscribe), client.get(manage):
+        assert_that(response.status_code, equal_to(200))
+        assert_that(response.text, contains_string("outdoor: temperature below -20 °C"))
 
 
 def test_alert_manage_only_emails_addresses_with_alerts(alert_api):
