@@ -40,6 +40,9 @@ set_real_ip_from fc00::/7;
 {% if not TRUSTED_NETWORK %}
 real_ip_header X-Forwarded-For;
 {% else %}
+{# NOTE: the listen lines in nginx.conf.j2 lack proxy_protocol, so nginx never
+   parses the PROXY header and this branch only stops trusting X-Forwarded-For.
+   Add proxy_protocol to them before relying on TRUSTED_NETWORK. #}
 set_real_ip_from {{ TRUSTED_NETWORK }};
 real_ip_header proxy_protocol;
 {% endif %}

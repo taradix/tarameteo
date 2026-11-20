@@ -72,12 +72,12 @@ jobs:
         working-directory: firmware
         run: make coverage
 
-      - name: Upload HTML report on failure
+      # No coverage threshold, so the report only exists when the job passes.
+      - name: Upload HTML report
         uses: actions/upload-artifact@v7
         with:
           name: firmware-report
           path: firmware/coverage_html
-        if: ${{ failure() }}
 
   backend-test:
     runs-on: ubuntu-latest
