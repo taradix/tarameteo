@@ -52,4 +52,3 @@
     <string name="error_response">Réponse du serveur incomprise : une mise à jour de l\'application peut corriger cela.</string>
     <string name="error_other">Une erreur est survenue (%1$s).</string>
 </resources>
-

@@ -54,4 +54,3 @@
     <string name="error_response">The server\'s answer wasn\'t understood: an app update may fix it.</string>
     <string name="error_other">Something went wrong (%1$s).</string>
 </resources>
-
