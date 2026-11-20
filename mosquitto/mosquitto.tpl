@@ -14,7 +14,6 @@ autosave_interval 60
 # Logging
 # =============================================================================
 
-log_dest file ${MOSQUITTO_DATA_DIR}/mosquitto.log
 log_dest stdout
 log_type all
 log_timestamp true
@@ -57,6 +56,9 @@ acl_file ${MOSQUITTO_CONFIG_DIR}/acl_consumer.conf
 # Performance & Limits
 # =============================================================================
 
+# NOTE: max_connections and max_qos are per-listener, so here they only apply
+# to the 8884 consumer listener above, not to the sensor listener.
+
 # Maximum number of concurrent connections
 max_connections 1000
 
@@ -77,9 +79,6 @@ max_packet_size 8192
 # MQTT Protocol Settings
 # =============================================================================
 
-# Retain messages across restarts
-retained_persistence true
-
 # Maximum number of inflight messages per client
 max_inflight_messages 20
 
@@ -87,6 +86,5 @@ max_inflight_messages 20
 # System Topics
 # =============================================================================
 
-# Publish system information to $SYS topics
-# Set to false to disable system topic publishing
+# Seconds between $SYS topic updates; 0 disables them.
 sys_interval 10

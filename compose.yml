@@ -1,5 +1,10 @@
 x-build-args: &python-build-args
   PYTHON_VERSION: ${PYTHON_VERSION:-3.15.1}
+x-healthcheck: &http-healthcheck
+  test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]
+  start_period: 10s
+  interval: 10s
+  timeout: 5s
 name: tarameteo
 
 include:
@@ -50,11 +55,7 @@ services:
     command: >
       sh -c "alembic upgrade head && exec uvicorn --host=0.0.0.0 --port=80 tarameteo.api:app --log-config=/app/log-config.yaml"
     restart: always
-    healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]
-      start_period: 10s
-      interval: 10s
-      timeout: 5s
+    healthcheck: *http-healthcheck
 
   ca:
     build:
@@ -66,7 +67,6 @@ services:
         condition: service_completed_successfully
     volumes:
       - ca-tls:/tls:ro
-      - certbot-certs:/etc/letsencrypt:ro
     environment:
       CA_KEY: /tls/ca.key
       CA_CERT: /tls/ca.pem
@@ -77,11 +77,7 @@ services:
           - tarameteo-ca
     command: uvicorn --host=0.0.0.0 --port=80 tarameteo.ca:app --log-config=/app/log-config.yaml
     restart: always
-    healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=2).status==200 else 1)" ]
-      start_period: 10s
-      interval: 10s
-      timeout: 5s
+    healthcheck: *http-healthcheck
 
   ca-init:
     build: ca
@@ -100,9 +96,6 @@ services:
     volumes:
       - ca-tls:/tls:ro
       - ca-trust:/trust
-    environment:
-      CA_TLS_DIR: /tls
-      CA_TRUST_DIR: /trust
     command: /publish.sh
     restart: no
 
@@ -181,11 +174,13 @@ services:
       PKI_API_URL: http://tarameteo-ca/v1/certs
       PKI_API_TOKEN: ${CA_TOKEN}
       PKI_OUTPUT_DIR: /tls
+      # Extra tarameteo-pki options, word-split by the shell.
+      PKI_EXTRA_ARGS: ""
     command:
       - sh
       - -ec
       - |
-        tarameteo-pki issue mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}"
+        tarameteo-pki issue mosquitto --san-dns tarameteo-mosquitto --san-dns "${SERVER_HOSTNAME}" $$PKI_EXTRA_ARGS
         chown -R 1883:1883 /tls
     restart: no
 
@@ -201,12 +196,11 @@ services:
     volumes:
       - certbot-certs:/etc/letsencrypt:ro
       - certbot-www:/web:ro
-      - ./nginx/conf.d/:/etc/nginx/conf.d/:z
+      - ./nginx/conf.d/:/etc/nginx/conf.d/:ro,z
     environment:
       SERVER_HOSTNAME: ${SERVER_HOSTNAME}
       ADDITIONAL_SERVER_NAMES: ${ADDITIONAL_SERVER_NAMES:-}
       TRUSTED_NETWORK: ${TRUSTED_NETWORK:-}
-      IPV4_NETWORK: ${IPV4_NETWORK:-172.22.1}
     networks:
       default:
         ipv4_address: ${IPV4_NETWORK:-172.22.1}.240

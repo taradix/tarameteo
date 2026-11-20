@@ -10,7 +10,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: deploy code
+      - name: Deploy
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -18,8 +18,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            cd ${{ secrets.WORK_DIR }}
-            git checkout ${{ secrets.MAIN_BRANCH }}
-            git pull origin ${{ secrets.MAIN_BRANCH }}
+            set -eu
+            cd "${{ secrets.WORK_DIR }}"
+            git checkout main
+            git pull origin main
             git submodule update --init --recursive
             make deploy

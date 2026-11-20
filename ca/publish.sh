@@ -9,4 +9,4 @@ mkdir -p "$CA_TRUST_DIR"
 
 echo "Publishing CA cert to trust volume"
 cp -f "$CA_TLS_DIR/ca.pem" "$CA_TRUST_DIR/ca.pem"
-chmod 644 "$CA_TRUST_DIR/ca.pem" || true
+chmod 644 "$CA_TRUST_DIR/ca.pem"
