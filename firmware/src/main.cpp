@@ -131,36 +131,35 @@ void setup() {
     Serial.println("===========================================");
 
     NimBLEProvisionerAdapter ble;
-    if (!ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLatitude(),
-                   certManager.getLongitude())) {
-      Serial.println("Failed to start BLE provisioning!");
-      delay(RESTART_DELAY_MS);
-      ESP.restart();
-    }
-
     bool saved = false;
-    unsigned long startTime = millis();
-    while (!saved && (millis() - startTime) < windowMs) {
-      if (ble.poll()) {
-        ble.notifyStatus("provisioning");
-        saved = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
-                                              ble.label());
-        ble.notifyStatus(certManager.getProvisioningStatus());
-        if (!saved) {
-          Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
+    // A provisioned board skips the window when BLE fails: restarting would
+    // be another cold boot, so it would fail again and never publish.
+    if (ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLatitude(),
+                  certManager.getLongitude())) {
+      unsigned long startTime = millis();
+      while (!saved && (millis() - startTime) < windowMs) {
+        if (ble.poll()) {
+          ble.notifyStatus("provisioning");
+          saved = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
+                                                ble.label());
+          ble.notifyStatus(certManager.getProvisioningStatus());
+          if (!saved) {
+            Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
+          }
         }
+        delay(BLE_POLL_INTERVAL_MS);
       }
-      delay(BLE_POLL_INTERVAL_MS);
+      delay(FINAL_NOTIFY_DELAY_MS);
+    } else {
+      Serial.println("Failed to start BLE provisioning!");
     }
-
-    delay(FINAL_NOTIFY_DELAY_MS);
-    ble.stop();
+    ble.stop(); // Frees the BLE stack before the WiFi needs the radio
 
     if (saved) {
       // No restart: that would be a cold boot, opening the window again.
       Serial.println("\nProvisioning completed!");
     } else if (wifiManager.needsProvisioning()) {
-      Serial.println("\nProvisioning timeout. Rebooting...");
+      Serial.println("\nProvisioning failed. Rebooting...");
       delay(RESTART_DELAY_MS);
       ESP.restart();
     }
