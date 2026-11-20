@@ -10,9 +10,11 @@ from hamcrest import (
     contains_exactly,
     empty,
     has_entries,
+    has_item,
     has_properties,
     is_not,
 )
+from influxdb_client.rest import ApiException
 from taraqueue import QueueEmpty
 
 from tarameteo.consumer import weather_handler
@@ -153,6 +155,16 @@ async def test_weather_handler_raises_unexpected_write_errors(memory_queue):
 
     with pytest.raises(RuntimeError, match="write failure"):
         await weather_handler(make_message(), ts_writer=BrokenWriter(), queue=memory_queue)
+
+
+async def test_weather_handler_logs_store_errors(memory_queue, logger_handler):
+    class BrokenWriter:
+        def write_points(self, points):
+            raise ApiException(status=400)
+
+    await weather_handler(make_message(), ts_writer=BrokenWriter(), queue=memory_queue)
+
+    assert_that(logger_handler.records, has_item(has_properties(msg="Error storing weather data for sensor %s")))
 
 
 async def test_weather_handler_writes_off_the_event_loop(memory_queue):

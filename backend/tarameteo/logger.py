@@ -1,7 +1,7 @@
 """Logger to setup logging for consistent messages.
 
 The root logger can be setup like this which typically happens in the main
-entrypoint or in the lambda handler:
+entrypoint:
 
     >>> logger = setup_logger()
     >>> logger.name
@@ -23,12 +23,6 @@ Then, that logger is used inside functions and methods to log messages:
     >>> with logger_time():
     ...     log.info('created %(user)s', {'user': 'x'})
     1970-01-01 00:00:00.000000 INFO    tarameteo.logger created x
-
-It is also possible to add structured context information to the messages:
-
-    >>> with logger_context({'lambda': 'x'}), logger_time():
-    ...     log.warning('message')
-    1970-01-01 00:00:00.000000 WARNING tarameteo.logger [{"lambda": "x"}] message
 
 The LoggerLevelAction provides argument defaults for the log level:
 
@@ -52,12 +46,9 @@ The log level and log file can then be used to setup the root logger like this:
     >>> logger = setup_logger(args.log_level, args.log_file)
 """
 
-import json
 import logging
 import sys
 from argparse import Action
-from contextlib import contextmanager
-from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import ClassVar
 
@@ -81,27 +72,6 @@ class LoggerFormatter(logging.Formatter):
         """Format time with support for microseconds."""
         ct = self.converter(record.created)
         return ct.strftime(datefmt)
-
-
-class JsonFormatter(LoggerFormatter):
-    """Logger formatter with sensible defaults."""
-
-    def __init__(self, fmt=None, datefmt=None):
-        """Initialize a formatter with default fmt and datefmt."""
-        if fmt is None:
-            fmt = "%(message)s"
-        super().__init__(fmt, datefmt)
-
-    def formatMessage(self, record):
-        data = {
-            "Level": record.levelname,
-            "Message": record.msg,
-            "Name": record.name,
-            "Timestamp": self.formatTime(record, self.datefmt),
-            **getattr(record, "ctx", {}),
-        }
-
-        return json.dumps(data)
 
 
 class LoggerHandlerAction(Action):
@@ -195,61 +165,3 @@ def setup_logger(level=DEFAULT_LEVEL, handler=None, formatter=None, name=None):
     logger.addHandler(handler)
     logger.setLevel(level)
     return logger
-
-
-log_context_var = ContextVar("log_context_var", default=None)
-
-
-def _log_context_cls(cls):
-    """Extend the given class by giving it context awareness."""
-
-    class LogRecordContext(cls):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.ctx = log_context_var.get()
-
-        def getMessage(self):
-            msg = super().getMessage()
-            if self.ctx:
-                s = json.dumps(self.ctx)
-                msg = f"[{s}] {msg}"
-
-            return msg
-
-    return LogRecordContext
-
-
-def _ensure_log_uses_context():
-    """Ensure the set log record factory includes context information."""
-    if log_context_var.get() is None:
-        log_context_var.set({})
-
-    log_factory = logging.getLogRecordFactory()
-    logging.setLogRecordFactory(_log_context_cls(log_factory))
-
-
-def set_log_context(ctx):
-    """Set context to all log records."""
-    _ensure_log_uses_context()
-    log_context_var.get().update(ctx)
-
-
-def remove_log_context(key):
-    """Remove a log context from all log records."""
-    _ensure_log_uses_context()
-    log_context_var.get().pop(key, None)
-
-
-@contextmanager
-def logger_context(ctx):
-    """Context managed function to add log message context."""
-    _ensure_log_uses_context()
-
-    current = log_context_var.get().copy()
-    current.update(ctx)
-    token = log_context_var.set(current)
-
-    try:
-        yield
-    finally:
-        log_context_var.reset(token)

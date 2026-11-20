@@ -1,6 +1,5 @@
 """Unit tests for the logger module."""
 
-import json
 import logging
 import sys
 from argparse import ArgumentParser
@@ -10,20 +9,16 @@ from io import StringIO
 import pytest
 from hamcrest import (
     assert_that,
-    has_entries,
+    equal_to,
     has_properties,
     is_,
     matches_regexp,
 )
 
 from tarameteo.logger import (
-    JsonFormatter,
     LoggerFormatter,
     LoggerHandlerAction,
     LoggerLevelAction,
-    logger_context,
-    remove_log_context,
-    set_log_context,
     setup_logger,
 )
 
@@ -94,45 +89,6 @@ def test_logger_formatter_custom_datefmt():
         assert_that(
             stream.readline(),
             matches_regexp(f'{date_pattern} {"INFO":<7} root {message}\n'),
-        )
-
-
-def test_json_formatter_default():
-    """The JsonFormatter should include Level, Message, Name and Timestamp."""
-    with logger_stream(JsonFormatter()) as stream:
-        message = "message"
-        logging.debug(message)
-        stream.seek(0)
-
-        assert_that(
-            json.loads(stream.readline()),
-            has_entries(
-                Level="DEBUG",
-                Message=message,
-                Name="root",
-                Timestamp=matches_regexp(DATE_PATTERN),
-            ),
-        )
-
-
-def test_json_formatter_context():
-    """The JsonFormatter should include context data."""
-    with logger_stream(JsonFormatter()) as stream:
-        message = "message"
-        source = "source"
-        with logger_context({"Source": source}):
-            logging.debug(message)
-        stream.seek(0)
-
-        assert_that(
-            json.loads(stream.readline()),
-            has_entries(
-                Level="DEBUG",
-                Message=message,
-                Name="root",
-                Timestamp=matches_regexp(DATE_PATTERN),
-                Source=source,
-            ),
         )
 
 
@@ -291,73 +247,10 @@ def test_setup_logger_level(level, records, logger_handler):
 
 def test_setup_logger_formatter(logger_handler):
     message = "message"
-    logger = setup_logger(logging.DEBUG, logger_handler, JsonFormatter())
+    logger = setup_logger(logging.DEBUG, logger_handler, LoggerFormatter(fmt="%(levelname)s %(message)s"))
     logger.debug(message)
 
     record = logger_handler.records[0]
-    result = json.loads(logger_handler.format(record))
+    result = logger_handler.format(record)
 
-    assert_that(
-        result,
-        has_entries(
-            Level="DEBUG",
-            Message=message,
-            Name="root",
-            Timestamp=matches_regexp(DATE_PATTERN),
-        ),
-    )
-
-
-def test_set_remove_log_context(logger_handler):
-    """Logging context is set and removed from log entries."""
-    logging.info("Test log0")
-    set_log_context({"a": "1"})
-    logging.info("Test log1")
-    set_log_context({"b": "2"})
-    logging.info("Test log2")
-
-    # Remove the contexts
-    remove_log_context("a")
-    logging.info("Test log3")
-    remove_log_context("b")
-    logging.info("Test log4")
-
-    assert_that(
-        logger_handler.records,
-        [
-            has_properties(msg="Test log0"),
-            has_properties(msg='[{"a": "1"}] Test log1'),
-            has_properties(msg='[{"a": "1", "b": "2"}] Test log2'),
-            has_properties(msg='[{"b": "2"}] Test log3'),
-            has_properties(msg="Test log4"),
-        ],
-    )
-
-
-def test_logger_context(logger_handler):
-    """Logging contexts are added to log lines within the context only."""
-    logging.info("Test log0")
-
-    with logger_context({"a": "1"}):
-        logging.info("Test log1")
-        with logger_context({"b": "2"}):
-            logging.info("Test log2")
-            with logger_context({"a": "3"}):
-                logging.info("Test log3")
-        logging.info("Test log4")
-    logging.info("Test log5")
-    with logger_context({"a": "1", "b": "2"}):
-        logging.info("Test log6")
-
-    assert_that(
-        logger_handler.records,
-        [
-            has_properties(msg="Test log0"),
-            has_properties(msg='[{"a": "1"}] Test log1'),
-            has_properties(msg='[{"a": "1", "b": "2"}] Test log2'),
-            has_properties(msg='[{"a": "3", "b": "2"}] Test log3'),
-            has_properties(msg='[{"a": "1"}] Test log4'),
-            has_properties(msg="Test log5"),
-            has_properties(msg='[{"a": "1", "b": "2"}] Test log6'),
-        ],
-    )
+    assert_that(result, equal_to(f"DEBUG {message}"))

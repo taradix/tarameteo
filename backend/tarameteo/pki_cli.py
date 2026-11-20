@@ -27,6 +27,7 @@ from tarameteo.crypto import (
 )
 from tarameteo.fs import atomic_write
 from tarameteo.pki import (
+    DEFAULT_TTL_DAYS,
     create_csr_pem,
     self_sign_ca_key_pem,
 )
@@ -252,7 +253,7 @@ def make_args_parser():
         metavar="DIR",
         help="Output directory for certificates (default: %(default)s)",
     )
-    command = args_parser.add_subparsers(dest="command")
+    command = args_parser.add_subparsers(dest="command", required=True)
 
     init_parser = command.add_parser(
         "init",
@@ -271,8 +272,8 @@ def make_args_parser():
     init_lifetime = init_parser.add_mutually_exclusive_group()
     init_lifetime.add_argument(
         "--ttl-days",
-        type=int,
-        help="Certificate time-to-live in days (default: server default)",
+        type=ttl_days_arg,
+        help=f"Certificate time-to-live in days (default: {DEFAULT_TTL_DAYS})",
     )
     init_lifetime.add_argument(
         "--no-expiry",

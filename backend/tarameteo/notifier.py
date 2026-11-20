@@ -35,6 +35,16 @@ class SmtpNotifier:
     password: str
     from_address: str
 
+    @classmethod
+    def from_env(cls, env=os.environ) -> "SmtpNotifier":
+        return cls(
+            host=env["SMTP_HOST"],
+            port=int(env.get("SMTP_PORT", "587")),
+            username=env.get("SMTP_USERNAME", ""),
+            password=env.get("SMTP_PASSWORD", ""),
+            from_address=env.get("SMTP_FROM", "noreply@taram.ca"),
+        )
+
     async def send(self, recipient: str, subject: str, body: str, headers: dict[str, str] | None = None) -> None:
         message = EmailMessage()
         message["From"] = self.from_address
@@ -52,7 +62,7 @@ class SmtpNotifier:
             password=self.password,
             start_tls=True,
         )
-        logger.info(f"Sent notification to {recipient}: {subject}")
+        logger.info("Sent notification to %s: %s", recipient, subject)
 
 
 # Firebase Cloud Messaging, HTTP v1: https://firebase.google.com/docs/cloud-messaging/send-message
@@ -125,4 +135,4 @@ class FcmNotifier:
         if response.status_code == 404:
             raise Unregistered("The push token is no longer registered")
         response.raise_for_status()
-        logger.info(f"Pushed a notification: {subject}")
+        logger.info("Pushed a notification: %s", subject)

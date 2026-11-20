@@ -121,10 +121,6 @@ def _to_weather_reading(reading: MetarReading, device_id: str) -> WeatherReading
 class MetarSource(Source):
     """Source implementation for METAR observations."""
 
-    @property
-    def name(self) -> str:
-        return "MetarSource"
-
     async def run_once(self, client: httpx.AsyncClient) -> list[WeatherReading]:
         """Fetch recent METAR observations for all sensors."""
         readings = await fetch_recent(client)

@@ -2,7 +2,6 @@
 
 import os
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
 from datetime import (
     UTC,
     datetime,
@@ -32,6 +31,12 @@ Aggregate = Literal["mean", "min", "max", "sum", "count", "last", "first"]
 
 # What a store call raises once its retries run out or the error isn't transient.
 TS_ERRORS = (ApiException, HTTPError)
+
+INFLUX_TIMEOUT_MS = 30_000
+
+
+def _influx_client(url: str, token: str, org: str) -> InfluxDBClient:
+    return InfluxDBClient(url=url, token=token, org=org, timeout=INFLUX_TIMEOUT_MS)
 
 
 def _transient(error: ApiException | HTTPError) -> bool:
@@ -155,14 +160,8 @@ class InfluxReader(TSReader):
 
     @classmethod
     def from_url(cls, url: str, token: str, org: str, bucket: str) -> "InfluxReader":
-        client = InfluxDBClient(
-            url=url,
-            token=token,
-            timeout=30_000  # 30 second timeout
-        )
-        query_api = client.query_api()
         return cls(
-            query_api=query_api,
+            query_api=_influx_client(url, token, org).query_api(),
             org=org,
             bucket=bucket,
         )
@@ -203,13 +202,17 @@ class InfluxReader(TSReader):
         fields: Sequence[str] | None = None,
         lookback: timedelta = timedelta(hours=1),
     ) -> TSPoint | None:
-        flux, params = self._build_latest_query(
+        flux, params = self._build_points_query(
             measurement=measurement,
             start=datetime.now(UTC) - lookback,
+            stop=None,
             tags=tags,
             fields=fields,
+            every=None,
+            aggregate=None,
         )
-        records = self._query_records(flux, params=params)
+        # last() runs per series, so this returns one row per field.
+        records = self._query_records(flux + "\n  |> last()", params=params)
         points = self._records_to_points(records)
 
         # We might get multiple timestamps if different fields last-updated at slightly different times.
@@ -270,7 +273,6 @@ class InfluxReader(TSReader):
             # Aggregation is optional; if you specify every without aggregate, default to mean.
             agg = aggregate or "mean"
             params["every"] = every
-            params["aggregate"] = agg
             # aggregateWindow requires fn identifier, not a string, so we map aggregate to fn literal.
             # Safe because aggregate is from a Literal union.
             flux_lines.append(f'  |> aggregateWindow(every: every, fn: {agg}, createEmpty: false)')
@@ -278,34 +280,8 @@ class InfluxReader(TSReader):
         flux = "\n".join(flux_lines)
         return flux, params
 
-    def _build_latest_query(
-        self,
-        *,
-        measurement: str,
-        start: datetime,
-        tags: Mapping[str, str] | None,
-        fields: Sequence[str] | None,
-    ) -> tuple[str, dict[str, Any]]:
-        params = {
-            "bucket": self.bucket,
-            "measurement": measurement,
-            "start": start,
-        }
-
-        flux_lines = [
-            'from(bucket: bucket)',
-            '  |> range(start: start)',
-            '  |> filter(fn: (r) => r._measurement == measurement)',
-            *_filter_lines(params, tags, fields),
-            # "last()" works per series; this returns one row per field.
-            '  |> last()',
-        ]
-
-        flux = "\n".join(flux_lines)
-        return flux, params
-
     @staticmethod
-    def _records_to_points(records: Sequence[FluxRecord]) -> list[TSPoint]:  # noqa: C901
+    def _records_to_points(records: Sequence[FluxRecord]) -> list[TSPoint]:
         """
         Influx results are "tall" (one row per field).
         Reconstruct "wide" TSPoint by grouping on (_measurement, _time, tags...).
@@ -342,9 +318,7 @@ class InfluxReader(TSReader):
             if m is None or t is None or f is None:
                 continue
             if not isinstance(t, datetime):
-                # best-effort parse
-                with suppress(Exception):
-                    t = datetime.fromisoformat(str(t))
+                t = datetime.fromisoformat(str(t))
 
             tags = infer_tags(vals)
             key = (str(m), t, tuple(sorted(tags.items())))
@@ -356,19 +330,7 @@ class InfluxReader(TSReader):
 
             g["fields"][str(f)] = v
 
-        points: list[TSPoint] = []
-        for g in groups.values():
-            fields = dict(g["fields"])
-            if not fields:
-                continue
-            points.append(
-                TSPoint(
-                    measurement=g["measurement"],
-                    timestamp=g["timestamp"],
-                    tags=g["tags"],
-                    fields=fields,
-                )
-            )
+        points = [TSPoint(**g) for g in groups.values()]
         points.sort(key=lambda p: p.timestamp)
         return points
 
@@ -395,15 +357,8 @@ class InfluxWriter(TSWriter):
 
     @classmethod
     def from_url(cls, url: str, token: str, org: str, bucket: str) -> "InfluxWriter":
-        client = InfluxDBClient(
-            url=url,
-            token=token,
-            org=org,
-            timeout=30_000  # 30 second timeout
-        )
-        write_api = client.write_api(write_options=SYNCHRONOUS)
         return cls(
-            write_api=write_api,
+            write_api=_influx_client(url, token, org).write_api(write_options=SYNCHRONOUS),
             org=org,
             bucket=bucket,
         )
@@ -429,10 +384,7 @@ class InfluxWriter(TSWriter):
             if v is not None:
                 ip.field(str(k), v)
 
-        if p.timestamp:
-            ip.time(p.timestamp)
-
-        return ip
+        return ip.time(p.timestamp)
 
 
 @define

@@ -5,7 +5,6 @@ import logging
 import os
 import ssl
 import threading
-from collections import deque
 from collections.abc import Callable
 from typing import Any, ClassVar, Self
 
@@ -15,10 +14,6 @@ from attrs import define, field
 logger = logging.getLogger(__name__)
 
 MQTTMessageHandler = Callable[["MQTTMessage"], None]
-
-
-class MQTTPublisherQueueFull(Exception):
-    """Raised when the MQTT publisher pre-connect queue is full."""
 
 
 @define(frozen=True)
@@ -126,29 +121,13 @@ class MQTTBase:
         self._client.loop_start()
         self._running = True
 
-    def disconnect(self, purge: bool = False):
-        """Stop networking loop and disconnect.
-
-        Args:
-            purge: If True, purge the persistent session from the broker after
-                   disconnecting. Only relevant when clean_session=False.
-                   Connects with clean_session=True to tell the broker to
-                   discard stored session state (subscriptions, queued messages).
-        """
+    def disconnect(self):
+        """Stop networking loop and disconnect."""
         self._running = False
         self._connected.clear()
         if self._client is not None:
             self._client.loop_stop()
             self._client.disconnect()
-
-            if purge and not self.clean_session:
-                # Reconnect with clean_session=True to purge broker state
-                self._client._clean_session = True
-                try:
-                    self._client.reconnect()
-                    self._client.disconnect()
-                finally:
-                    self._client._clean_session = self.clean_session
 
     def __enter__(self):
         self.connect()
@@ -191,65 +170,14 @@ class MQTTConsumer(MQTTBase):
         self._connected.set()
 
     def _on_message(self, client, userdata, msg: mqtt.MQTTMessage):
-        message = MQTTMessage.from_msg(msg)
+        # An exception escaping a paho callback kills its network thread.
+        try:
+            message = MQTTMessage.from_msg(msg)
+        except ValueError:
+            logger.warning("Invalid JSON payload on topic %s: %r", msg.topic, msg.payload[:100])
+            return
         try:
             self.on_message(message)
         except Exception:
             logger.exception("Error in message callback for topic %s", msg.topic)
 
-
-@define
-class MQTTPublisher(MQTTBase):
-    """MQTT publisher with pre-connect queuing and bounded backlog."""
-
-    qos: int = field(default=0, kw_only=True)
-    retain: bool = field(default=False, kw_only=True)
-    max_pending: int = field(default=1000, kw_only=True)
-    _pending: deque = field(init=False, factory=deque)
-    _pending_lock: threading.Lock = field(init=False, factory=threading.Lock)
-
-    def _post_connect(self):
-        """Drain any messages that were enqueued before connection."""
-        with self._pending_lock:
-            count = len(self._pending)
-            while self._pending:
-                topic, payload, qos, retain = self._pending.popleft()
-                self._client.publish(
-                    topic=topic, payload=payload, qos=qos, retain=retain,
-                )
-            if count:
-                logger.info("Drained %d pending publish(es)", count)
-            self._connected.set()
-
-    def publish(self, topic: str, payload: Any, *,
-                qos: int | None = None,
-                retain: bool | None = None) -> mqtt.MQTTMessageInfo | None:
-        """Publish a message.
-
-        Non-bytes payloads are encoded: str → UTF-8, anything else → JSON.
-        If the client is not yet connected, the message is enqueued (bounded
-        by ``max_pending``); ``MQTTPublisherQueueFull`` is raised if full.
-        Returns ``None`` for enqueued messages.
-        """
-        if not isinstance(payload, (bytes, bytearray, memoryview)):
-            payload = json.dumps(payload).encode("utf-8")
-
-        resolved_qos = qos if qos is not None else self.qos
-        resolved_retain = retain if retain is not None else self.retain
-
-        with self._pending_lock:
-            if not self._connected.is_set():
-                if len(self._pending) >= self.max_pending:
-                    raise MQTTPublisherQueueFull(
-                        f"MQTT queue is full (max: {self.max_pending})"
-                    )
-                self._pending.append(
-                    (topic, payload, resolved_qos, resolved_retain),
-                )
-                logger.debug("Enqueued publish to %s (not yet connected)", topic)
-                return None
-
-        return self._client.publish(
-            topic=topic, payload=payload,
-            qos=resolved_qos, retain=resolved_retain,
-        )

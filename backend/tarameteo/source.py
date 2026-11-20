@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from tarameteo.readings import Reading
-from tarameteo.ts import TSWriter
+from tarameteo.ts import TS_ERRORS, TSWriter
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +17,12 @@ logger = logging.getLogger(__name__)
 class Source(ABC):
     """Base class for external weather data sources."""
 
+    # Influx failing too: the next run writes again, so it must not end the sync loop.
     RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
         httpx.HTTPError,
         ValueError,
         KeyError,
+        *TS_ERRORS,
     )
 
     @property

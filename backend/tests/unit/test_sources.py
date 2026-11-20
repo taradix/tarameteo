@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from hamcrest import assert_that, contains_exactly, equal_to, has_properties
+from influxdb_client.rest import ApiException
 
 from tarameteo.readings import AggregateReading
 from tarameteo.source import Source
@@ -46,6 +47,16 @@ async def test_run_source_once_swallows_recoverable(memory_writer, memory_queue)
     source = _RecoverableSource()
     async with httpx.AsyncClient(timeout=1) as client:
         await _run_source_once(source, client, memory_writer, memory_queue)
+
+
+async def test_run_source_once_swallows_store_errors(memory_queue):
+    """An Influx failure should be logged, not end the sync loop."""
+    class BrokenWriter:
+        def write_points(self, points):
+            raise ApiException(status=503)
+
+    async with httpx.AsyncClient(timeout=1) as client:
+        await _run_source_once(_AggregateSource(), client, BrokenWriter(), memory_queue)
 
 
 async def test_run_source_once_raises_unexpected(memory_writer, memory_queue):
