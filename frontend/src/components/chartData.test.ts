@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDatasets, extendedRange } from "./chartData";
-import type { AggregateReading, WeatherReading } from "../types";
+import i18n from "../i18n";
+import type { AggregateReading, SensorRef, WeatherField, WeatherReading } from "../types";
 
 // Local-time timestamps, since daily aggregates span local days.
 const at = (day: number, hour = 0) => new Date(2026, 0, day, hour).getTime();
@@ -15,6 +16,17 @@ function reading(sensor: string, day: number, hour: number, temperature: number,
 
 const ts = { name: "ts", kind: "timeseries" } as const;
 const agg = { name: "agg", kind: "aggregate" } as const;
+
+function build(
+  sensors: SensorRef[],
+  fields: WeatherField[],
+  readings: WeatherReading[],
+  aggregates: AggregateReading[],
+  language = "en",
+) {
+  const t = i18n.getFixedT(language);
+  return buildDatasets(sensors, fields, readings, aggregates, (f) => t(`fields.${f}`));
+}
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -32,20 +44,25 @@ describe("buildDatasets", () => {
       reading("ts", 9, 1, 10),
       reading("other", 9, 1, 99, 9),
     ];
-    const [temp, rain] = buildDatasets([ts], ["temperature", "rain"], readings, []);
+    const [temp, rain] = build([ts], ["temperature", "rain"], readings, []);
     expect(temp.label).toBe("ts — Temperature");
     expect(temp.data).toEqual([{ x: at(9, 1), y: 10 }, { x: at(9, 2), y: 20 }]);
     expect(rain.label).toBe("ts — Rain");
     expect(rain.data).toEqual([{ x: at(9, 2), y: 1 }]);
   });
 
+  it("names fields in the page's language", () => {
+    const [, rain] = build([ts], ["temperature", "rain"], [reading("ts", 9, 1, 10, 1)], [], "fr");
+    expect(rain.label).toBe("ts — Pluie");
+  });
+
   it("labels by sensor alone for a single field", () => {
-    const [ds] = buildDatasets([ts], ["temperature"], [reading("ts", 9, 1, 10)], []);
+    const [ds] = build([ts], ["temperature"], [reading("ts", 9, 1, 10)], []);
     expect(ds.label).toBe("ts");
   });
 
   it("names a labelled sensor by its label, and finds its readings by ID", () => {
-    const [ds] = buildDatasets([{ ...ts, label: "Gazebo" }], ["temperature"], [reading("ts", 9, 1, 10)], []);
+    const [ds] = build([{ ...ts, label: "Gazebo" }], ["temperature"], [reading("ts", 9, 1, 10)], []);
     expect(ds.label).toBe("Gazebo");
     expect(ds.data).toHaveLength(1);
   });
@@ -54,7 +71,7 @@ describe("buildDatasets", () => {
     const aggregates: AggregateReading[] = [
       { sensor: "agg", timestamp: iso(8, 23), temperature_min: 1, temperature_avg: 2, temperature_max: 3 },
     ];
-    const [max, min, avg] = buildDatasets([agg], ["temperature"], [], aggregates);
+    const [max, min, avg] = build([agg], ["temperature"], [], aggregates);
     const day = (y: number) => [{ x: at(8), y }, { x: at(9), y }];
     expect(max).toMatchObject({ label: "", fill: "+1", data: day(3) });
     expect(min).toMatchObject({ label: "", fill: false, data: day(1) });
@@ -63,7 +80,7 @@ describe("buildDatasets", () => {
 
   it("stops today's step at the observation instead of midnight", () => {
     const aggregates: AggregateReading[] = [{ sensor: "agg", timestamp: iso(10, 6), rain: 4 }];
-    const [rain] = buildDatasets([agg], ["rain"], [], aggregates);
+    const [rain] = build([agg], ["rain"], [], aggregates);
     expect(rain.data).toEqual([{ x: at(10), y: 4 }, { x: at(10, 6), y: 4 }]);
   });
 
@@ -74,13 +91,13 @@ describe("buildDatasets", () => {
       { sensor: "agg", timestamp: iso(6, 12) },
       { sensor: "other", timestamp: iso(6, 12), rain: 9 },
     ];
-    const [rain] = buildDatasets([agg], ["rain"], [], aggregates);
+    const [rain] = build([agg], ["rain"], [], aggregates);
     expect(rain.data.map((p) => p.y)).toEqual([1, 1, 2, 2]);
   });
 
   it("labels only the first precipitation field and dashes snow", () => {
     const aggregates: AggregateReading[] = [{ sensor: "agg", timestamp: iso(8, 12), rain: 1, snow: 2 }];
-    const [rain, snow] = buildDatasets([agg], ["rain", "snow"], [], aggregates);
+    const [rain, snow] = build([agg], ["rain", "snow"], [], aggregates);
     expect(rain.label).toBe("agg");
     expect(rain.borderDash).toBeUndefined();
     expect(snow.label).toBe("");

@@ -6,9 +6,9 @@ React 19 + Vite 8 + Tailwind 4 dashboard for TaraMeteo.
 Stack
 -----
 
-- TanStack Query for server state (polling every 30s).
+- TanStack Query for server state; live ranges stream readings over SSE.
 - nuqs for URL-as-source-of-truth for dashboard state (sensors, date range).
-- recharts for charts, with a colorblind-safe palette.
+- chart.js (react-chartjs-2, chartjs-plugin-zoom) for charts, with a colorblind-safe palette.
 - openapi-typescript for generated API types.
 - Vitest + happy-dom + @testing-library/react for tests.
 
@@ -24,9 +24,9 @@ Local development
 Type generation
 ---------------
 
-Once the backend exposes ``openapi.json``, run:
+``src/api-types.ts`` is generated from ``../backend/openapi.json``; after the
+backend schema changes, run:
 
 .. code-block:: shell
 
-   curl -o openapi.json http://localhost/api/openapi.json
-   npm run generate:types
+   npm run openapi

@@ -29,6 +29,9 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// Light enough that the avg line and other sensors show through a min/max band.
+const BAND_ALPHA = 0.15;
+
 export function bandColorFor(key: string): string {
-  return hexToRgba(colorFor(key), 0.15);
+  return hexToRgba(colorFor(key), BAND_ALPHA);
 }

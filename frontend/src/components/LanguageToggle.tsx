@@ -1,24 +1,20 @@
-import { useTranslation } from 'react-i18next'
-import './LanguageToggle.css'
+import { useTranslation } from "react-i18next";
 
-function LanguageToggle() {
-  const { i18n } = useTranslation()
+export function LanguageToggle() {
+  const { t, i18n } = useTranslation();
   // resolvedLanguage maps a detected locale like "en-US" to a supported one ("en").
-  const isEnglish = i18n.resolvedLanguage === 'en'
-
-  const toggleLanguage = () => {
-    i18n.changeLanguage(isEnglish ? 'fr' : 'en')
-  }
+  const other = i18n.resolvedLanguage === "en" ? "fr" : "en";
 
   return (
     <button
-      onClick={toggleLanguage}
-      className="language-toggle"
-      aria-label={isEnglish ? 'Passer en français' : 'Switch to English'}
+      type="button"
+      onClick={() => i18n.changeLanguage(other)}
+      // language.toggle is worded in the language it switches to, for those who can't read this one.
+      lang={other}
+      aria-label={t("language.toggle")}
+      className="rounded border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
     >
-      {isEnglish ? 'FR' : 'EN'}
+      {other.toUpperCase()}
     </button>
-  )
+  );
 }
-
-export default LanguageToggle

@@ -2,19 +2,15 @@ import { useMemo } from "react";
 import { useQueryStates, parseAsArrayOf, parseAsString, parseAsIsoDateTime } from "nuqs";
 import { startOfToday, startOfYesterday, subDays } from "date-fns";
 
-function computeRange(
-  preset: string,
-  customStart: Date | null,
-  customEnd: Date | null,
-): { start: Date; end: Date | null } {
-  switch (preset) {
-    case "today":     return { start: startOfToday(),              end: null             };
-    case "yesterday": return { start: startOfYesterday(),          end: startOfToday()   };
-    case "7d":        return { start: subDays(startOfToday(), 7),  end: null             };
-    case "30d":       return { start: subDays(startOfToday(), 30), end: null             };
-    default:          return { start: customStart ?? startOfToday(), end: customEnd ?? null };
-  }
-}
+// Ranges by preset; end=null is live. Labels are dateRange.<preset>.
+export const PRESETS: Record<string, () => { start: Date; end: Date | null }> = {
+  today:     () => ({ start: startOfToday(),              end: null           }),
+  yesterday: () => ({ start: startOfYesterday(),          end: startOfToday() }),
+  "7d":      () => ({ start: subDays(startOfToday(), 7),  end: null           }),
+  "30d":     () => ({ start: subDays(startOfToday(), 30), end: null           }),
+};
+
+export const isPreset = (preset: string) => Object.hasOwn(PRESETS, preset);
 
 export function useDashboardState() {
   const [params, setParams] = useQueryStates({
@@ -26,7 +22,9 @@ export function useDashboardState() {
   });
 
   const { start, end } = useMemo(
-    () => computeRange(params.preset, params.start, params.end),
+    () => isPreset(params.preset)
+      ? PRESETS[params.preset]()
+      : { start: params.start ?? startOfToday(), end: params.end },
     [params.preset, params.start, params.end],
   );
 
