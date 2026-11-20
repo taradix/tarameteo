@@ -290,7 +290,8 @@ async def post_alert(
     body: AlertCreate, alerts: EmailServiceDep, alert_store: AlertStoreDep, service: SensorServiceDep,
 ) -> dict[str, str]:
     # The sensor name goes into an email to an unconfirmed address, so only send names we know.
-    if not service.list_sensors(names=[body.sensor]).sensors:
+    sensors = service.list_sensors(names=[body.sensor]).sensors
+    if not sensors:
         raise HTTPException(status_code=422, detail=f"Unknown sensor {body.sensor!r}")
 
     alert_store.delete_unconfirmed(datetime.now(UTC) - CONFIRM_EXPIRY)
@@ -302,7 +303,7 @@ async def post_alert(
 
     alert = Alert(id=uuid.uuid4().hex, **body.model_dump())
     # Saved only once sent, so a failed send doesn't leave a pending alert that counts against MAX_PENDING.
-    await alerts.send_confirm(alert, service.get_label(alert.sensor))
+    await alerts.send_confirm(alert, sensors[0].label)
     alert_store.create(alert)
     return {"status": "confirmation_sent"}
 
@@ -407,7 +408,7 @@ def alert_manage_page(
         return _html(INVALID_PAGE, 400)
     email = payload["email"]
     email_alerts = alert_store.list_by_email(email)
-    labels = {s.name: s.label for s in service.list_sensors(names=[a.sensor for a in email_alerts]).sensors}
+    labels = service.get_labels([a.sensor for a in email_alerts])
     return _html(alert_text.manage_page(payload["language"], email, email_alerts, labels))
 
 

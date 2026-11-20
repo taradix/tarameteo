@@ -23,6 +23,7 @@ from tarameteo.readings import (
     from_point,
 )
 from tarameteo.ts import (
+    TS_ERRORS,
     TSPoint,
     TSReader,
 )
@@ -206,10 +207,24 @@ class SensorService:
         )
         return [from_point(p) for p in points]
 
+    # The label only names the sensor and its ID does too, so a store failure falls back to the ID.
     def get_label(self, name: str) -> str | None:
         """The sensor's current label, if its latest reading has one."""
-        latest = self.get_latest(name)
+        try:
+            latest = self.get_latest(name)
+        except TS_ERRORS:
+            logger.warning("No label for %s, the time series store failed", name, exc_info=True)
+            return None
         return latest.label if latest is not None else None
+
+    def get_labels(self, names: Sequence[str]) -> dict[str, str | None]:
+        """Like get_label for many sensors, in one scan."""
+        try:
+            sensors = self.list_sensors(names=names).sensors
+        except TS_ERRORS:
+            logger.warning("No labels for %s, the time series store failed", names, exc_info=True)
+            return {}
+        return {s.name: s.label for s in sensors}
 
     def get_latest(self, name: str) -> WeatherReading | None:
         point = self.ts_reader.latest(

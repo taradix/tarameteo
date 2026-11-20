@@ -27,13 +27,14 @@ from hamcrest import (
     not_none,
     only_contains,
 )
+from influxdb_client.rest import ApiException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from tarameteo.alert_checker import AlertService
 from tarameteo.alerts import Alert, AlertStore
-from tarameteo.api import app, get_alert_store, stream_sensor_weather
+from tarameteo.api import app, get_alert_store, get_ts_reader, stream_sensor_weather
 from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
@@ -668,6 +669,29 @@ def test_alert_texts_name_the_sensor_by_its_label(alert_api, memory_writer):
 
     client.post("/api/alerts/manage", json={"email": NEW_ALERT["email"], "language": "en"})
     assert_that(client.get(_link(notifier)).text, contains_string("Gazebo: temperature below -20 °C"))
+
+
+class DownReader:
+    """A TSReader whose Influx is down."""
+
+    def query_points(self, *args, **kwargs):
+        raise ApiException(status=503)
+
+    latest = last_points = query_points
+
+
+def test_alert_pages_name_the_sensor_by_its_id_when_the_store_fails(alert_api):
+    client, store, _ = alert_api
+    store.create(Alert(id="a1", **NEW_ALERT))
+    # api_app drops the override when the test ends.
+    app.dependency_overrides[get_ts_reader] = DownReader
+    confirm = "/api/alerts/confirm/" + sign_token({"alert_id": "a1", "action": "confirm"}, "s")
+    unsubscribe = "/api/alerts/unsubscribe/" + sign_token({"alert_id": "a1", "action": "unsubscribe"}, "s")
+    manage = "/api/alerts/manage/" + sign_token({"email": NEW_ALERT["email"], "language": "en", "action": "manage"}, "s")
+
+    for response in client.get(confirm), client.post(confirm), client.get(unsubscribe), client.get(manage):
+        assert_that(response.status_code, equal_to(200))
+        assert_that(response.text, contains_string("outdoor: temperature below -20 °C"))
 
 
 def test_alert_manage_only_emails_addresses_with_alerts(alert_api):
