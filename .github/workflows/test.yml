@@ -13,7 +13,8 @@ jobs:
       - name: Check out
         uses: actions/checkout@v7
 
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - name: Install apt packages
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
           packages: clang-format clang-tidy
           version: 1.0
@@ -50,9 +51,8 @@ jobs:
 
   firmware-test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Check out
         uses: actions/checkout@v7
 
       - name: Set up Python environment
@@ -61,24 +61,16 @@ jobs:
           python-version: "3.15"
           working-directory: firmware
 
-      - name: Create config.h from example
-        working-directory: firmware
-        run: |
-          if [ ! -f include/config.h ]; then
-            cp include/config.h.example include/config.h
-            echo "Created config.h from example"
-          fi
-
-      - name: Test firmware
+      - name: Run test target
         working-directory: firmware
         run: make test
 
-      - name: "Upload coverage data"
+      # The .gcno/.gcda files sit next to the objects, so the whole native build goes.
+      - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
-          name: firmware-coverage
+          name: firmware-coverage-data
           path: firmware/.pio/build/native
-          if-no-files-found: ignore
           include-hidden-files: true
 
   firmware-coverage:
@@ -86,35 +78,31 @@ jobs:
     needs: firmware-test
 
     steps:
-      - name: Checkout repository
+      - name: Check out
         uses: actions/checkout@v7
 
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - name: Install apt packages
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
           packages: lcov
           version: 1.0
 
-      - name: Set up Python environment
-        uses: ./.github/actions/setup-uv-env
-        with:
-          python-version: "3.15"
-          working-directory: firmware
-
       - name: Download coverage data
         uses: actions/download-artifact@v8
         with:
-          path: firmware
+          name: firmware-coverage-data
+          path: firmware/.pio/build/native
 
       - name: Run coverage target
         working-directory: firmware
         run: make coverage
 
-      - name: Upload HTML report if check failed.
+      # No coverage threshold, so the report only exists when the job passes.
+      - name: Upload HTML report
         uses: actions/upload-artifact@v7
         with:
           name: firmware-report
-          path: firmware
-        if: ${{ failure() }}
+          path: firmware/coverage_html
 
   backend-test:
     runs-on: ubuntu-latest
@@ -135,11 +123,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           working-directory: backend
 
-      - name: Run backend test target
+      - name: Run test target
         working-directory: backend
         run: make test
 
-      - name: "Upload coverage data"
+      - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
           name: coverage-data-${{ matrix.python-version }}
@@ -173,7 +161,7 @@ jobs:
         working-directory: backend
         run: make coverage
 
-      - name: Upload HTML report if check failed.
+      - name: Upload HTML report on failure
         uses: actions/upload-artifact@v7
         with:
           name: backend-report
@@ -199,6 +187,30 @@ jobs:
         working-directory: frontend
         run: make test
 
+  frontend-coverage:
+    runs-on: ubuntu-latest
+    needs: frontend-test
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node environment
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Run coverage target
+        working-directory: frontend
+        run: make coverage
+
+      - name: Upload HTML report on failure
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-report
+          path: frontend/coverage
+        if: ${{ failure() }}
+
   # The runner image ships the Android SDK; Gradle fetches missing platforms itself.
   android-test:
     runs-on: ubuntu-latest
@@ -218,27 +230,3 @@ jobs:
       - name: Run test target
         working-directory: android
         run: make test
-
-  frontend-coverage:
-    runs-on: ubuntu-latest
-    needs: frontend-test
-
-    steps:
-      - name: Check out
-        uses: actions/checkout@v7
-
-      - name: Set up Node environment
-        uses: actions/setup-node@v7
-        with:
-          node-version: 26
-
-      - name: Run coverage target
-        working-directory: frontend
-        run: make coverage
-
-      - name: Upload HTML report if check failed.
-        uses: actions/upload-artifact@v7
-        with:
-          name: frontend-report
-          path: frontend/coverage
-        if: ${{ failure() }}

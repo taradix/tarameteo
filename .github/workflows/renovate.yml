@@ -17,4 +17,3 @@ jobs:
           github-token: ${{ secrets.CODEOWNER_TOKEN }}
           number: ${{ github.event.pull_request.number }}
           message: "Auto-approving Renovate PR"
-

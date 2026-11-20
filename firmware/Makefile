@@ -40,18 +40,20 @@ test: .pio/libdeps/native/integrity.dat include/config.h
 	@echo "==> Running unit tests..."
 	@$(PIO) test -e native
 
+# Reads the data the last `make test` left in .pio/build/native, like the backend's coverage target.
+# Excluded at capture, since CI only restores the build directory, not the library sources in .pio/libdeps.
 .PHONY: coverage
-coverage: test
+coverage:
 	@echo "==> Generating coverage report..."
-	@lcov --ignore-errors inconsistent,inconsistent --capture --directory .pio/build/native --output-file coverage.info
-	@lcov --ignore-errors inconsistent,inconsistent --remove coverage.info '/usr/*' '*/test/*' '*/.pio/*' --output-file coverage.cleaned.info
-	@genhtml --ignore-errors inconsistent,inconsistent coverage.cleaned.info --output-directory coverage_html
+	@lcov --ignore-errors inconsistent,inconsistent --capture --directory .pio/build/native \
+		--exclude '/usr/*' --exclude '*/test/*' --exclude '*/.pio/*' --output-file coverage.info
+	@genhtml --ignore-errors inconsistent,inconsistent coverage.info --output-directory coverage_html
 	@echo "==> Coverage report generated in coverage_html/index.html"
 
 .PHONY: clean
 clean:
 	@echo "==> Cleaning build artifacts..."
 	@$(PIO) run -t clean
-	@rm -rf .pio/build coverage.info coverage.cleaned.info coverage_html
+	@rm -rf .pio/build coverage.info coverage_html
 
 .DEFAULT_GOAL := test

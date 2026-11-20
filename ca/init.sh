@@ -23,8 +23,7 @@ if [ ! -s "$CA_KEY" ] || [ ! -s "$CA_CERT" ]; then
     -sha256 -not_after "$CA_NOT_AFTER" \
     -out "$CA_CERT" \
     -subj "$CA_SUBJECT"
-  chmod 600 "$CA_KEY" || true
-  chmod 644 "$CA_CERT" || true
+  chmod 644 "$CA_CERT"
 else
   echo "Existing CA found in $CA_DIR"
 fi

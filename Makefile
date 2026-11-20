@@ -1,8 +1,5 @@
-ENV := .env
 SUBDIRS := android backend firmware frontend
 TARGETS := setup check test coverage
-
--include $(ENV)
 
 .PHONY: $(TARGETS) $(SUBDIRS)
 $(TARGETS): $(SUBDIRS)
@@ -23,10 +20,8 @@ $(NODE_MODULES): package-lock.json
 	@$(TOUCH) $@
 
 # Convenience target to build node_modules
-.PHONY: setup
 setup: $(NODE_MODULES)
 
-.PHONY: check
 check: $(NODE_MODULES)
 	@echo "==> Linting docker compose files..."
 	@npm run lint
@@ -49,10 +44,5 @@ undeploy:
 	@echo "==> Stopping services..."
 	@docker compose down
 	@echo "==> Services stopped"
-
-.PHONY: clean
-clean:
-	@echo "==> Cleaning ignored files..."
-	@git clean -Xfd
 
 .DEFAULT_GOAL := test

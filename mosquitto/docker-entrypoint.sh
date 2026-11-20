@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -eu
+
 : "${MQTT_USERNAME:?}"
 : "${MQTT_PASSWORD:?}"
 : "${MOSQUITTO_TEMPLATE:?}"
@@ -15,8 +17,10 @@ envsubst < "$MOSQUITTO_TEMPLATE" > "$MOSQUITTO_CONF"
 
 # Create password file for backend services (username/password auth).
 MOSQUITTO_PASSWD=$MOSQUITTO_CONFIG_DIR/passwd
-install -o root -g root -m 644 /dev/null "$MOSQUITTO_PASSWD"
+# mosquitto_passwd wants the file owned by its user (root), the broker by mosquitto.
+install -m 600 /dev/null "$MOSQUITTO_PASSWD"
 mosquitto_passwd -b "$MOSQUITTO_PASSWD" "$MQTT_USERNAME" "$MQTT_PASSWORD"
+chown mosquitto:mosquitto "$MOSQUITTO_PASSWD"
 
 # Sensor ACL — cert CN is the username; a sensor may only publish to its own topic.
 MOSQUITTO_SENSOR_ACL=$MOSQUITTO_CONFIG_DIR/acl_sensor.conf

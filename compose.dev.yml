@@ -32,15 +32,12 @@ services:
         /deploy-hook.sh
         echo Ready
         sleep infinity
+
   mosquitto:
     networks:
       default:
         ipv4_address: ${IPV4_NETWORK:-172.22.1}.241
 
   mosquitto-init:
-    command:
-      - sh
-      - -ec
-      - |
-        tarameteo-pki issue mosquitto --san-dns tarameteo-mosquitto --san-dns ${SERVER_HOSTNAME} --san-ip ${IPV4_NETWORK:-172.22.1}.241
-        chown -R 1883:1883 /tls
+    environment:
+      PKI_EXTRA_ARGS: --san-ip ${IPV4_NETWORK:-172.22.1}.241
