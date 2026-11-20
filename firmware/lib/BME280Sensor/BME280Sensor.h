@@ -20,7 +20,7 @@ public:
                  int8_t sda = DEFAULT_SDA,
                  int8_t scl = DEFAULT_SCL,
                  float seaLevelPressure = 1013.25f);
-    
+
     bool begin();
     bool isAvailable() const { return _available; }
     float getTemperature() const;
@@ -37,9 +37,9 @@ private:
     float _seaLevelPressure;
     bool _available;
     mutable char _lastError[128];  // Allow modification in const methods
-    
-    void updateLastError(const char* error) const;  // Make const
-    bool configureSensor();
+
+    void setError(const char* error) const;
+    void configureSensor();
 };
 
-#endif // BME280_SENSOR_H 
+#endif // BME280_SENSOR_H

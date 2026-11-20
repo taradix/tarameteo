@@ -1,4 +1,10 @@
 # Enable RSA key exchange cipher suites in mbedTLS.
 # Required for TLS handshake without EC scalar multiplications on the ESP32-C3,
 # which has no hardware crypto and makes ECDHE prohibitively slow (~15s per handshake).
+#
+# NOTE: PlatformIO only reads this file for `framework = espidf` (or
+# `arduino, espidf`). The esp32 env builds `framework = arduino` alone, which
+# links the Arduino core's precompiled ESP-IDF libraries, so this setting is not
+# applied; RSA key exchange is available only because ESP-IDF enables it by
+# default and the prebuilt config keeps that default. Switch to `arduino, espidf` if it ever needs changing.
 CONFIG_MBEDTLS_KEY_EXCHANGE_RSA=y
