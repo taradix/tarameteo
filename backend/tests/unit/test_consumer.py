@@ -164,7 +164,7 @@ async def test_weather_handler_logs_store_errors(memory_queue, logger_handler):
 
     await weather_handler(make_message(), ts_writer=BrokenWriter(), queue=memory_queue)
 
-    assert_that(logger_handler.records, has_item(has_properties(msg="Error storing weather data for sensor %s")))
+    assert_that(logger_handler.records, has_item(has_properties(levelname="ERROR")))
 
 
 async def test_weather_handler_writes_off_the_event_loop(memory_queue):

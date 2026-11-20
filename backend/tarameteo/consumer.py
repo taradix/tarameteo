@@ -51,9 +51,11 @@ async def weather_handler(
         logger.exception("Error storing weather data for sensor %s", device_id)
         return
 
+    # The firmware leaves rssi out when it has none.
+    rssi = "" if reading.rssi is None else f", RSSI={reading.rssi}dBm"
     logger.info(
-        "Stored weather data for sensor %s: T=%s°C, H=%s%%, P=%shPa, RSSI=%sdBm",
-        device_id, reading.temperature, reading.humidity, reading.pressure, reading.rssi,
+        "Stored weather data for sensor %s: T=%s°C, H=%s%%, P=%shPa%s",
+        device_id, reading.temperature, reading.humidity, reading.pressure, rssi,
     )
 
 
