@@ -40,8 +40,9 @@ test: .pio/libdeps/native/integrity.dat include/config.h
 	@echo "==> Running unit tests..."
 	@$(PIO) test -e native
 
+# Reads the data the last `make test` left in .pio/build/native, like the backend's coverage target.
 .PHONY: coverage
-coverage: test
+coverage:
 	@echo "==> Generating coverage report..."
 	@lcov --ignore-errors inconsistent,inconsistent --capture --directory .pio/build/native --output-file coverage.info
 	@lcov --ignore-errors inconsistent,inconsistent --remove coverage.info '/usr/*' '*/test/*' '*/.pio/*' --output-file coverage.cleaned.info
