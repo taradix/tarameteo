@@ -5,6 +5,7 @@
 
 #ifndef UNIT_TEST
 #include <NimBLEDevice.h>
+#include <atomic>
 #include <cstring>
 
 // Real BLE provisioning transport backed by NimBLE-Arduino v2.
@@ -12,7 +13,8 @@
 // Threading: NimBLE runs its own host task; characteristic write callbacks fire
 // on it. They only copy the payload into member buffers and raise _committed.
 // The main loop calls poll() to consume it. Single writer (BLE task) / single
-// reader (main loop) with a volatile flag — no locks needed.
+// reader (main loop): the release store / acquire load on _committed makes the
+// buffer writes before Commit visible to poll() — no locks needed.
 class NimBLEProvisionerAdapter : public IBleProvisioner {
 public:
   NimBLEProvisionerAdapter() : _committed(false), _lat(0.0f), _lon(0.0f), _statusChar(nullptr) {
@@ -72,13 +74,7 @@ public:
 
   void stop() override { NimBLEDevice::deinit(true); }
 
-  bool poll() override {
-    if (!_committed) {
-      return false;
-    }
-    _committed = false;
-    return true;
-  }
+  bool poll() override { return _committed.exchange(false, std::memory_order_acquire); }
 
   const char *ssid() override { return _ssid; }
   const char *password() override { return _password; }
@@ -116,7 +112,7 @@ private:
       copyString(_label, sizeof(_label), data, len);
       break;
     case Field::Commit:
-      _committed = true;
+      _committed.store(true, std::memory_order_release);
       break;
     }
   }
@@ -148,10 +144,10 @@ private:
   NimBLECharacteristic *_commitChar;
   NimBLECharacteristic *_statusChar;
 
-  char _ssid[32];
+  char _ssid[33]; // 32-byte SSID max + NUL
   char _password[64];
   char _label[64]; // Longer than allowed, so applyProvisioning rejects a long label instead of cutting it
-  volatile bool _committed;
+  std::atomic<bool> _committed;
   float _lat;
   float _lon;
 };

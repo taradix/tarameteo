@@ -246,6 +246,20 @@ void test_ble_provision_rejects_empty_credentials(void) {
   TEST_ASSERT_TRUE(strstr(ble.lastStatus.c_str(), "must not be empty") != NULL);
 }
 
+void test_ble_provision_rejects_failed_location_write(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+  testPrefs.begin("tarameteo_certs", true); // read-only: every put* returns 0
+
+  bool ok = certMgr.applyProvisioning("my-network", "my-password", 45.504f, -73.617f, "Gazebo");
+
+  TEST_ASSERT_FALSE(ok);
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Failed to store location") != NULL);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, certMgr.getLatitude());
+}
+
 void test_ble_provision_location_persists_across_instances(void) {
   seedIdentity();
   {
@@ -328,6 +342,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_ble_provision_valid_payload);
   RUN_TEST(test_ble_provision_rejects_bad_latitude);
   RUN_TEST(test_ble_provision_rejects_empty_credentials);
+  RUN_TEST(test_ble_provision_rejects_failed_location_write);
   RUN_TEST(test_ble_provision_location_persists_across_instances);
   RUN_TEST(test_ble_provision_rejects_bad_label);
   RUN_TEST(test_ble_provision_accepts_utf8_and_empty_labels);

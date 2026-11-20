@@ -227,13 +227,20 @@ bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wif
     return false;
   }
 
-  // Store location and label in NVS
+  // Store location and label in NVS; put* returns 0 bytes written on failure.
+  // NOTE: putString also returns 0 for an empty label, so that write can't be
+  // checked; a failed clear keeps the previous label until reprovisioning.
+  if (_prefs.putFloat("latitude", latitude) == 0 || _prefs.putFloat("longitude", longitude) == 0) {
+    setError("Failed to store location in NVS");
+    return false;
+  }
+  if (_prefs.putString("label", label) == 0 && label[0] != '\0') {
+    setError("Failed to store label in NVS");
+    return false;
+  }
   _latitude = latitude;
   _longitude = longitude;
-  _prefs.putFloat("latitude", _latitude);
-  _prefs.putFloat("longitude", _longitude);
   memcpy(_label, label, strlen(label) + 1); // isValidLabel checked it fits
-  _prefs.putString("label", _label);
 
 #ifndef UNIT_TEST
   if (!_wifiManager || !_wifiManager->storeCredentials(wifiSsid, wifiPassword)) {

@@ -226,14 +226,13 @@ void loop() {
   }
 
   // Read sensor data
-  WeatherData data = {
+  const WeatherData data = {
       sensor.getTemperature(),
       sensor.getPressure(),
       sensor.getHumidity(),
       sensor.getAltitude(),
       wifiManager.getRSSI(),
       timeManager.getCurrentTimestamp(),
-      0, // retryCount will be updated by MQTT client
       certManager.getLatitude(),
       certManager.getLongitude(),
       certManager.getLabel()
@@ -267,9 +266,6 @@ void loop() {
   if (!mqttClient.publishWeatherData(data)) {
     printStatus("Data Publish", false, mqttClient.getLastError());
     Serial.printf("Retry count: %d/%d\n", mqttClient.getRetryCount(), MqttClient::MAX_RETRIES);
-
-    // Store retry count for next attempt
-    data.retryCount = mqttClient.getRetryCount();
   } else {
     printStatus("Data Publish", true);
     Serial.printf("Data published successfully to topic: weather/%s/event\n", certManager.getSensorName());
