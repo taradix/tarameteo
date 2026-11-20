@@ -16,7 +16,6 @@ struct WeatherData {
     float altitude;
     int rssi;
     unsigned long timestamp;
-    int retryCount;
     float latitude;
     float longitude;
     const char* label;  // Empty when the owner gave none
@@ -52,7 +51,7 @@ private:
     WiFiClientSecure _wifiClientSecure;
     PubSubClient _mqttClient;
 
-    bool buildPayload(const WeatherData& data, char* buffer, size_t size);
+    bool buildPayload(const WeatherData& data, int retryCount, char* buffer, size_t size);
     void setError(const char* error);
 };
 

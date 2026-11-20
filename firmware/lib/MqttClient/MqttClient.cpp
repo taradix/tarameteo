@@ -131,16 +131,17 @@ bool MqttClient::publishWeatherData(const WeatherData &data) {
   }
 
   char payload[MQTT_BUFFER_SIZE];
-  if (!buildPayload(data, payload, sizeof(payload))) {
-    setError("Failed to build JSON payload");
-    return false;
-  }
 
-  // Publish with retries
+  // Publish with retries; each attempt reports how many retries preceded it.
   for (_retryCount = 0; _retryCount <= MAX_RETRIES; _retryCount++) {
     if (_retryCount > 0) {
       Serial.printf("Retry attempt %d/%d\n", _retryCount, MAX_RETRIES);
       delay(1000 * _retryCount);
+    }
+
+    if (!buildPayload(data, _retryCount, payload, sizeof(payload))) {
+      setError("Failed to build JSON payload");
+      return false;
     }
 
     bool success = _mqttClient.publish(_topic, payload, false);
@@ -181,7 +182,7 @@ void MqttClient::disconnect() {
   }
 }
 
-bool MqttClient::buildPayload(const WeatherData &data, char *buffer, size_t size) {
+bool MqttClient::buildPayload(const WeatherData &data, int retryCount, char *buffer, size_t size) {
   StaticJsonDocument<MQTT_BUFFER_SIZE> doc;
 
   // The backend parses this payload; keep backend/tests/unit/test_readings.py in sync.
@@ -204,8 +205,8 @@ bool MqttClient::buildPayload(const WeatherData &data, char *buffer, size_t size
     doc["rssi"] = data.rssi;
   }
 
-  if (data.retryCount > 0) {
-    doc["retry_count"] = data.retryCount;
+  if (retryCount > 0) {
+    doc["retry_count"] = retryCount;
   }
 
   size_t len = serializeJson(doc, buffer, size);
