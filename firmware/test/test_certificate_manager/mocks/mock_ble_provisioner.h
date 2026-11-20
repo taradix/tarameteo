@@ -10,11 +10,13 @@ public:
         : beginCalled(false), stopCalled(false), passkey(0), payloadReady(false),
           _lat(0.0f), _lon(0.0f) {}
 
-    bool begin(const char* deviceName, uint32_t pk, const char* label) override {
+    bool begin(const char* deviceName, uint32_t pk, const char* label, float latitude, float longitude) override {
         beginCalled = true;
         deviceNameArg = deviceName ? std::string(deviceName) : std::string();
         passkey = pk;
         _label = label ? label : "";
+        _lat = latitude;
+        _lon = longitude;
         return true;
     }
 
@@ -47,6 +49,13 @@ public:
         _lat = lat;
         _lon = lon;
         _label = label;
+        payloadReady = true;
+    }
+
+    // Test helper: stage WiFi alone, as a client that skips Label and Location.
+    void setWiFiPayload(const char* ssid, const char* password) {
+        _ssid = ssid;
+        _password = password;
         payloadReady = true;
     }
 

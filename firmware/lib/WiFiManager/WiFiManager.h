@@ -7,6 +7,8 @@ class WiFiManager {
 public:
     static constexpr int MAX_RECONNECT_ATTEMPTS = 3;
     static constexpr int RECONNECT_DELAY_MS = 1000;  // 1 second between attempts
+    static constexpr size_t MAX_SSID_BYTES = 32;      // 802.11 limit
+    static constexpr size_t MAX_PASSWORD_BYTES = 64;  // WPA2: 63-character passphrase or 64 hex digits
 
     // Constructor with optional credentials (NULL = load from NVS)
     // This enables "flash once, provision many" for WiFi credentials
@@ -27,13 +29,14 @@ public:
     // Provisioning support
     bool isProvisioned() const;
     bool needsProvisioning() const;
+    // Joins with these credentials without saving them or touching the stored ones.
+    bool tryConnect(const char* ssid, const char* password);
     bool storeCredentials(const char* ssid, const char* password);
-    bool clearCredentials();
     const char* getSSID() const { return _ssid; }
 
 private:
-    char _ssid[33];  // 32-byte SSID max + NUL
-    char _password[64];
+    char _ssid[MAX_SSID_BYTES + 1];
+    char _password[MAX_PASSWORD_BYTES + 1];
     char _lastError[128];
     int _reconnectAttempts;
     Preferences _prefs;
@@ -41,7 +44,7 @@ private:
     int _connectTimeoutMs;
 
     void updateLastError(const char* error);
-    bool attemptConnection();
+    bool attemptConnection(const char* ssid, const char* password);
     bool loadFromNVS();
     bool saveToNVS();
 };

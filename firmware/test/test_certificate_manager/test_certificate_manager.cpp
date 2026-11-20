@@ -1,9 +1,12 @@
+#include <math.h>
 #include <string.h>
+#include <string>
 #include <unity.h>
 
 #ifdef UNIT_TEST
 #include "Arduino.h"
 #include "Preferences.h"
+#include "WiFi.h"
 #include "./mocks/mock_arduino_core.h"
 #include "./mocks/mock_ble_provisioner.h"
 #include "./mocks/mock_wifi_client.h"
@@ -70,6 +73,8 @@ void setUp(void) {
   _mock_millis = 0;
   mockArduino.reset();
   testPrefs.clear();
+  WiFi.setBeginFails(false);
+  WiFi.disconnect();
 }
 
 void tearDown(void) { testPrefs.end(); }
@@ -188,7 +193,18 @@ void test_certificate_manager_load_fails_without_provisioning(void) {
 // Test Cases - BLE Provisioning Transport
 // ========================================
 // These drive the same main-loop sequence the firmware uses (poll ->
-// applyProvisioning -> notifyStatus).
+// "provisioning" -> applyProvisioning -> final status).
+
+bool provision(MockBleProvisioner &ble, CertificateManager &certMgr) {
+  if (!ble.poll()) {
+    ble.notifyStatus("nothing committed");
+    return false;
+  }
+  ble.notifyStatus("provisioning");
+  bool saved = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(), ble.label());
+  ble.notifyStatus(certMgr.getProvisioningStatus());
+  return saved;
+}
 
 void test_ble_provision_valid_payload(void) {
   MockBleProvisioner ble;
@@ -199,33 +215,27 @@ void test_ble_provision_valid_payload(void) {
 
   ble.setPayload("my-network", "my-password", 45.504f, -73.617f);
 
-  TEST_ASSERT_TRUE(ble.poll());
-  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
-                                      ble.label());
-  ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
-
-  TEST_ASSERT_TRUE(ok);
+  TEST_ASSERT_TRUE(provision(ble, certMgr));
   TEST_ASSERT_EQUAL_STRING("ok", ble.lastStatus.c_str());
+  TEST_ASSERT_EQUAL_STRING("my-network", wifiMgr.getSSID());
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLatitude());
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLongitude());
 }
 
-void test_ble_provision_rejects_bad_latitude(void) {
+void test_ble_provision_rejects_bad_location(void) {
   MockBleProvisioner ble;
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
   WiFiManager wifiMgr;
   certMgr.setWiFiManager(&wifiMgr);
 
-  ble.setPayload("my-network", "my-password", 999.0f, -73.617f);
-
-  TEST_ASSERT_TRUE(ble.poll());
-  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
-                                      ble.label());
-  ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
-
-  TEST_ASSERT_FALSE(ok);
-  TEST_ASSERT_TRUE(strstr(ble.lastStatus.c_str(), "Invalid latitude") != NULL);
+  const float bad[][2] = {{999.0f, -73.617f}, {45.504f, -181.0f}, {NAN, -73.617f}, {45.504f, NAN}};
+  for (const auto &location : bad) {
+    ble.setPayload("my-network", "my-password", location[0], location[1]);
+    TEST_ASSERT_FALSE(provision(ble, certMgr));
+    TEST_ASSERT_EQUAL_STRING("error:location", ble.lastStatus.c_str());
+  }
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
 }
 
 void test_ble_provision_rejects_empty_credentials(void) {
@@ -236,14 +246,83 @@ void test_ble_provision_rejects_empty_credentials(void) {
   certMgr.setWiFiManager(&wifiMgr);
 
   ble.setPayload("", "my-password", 45.504f, -73.617f);
+  TEST_ASSERT_FALSE(provision(ble, certMgr));
+  TEST_ASSERT_EQUAL_STRING("error:ssid", ble.lastStatus.c_str());
 
-  TEST_ASSERT_TRUE(ble.poll());
-  bool ok = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
-                                      ble.label());
-  ble.notifyStatus(ok ? "ok" : certMgr.getLastError());
+  ble.setPayload("my-network", "", 45.504f, -73.617f);
+  TEST_ASSERT_FALSE(provision(ble, certMgr));
+  TEST_ASSERT_EQUAL_STRING("error:password", ble.lastStatus.c_str());
+}
 
-  TEST_ASSERT_FALSE(ok);
-  TEST_ASSERT_TRUE(strstr(ble.lastStatus.c_str(), "must not be empty") != NULL);
+void test_ble_provision_credential_lengths(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+
+  const std::string ssid32(32, 's');
+  const std::string password64(64, 'a');
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning(ssid32.c_str(), password64.c_str(), 45.5f, -73.6f, ""));
+  TEST_ASSERT_EQUAL_STRING(ssid32.c_str(), wifiMgr.getSSID());
+
+  TEST_ASSERT_FALSE(certMgr.applyProvisioning((ssid32 + "s").c_str(), "my-password", 45.5f, -73.6f, ""));
+  TEST_ASSERT_EQUAL_STRING("error:ssid", certMgr.getProvisioningStatus());
+  TEST_ASSERT_FALSE(certMgr.applyProvisioning("my-network", (password64 + "a").c_str(), 45.5f, -73.6f, ""));
+  TEST_ASSERT_EQUAL_STRING("error:password", certMgr.getProvisioningStatus());
+  TEST_ASSERT_EQUAL_STRING(ssid32.c_str(), wifiMgr.getSSID());
+}
+
+void test_ble_provision_failed_join_saves_nothing(void) {
+  seedIdentity();
+  MockBleProvisioner ble;
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning("old-network", "old-password", 45.504f, -73.617f, "Gazebo"));
+
+  WiFi.setBeginFails(true);
+  ble.setPayload("new-network", "wrong-password", 10.0f, 20.0f, "Garden");
+  TEST_ASSERT_FALSE(provision(ble, certMgr));
+  TEST_ASSERT_EQUAL_STRING("error:wifi", ble.lastStatus.c_str());
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "timeout") != NULL);
+
+  // The board keeps its working settings, in memory and in NVS.
+  TEST_ASSERT_EQUAL_STRING("old-network", wifiMgr.getSSID());
+  TEST_ASSERT_EQUAL_STRING("Gazebo", certMgr.getLabel());
+  CertificateManager reloaded(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(reloaded.begin());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, reloaded.getLatitude());
+  TEST_ASSERT_EQUAL_STRING("Gazebo", reloaded.getLabel());
+
+  // The client fixes the password and commits again.
+  WiFi.setBeginFails(false);
+  ble.setPayload("new-network", "right-password", 10.0f, 20.0f, "Garden");
+  TEST_ASSERT_TRUE(provision(ble, certMgr));
+  TEST_ASSERT_EQUAL_STRING("ok", ble.lastStatus.c_str());
+  TEST_ASSERT_EQUAL_STRING("new-network", wifiMgr.getSSID());
+}
+
+void test_ble_provision_wifi_only_keeps_location_and_label(void) {
+  seedIdentity();
+  testPrefs.begin("tarameteo_certs", false);
+  testPrefs.putFloat("latitude", 45.504f);
+  testPrefs.putFloat("longitude", -73.617f);
+  testPrefs.putString("label", "Gazebo");
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin());
+  WiFiManager wifiMgr;
+  certMgr.setWiFiManager(&wifiMgr);
+  MockBleProvisioner ble;
+  ble.begin(certMgr.getCN(), certMgr.getPasskey(), certMgr.getLabel(), certMgr.getLatitude(),
+            certMgr.getLongitude());
+
+  ble.setWiFiPayload("new-network", "my-password");
+
+  TEST_ASSERT_TRUE(provision(ble, certMgr));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLatitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLongitude());
+  TEST_ASSERT_EQUAL_STRING("Gazebo", certMgr.getLabel());
 }
 
 void test_ble_provision_rejects_failed_location_write(void) {
@@ -257,7 +336,9 @@ void test_ble_provision_rejects_failed_location_write(void) {
 
   TEST_ASSERT_FALSE(ok);
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Failed to store location") != NULL);
+  TEST_ASSERT_EQUAL_STRING("error:storage", certMgr.getProvisioningStatus());
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, certMgr.getLatitude());
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
 }
 
 void test_ble_provision_location_persists_across_instances(void) {
@@ -294,6 +375,7 @@ void test_ble_provision_rejects_bad_label(void) {
   for (const char *label : bad) {
     TEST_ASSERT_FALSE_MESSAGE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, label), label);
     TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Invalid label") != NULL);
+    TEST_ASSERT_EQUAL_STRING("error:label", certMgr.getProvisioningStatus());
   }
   TEST_ASSERT_EQUAL_STRING("", certMgr.getLabel());
 }
@@ -312,7 +394,6 @@ void test_ble_provision_accepts_utf8_and_empty_labels(void) {
   TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, ""));
   TEST_ASSERT_EQUAL_STRING("", certMgr.getLabel());
 }
-
 void test_ble_poll_empty_when_no_payload(void) {
   MockBleProvisioner ble;
   TEST_ASSERT_FALSE(ble.poll());  // nothing staged -> nothing to consume
@@ -340,9 +421,12 @@ int main(int argc, char **argv) {
 
   // BLE provisioning transport tests
   RUN_TEST(test_ble_provision_valid_payload);
-  RUN_TEST(test_ble_provision_rejects_bad_latitude);
+  RUN_TEST(test_ble_provision_rejects_bad_location);
   RUN_TEST(test_ble_provision_rejects_empty_credentials);
   RUN_TEST(test_ble_provision_rejects_failed_location_write);
+  RUN_TEST(test_ble_provision_credential_lengths);
+  RUN_TEST(test_ble_provision_failed_join_saves_nothing);
+  RUN_TEST(test_ble_provision_wifi_only_keeps_location_and_label);
   RUN_TEST(test_ble_provision_location_persists_across_instances);
   RUN_TEST(test_ble_provision_rejects_bad_label);
   RUN_TEST(test_ble_provision_accepts_utf8_and_empty_labels);
