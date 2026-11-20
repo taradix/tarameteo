@@ -4,7 +4,7 @@
 #include <cstdint>
 
 // GATT contract shared with the mobile provisioning app. One custom 128-bit
-// service, seven characteristics. All writes require an encrypted + authenticated
+// service, six characteristics. All writes require an encrypted + authenticated
 // link (static-passkey pairing), so the WiFi password never crosses in clear.
 //
 // Field characteristics are single-write (each fits one MTU); the client writes
@@ -23,21 +23,23 @@ constexpr const char *LABEL = "6d5a0007-8b6e-4b3a-9c1d-2f7a5e0c1a01";  // Read +
 } // namespace BleProvisioningUUID
 
 // Transport for BLE provisioning. NimBLE write callbacks run on their own task,
-// so the adapter buffers a single payload and the main loop drains it via poll()
-// — keeps provisioning single-threaded, matching the old HTTP flow.
+// so the adapter buffers a single payload and the main loop drains it via poll(),
+// which keeps provisioning single-threaded.
 class IBleProvisioner {
 public:
   virtual ~IBleProvisioner() = default;
 
   // Start advertising under deviceName, requiring the static passkey to pair.
   // label and location are the current ones: the client can read the label to
-  // prefill it, and a payload without Label or Location keeps them.
+  // prefill it, and a payload without Label or Location keeps them. Returns
+  // false when the BLE stack or advertising fails to start.
   virtual bool begin(const char *deviceName, uint32_t passkey, const char *label, float latitude,
                      float longitude) = 0;
   virtual void stop() = 0;
 
-  // Returns true once Commit has been received with a full payload. The
-  // ssid()/password()/latitude()/longitude()/label() getters are valid after that.
+  // Returns true once per Commit write, whatever the fields hold: the getters
+  // then return the last values written (begin()'s label and location for
+  // fields the client skipped), and applyProvisioning validates them.
   virtual bool poll() = 0;
   virtual const char *ssid() = 0;
   virtual const char *password() = 0;

@@ -5,12 +5,9 @@
 
 class TimeManager {
 public:
-    TimeManager(int ntpTimeoutMs, unsigned long syncIntervalMs);
+    explicit TimeManager(unsigned long ntpTimeoutMs);
 
-    // Initialize time manager
-    bool begin();
-
-    // Sync time with NTP servers
+    // Start SNTP and wait up to ntpTimeoutMs for the clock to be set
     bool syncTime();
 
     // Get current Unix timestamp
@@ -27,13 +24,10 @@ public:
 
 private:
     bool _timeSynced;
-    unsigned long _lastSyncTime;
     char _lastError[128];
-    int _ntpTimeoutMs;
-    unsigned long _syncIntervalMs;
+    unsigned long _ntpTimeoutMs;
 
     void setError(const char* error);
-    bool syncTimeWithNTP();
 };
 
 #endif // TIME_MANAGER_H

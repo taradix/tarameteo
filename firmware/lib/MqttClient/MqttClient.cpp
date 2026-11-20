@@ -4,7 +4,7 @@
 #include <WiFi.h>
 
 MqttClient::MqttClient(const char *server, int port, CertificateManager *certManager)
-    : _server(server), _port(port), _certManager(certManager), _retryCount(0), _mqttClient(_wifiClientSecure) {
+    : _server(server), _port(port), _certManager(certManager), _mqttClient(_wifiClientSecure) {
 
   _lastError[0] = '\0';
 
@@ -27,7 +27,7 @@ bool MqttClient::begin() {
   Serial.println("MqttClient: mTLS certificates loaded successfully");
 
   // Initialize topics using sensor name from certificate CN
-  const char *sensorName = _certManager->getSensorName();
+  const char *sensorName = _certManager->getCN();
   if (sensorName && strlen(sensorName) > 0) {
     snprintf(_topic, sizeof(_topic), "weather/%s/event", sensorName);
     snprintf(_clientId, sizeof(_clientId), "tarameteo-%s", sensorName);
@@ -121,8 +121,6 @@ bool MqttClient::connect() {
 bool MqttClient::isConnected() { return _mqttClient.connected(); }
 
 bool MqttClient::publishWeatherData(const WeatherData &data) {
-  _retryCount = 0;
-
   if (!isConnected()) {
     if (!connect()) {
       return false;
@@ -132,13 +130,13 @@ bool MqttClient::publishWeatherData(const WeatherData &data) {
   char payload[MQTT_BUFFER_SIZE];
 
   // Publish with retries; each attempt reports how many retries preceded it.
-  for (_retryCount = 0; _retryCount <= MAX_RETRIES; _retryCount++) {
-    if (_retryCount > 0) {
-      Serial.printf("Retry attempt %d/%d\n", _retryCount, MAX_RETRIES);
-      delay(1000 * _retryCount);
+  for (int retryCount = 0; retryCount <= MAX_RETRIES; retryCount++) {
+    if (retryCount > 0) {
+      Serial.printf("Retry attempt %d/%d\n", retryCount, MAX_RETRIES);
+      delay(1000 * retryCount);
     }
 
-    if (!buildPayload(data, _retryCount, payload, sizeof(payload))) {
+    if (!buildPayload(data, retryCount, payload, sizeof(payload))) {
       setError("Failed to build JSON payload");
       return false;
     }

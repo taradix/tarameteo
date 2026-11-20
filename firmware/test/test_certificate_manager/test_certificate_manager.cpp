@@ -46,6 +46,9 @@ const char *CA_CERT_PEM = "-----BEGIN CERTIFICATE-----\n"
 
 const char *INVALID_CERT = "This is not a certificate";
 
+// Elapses on the mock clock, which delay() advances.
+const int WIFI_TIMEOUT_MS = 30000;
+
 // Global test fixtures
 Preferences testPrefs;
 MockArduino mockArduino;
@@ -103,7 +106,6 @@ void test_certificate_manager_begin_with_factory_identity(void) {
   TEST_ASSERT_TRUE(result);
   TEST_ASSERT_TRUE(certMgr.isProvisioned());
   TEST_ASSERT_EQUAL_STRING("station-01", certMgr.getCN());
-  TEST_ASSERT_EQUAL_STRING("station-01", certMgr.getSensorName());
   TEST_ASSERT_EQUAL_UINT32(123456, certMgr.getPasskey());
 }
 
@@ -210,7 +212,7 @@ void test_ble_provision_valid_payload(void) {
   MockBleProvisioner ble;
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   ble.setPayload("my-network", "my-password", 45.504f, -73.617f);
@@ -226,7 +228,7 @@ void test_ble_provision_rejects_bad_location(void) {
   MockBleProvisioner ble;
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   const float bad[][2] = {{999.0f, -73.617f}, {45.504f, -181.0f}, {NAN, -73.617f}, {45.504f, NAN}};
@@ -242,7 +244,7 @@ void test_ble_provision_rejects_empty_credentials(void) {
   MockBleProvisioner ble;
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   ble.setPayload("", "my-password", 45.504f, -73.617f);
@@ -257,7 +259,7 @@ void test_ble_provision_rejects_empty_credentials(void) {
 void test_ble_provision_credential_lengths(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   const std::string ssid32(32, 's');
@@ -277,7 +279,7 @@ void test_ble_provision_failed_join_saves_nothing(void) {
   MockBleProvisioner ble;
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
   TEST_ASSERT_TRUE(certMgr.applyProvisioning("old-network", "old-password", 45.504f, -73.617f, "Gazebo"));
 
@@ -311,7 +313,7 @@ void test_ble_provision_wifi_only_keeps_location_and_label(void) {
   testPrefs.putString("label", "Gazebo");
   CertificateManager certMgr(testPrefs, &mockArduino);
   TEST_ASSERT_TRUE(certMgr.begin());
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
   MockBleProvisioner ble;
   ble.begin(certMgr.getCN(), certMgr.getPasskey(), certMgr.getLabel(), certMgr.getLatitude(),
@@ -328,7 +330,7 @@ void test_ble_provision_wifi_only_keeps_location_and_label(void) {
 void test_ble_provision_rejects_failed_location_write(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
   testPrefs.begin("tarameteo_certs", true); // read-only: every put* returns 0
 
@@ -341,12 +343,36 @@ void test_ble_provision_rejects_failed_location_write(void) {
   TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
 }
 
+void test_ble_provision_rejects_failed_label_write(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  certMgr.begin();
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  testPrefs.failWritesTo("label");
+
+  bool ok = certMgr.applyProvisioning("my-network", "my-password", 45.504f, -73.617f, "Gazebo");
+
+  TEST_ASSERT_FALSE(ok);
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Failed to store label") != NULL);
+  TEST_ASSERT_EQUAL_STRING("error:storage", certMgr.getProvisioningStatus());
+  TEST_ASSERT_EQUAL_STRING("", certMgr.getLabel());
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+}
+
+void test_wifi_reconnect_reports_every_attempt(void) {
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  WiFi.setBeginFails(true);
+
+  TEST_ASSERT_FALSE(wifiMgr.reconnect());
+  TEST_ASSERT_EQUAL_STRING("Failed to reconnect after 3 attempts", wifiMgr.getLastError());
+}
+
 void test_ble_provision_location_persists_across_instances(void) {
   seedIdentity();
   {
     CertificateManager certMgr1(testPrefs, &mockArduino);
     certMgr1.begin();
-    WiFiManager wifiMgr;
+    WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
     certMgr1.setWiFiManager(&wifiMgr);
 
     TEST_ASSERT_TRUE(certMgr1.applyProvisioning("my-network", "my-password", 45.504f, -73.617f, "Gazebo"));
@@ -363,7 +389,7 @@ void test_ble_provision_location_persists_across_instances(void) {
 void test_ble_provision_rejects_bad_label(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   const char *bad[] = {
@@ -383,7 +409,7 @@ void test_ble_provision_rejects_bad_label(void) {
 void test_ble_provision_accepts_utf8_and_empty_labels(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
   certMgr.begin();
-  WiFiManager wifiMgr;
+  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   // 16 two-byte characters: 32 bytes, the most there is room for.
@@ -393,10 +419,6 @@ void test_ble_provision_accepts_utf8_and_empty_labels(void) {
   TEST_ASSERT_EQUAL_STRING("Abri 🌧", certMgr.getLabel());
   TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, ""));
   TEST_ASSERT_EQUAL_STRING("", certMgr.getLabel());
-}
-void test_ble_poll_empty_when_no_payload(void) {
-  MockBleProvisioner ble;
-  TEST_ASSERT_FALSE(ble.poll());  // nothing staged -> nothing to consume
 }
 
 // ========================================
@@ -424,13 +446,16 @@ int main(int argc, char **argv) {
   RUN_TEST(test_ble_provision_rejects_bad_location);
   RUN_TEST(test_ble_provision_rejects_empty_credentials);
   RUN_TEST(test_ble_provision_rejects_failed_location_write);
+  RUN_TEST(test_ble_provision_rejects_failed_label_write);
   RUN_TEST(test_ble_provision_credential_lengths);
   RUN_TEST(test_ble_provision_failed_join_saves_nothing);
   RUN_TEST(test_ble_provision_wifi_only_keeps_location_and_label);
   RUN_TEST(test_ble_provision_location_persists_across_instances);
   RUN_TEST(test_ble_provision_rejects_bad_label);
   RUN_TEST(test_ble_provision_accepts_utf8_and_empty_labels);
-  RUN_TEST(test_ble_poll_empty_when_no_payload);
+
+  // WiFi manager tests
+  RUN_TEST(test_wifi_reconnect_reports_every_attempt);
 
   return UNITY_END();
 }

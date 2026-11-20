@@ -129,36 +129,6 @@ public:
         return true;
     }
 
-    // Access Point (softAP) methods
-    bool softAPConfig(IPAddress local_ip, IPAddress gateway, IPAddress subnet) {
-        (void)local_ip;
-        (void)gateway;
-        (void)subnet;
-        return true;
-    }
-
-    bool softAP(const char* ssid, const char* password = nullptr, int channel = 1, int ssid_hidden = 0, int max_connection = 4) {
-        (void)ssid;
-        (void)password;
-        (void)channel;
-        (void)ssid_hidden;
-        (void)max_connection;
-        return true;
-    }
-
-    IPAddress softAPIP() const {
-        return IPAddress(192, 168, 4, 1);
-    }
-
-    uint8_t softAPgetStationNum() const {
-        return 0;
-    }
-
-    bool softAPdisconnect(bool wifioff = false) {
-        (void)wifioff;
-        return true;
-    }
-
     // DNS
     bool hostByName(const char* hostname, IPAddress& result) {
         (void)hostname;

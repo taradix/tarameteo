@@ -6,21 +6,18 @@
 
 class MockBleProvisioner : public IBleProvisioner {
 public:
-    MockBleProvisioner()
-        : beginCalled(false), stopCalled(false), passkey(0), payloadReady(false),
-          _lat(0.0f), _lon(0.0f) {}
+    MockBleProvisioner() : payloadReady(false), _lat(0.0f), _lon(0.0f) {}
 
-    bool begin(const char* deviceName, uint32_t pk, const char* label, float latitude, float longitude) override {
-        beginCalled = true;
-        deviceNameArg = deviceName ? std::string(deviceName) : std::string();
-        passkey = pk;
+    bool begin(const char* deviceName, uint32_t passkey, const char* label, float latitude, float longitude) override {
+        (void)deviceName;
+        (void)passkey;
         _label = label ? label : "";
         _lat = latitude;
         _lon = longitude;
         return true;
     }
 
-    void stop() override { stopCalled = true; }
+    void stop() override {}
 
     // Drains the buffered payload exactly once, like the real adapter clearing
     // its ready flag after the main loop consumes a Commit.
@@ -59,10 +56,6 @@ public:
         payloadReady = true;
     }
 
-    bool beginCalled;
-    bool stopCalled;
-    std::string deviceNameArg;
-    uint32_t passkey;
     bool payloadReady;
     std::string lastStatus;
 

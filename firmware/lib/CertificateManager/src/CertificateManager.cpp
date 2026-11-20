@@ -209,10 +209,10 @@ bool CertificateManager::extractCNFromCert(const char *certPem) {
 // persists it. On failure sets _lastError and _provisioningStatus and returns false.
 bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wifiPassword, float latitude,
                                            float longitude, const char *label) {
-  if (!wifiSsid || strlen(wifiSsid) == 0 || strlen(wifiSsid) > WiFiManager::MAX_SSID_BYTES) {
+  if (!WiFiManager::isValidSsid(wifiSsid)) {
     return rejectProvisioning("error:ssid", "Invalid WiFi SSID: 1 to 32 bytes");
   }
-  if (!wifiPassword || strlen(wifiPassword) == 0 || strlen(wifiPassword) > WiFiManager::MAX_PASSWORD_BYTES) {
+  if (!WiFiManager::isValidPassword(wifiPassword)) {
     return rejectProvisioning("error:password", "Invalid WiFi password: 1 to 64 bytes");
   }
   // Written so NaN fails too

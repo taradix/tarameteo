@@ -36,14 +36,12 @@ public:
     bool publishWeatherData(const WeatherData& data);
     void disconnect();
     const char* getLastError() const { return _lastError; }
-    int getRetryCount() const { return _retryCount; }
 
 private:
     const char* _server;
     int _port;
     CertificateManager* _certManager;
     char _lastError[128];
-    int _retryCount;
     char _topic[64];
     char _clientId[32];
     char _lwTopic[64];
