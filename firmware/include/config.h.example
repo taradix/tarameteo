@@ -21,9 +21,5 @@
 
 // Advanced Settings
 #define WIFI_TIMEOUT_MS     30000  // 30 seconds
-#define WIFI_MAX_RETRIES    3
-
-#define MQTT_KEEPALIVE      60
-#define MQTT_TIMEOUT_MS     10000  // 10 seconds
 
 #endif // CONFIG_H

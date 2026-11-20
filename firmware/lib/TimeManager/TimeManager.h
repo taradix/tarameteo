@@ -6,25 +6,22 @@
 class TimeManager {
 public:
     TimeManager(int ntpTimeoutMs, unsigned long syncIntervalMs);
-    
+
     // Initialize time manager
     bool begin();
-    
+
     // Sync time with NTP servers
     bool syncTime();
-    
+
     // Get current Unix timestamp
     unsigned long getCurrentTimestamp();
-    
+
     // Get formatted date/time string
     bool getFormattedTime(char* buffer, size_t bufferSize, const char* format = "%Y-%m-%d %H:%M:%S");
-    
+
     // Check if time is synced
     bool isTimeSynced() const { return _timeSynced; }
-    
-    // Get last sync time
-    unsigned long getLastSyncTime() const { return _lastSyncTime; }
-    
+
     // Get last error message
     const char* getLastError() const { return _lastError; }
 
@@ -34,9 +31,9 @@ private:
     char _lastError[128];
     int _ntpTimeoutMs;
     unsigned long _syncIntervalMs;
-    
-    void updateLastError(const char* error);
+
+    void setError(const char* error);
     bool syncTimeWithNTP();
 };
 
-#endif 
+#endif // TIME_MANAGER_H

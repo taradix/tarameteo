@@ -1,5 +1,8 @@
 #include "TimeManager.h"
-#include <WiFiUdp.h>
+#include <Arduino.h>
+
+// 2020-01-01T00:00:00Z: the backend treats earlier timestamps as unsynced.
+static constexpr time_t MIN_VALID_EPOCH = 1577836800;
 
 TimeManager::TimeManager(int ntpTimeoutMs, unsigned long syncIntervalMs)
     : _timeSynced(false), _lastSyncTime(0), _ntpTimeoutMs(ntpTimeoutMs), _syncIntervalMs(syncIntervalMs) {
@@ -22,14 +25,11 @@ bool TimeManager::syncTime() {
 }
 
 bool TimeManager::syncTimeWithNTP() {
-  // Configure time (in case begin() wasn't called)
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-
-  // Wait for time to be set
+  // Wait for the SNTP client started in begin() to set the clock
   unsigned long startTime = millis();
-  while (time(nullptr) < 24 * 3600) { // Wait until we get a valid time (after 1970)
+  while (time(nullptr) < MIN_VALID_EPOCH) {
     if (millis() - startTime > _ntpTimeoutMs) {
-      updateLastError("NTP sync timeout");
+      setError("NTP sync timeout");
       return false;
     }
     delay(100);
@@ -64,7 +64,7 @@ bool TimeManager::getFormattedTime(char *buffer, size_t bufferSize, const char *
   return strftime(buffer, bufferSize, format, timeinfo) > 0;
 }
 
-void TimeManager::updateLastError(const char *error) {
+void TimeManager::setError(const char *error) {
   strncpy(_lastError, error, sizeof(_lastError) - 1);
   _lastError[sizeof(_lastError) - 1] = '\0';
 }

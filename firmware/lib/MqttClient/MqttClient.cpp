@@ -76,33 +76,32 @@ bool MqttClient::connect() {
                                        lwMessage);
 
   if (!connected) {
-    int state = _mqttClient.state();
-    switch (state) {
-    case -4:
+    switch (_mqttClient.state()) {
+    case MQTT_CONNECTION_TIMEOUT:
       setError("Connection timeout");
       break;
-    case -3:
+    case MQTT_CONNECTION_LOST:
       setError("Connection lost");
       break;
-    case -2:
+    case MQTT_CONNECT_FAILED:
       setError("Connect failed");
       break;
-    case -1:
+    case MQTT_DISCONNECTED:
       setError("Disconnected");
       break;
-    case 1:
+    case MQTT_CONNECT_BAD_PROTOCOL:
       setError("Bad protocol");
       break;
-    case 2:
+    case MQTT_CONNECT_BAD_CLIENT_ID:
       setError("Bad client ID");
       break;
-    case 3:
+    case MQTT_CONNECT_UNAVAILABLE:
       setError("Unavailable");
       break;
-    case 4:
+    case MQTT_CONNECT_BAD_CREDENTIALS:
       setError("Bad credentials (mTLS cert issue?)");
       break;
-    case 5:
+    case MQTT_CONNECT_UNAUTHORIZED:
       setError("Unauthorized (mTLS cert not accepted)");
       break;
     default:

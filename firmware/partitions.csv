@@ -1,4 +1,4 @@
-# Dual-OTA layout for the 4MB XIAO ESP32C3. Pinned now so BLE OTA (Phase 2) can
+# Dual-OTA layout for the 4MB XIAO ESP32C3. Pinned now so a future BLE OTA can
 # ship without re-flashing deployed devices. Copied from Arduino-ESP32 stock
 # min_spiffs.csv — two 1.875MB app slots. Preserves nvs (tarameteo_wifi/tarameteo_certs).
 # Name,     Type, SubType,  Offset,   Size,     Flags

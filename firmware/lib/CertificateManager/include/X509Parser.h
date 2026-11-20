@@ -12,8 +12,6 @@
  */
 class X509Parser {
 public:
-    static const int MAX_CN_LENGTH = 64;
-
     /**
      * @brief Extract the Common Name (CN) from a PEM certificate
      *
