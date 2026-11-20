@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { keepPreviousData, useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  keepPreviousData, useQueries, useQuery, useQueryClient, type Query, type UseQueryResult,
+} from "@tanstack/react-query";
 import { api, type SensorFilter } from "../api";
 import type { SensorRef, WeatherReading } from "../types";
 
@@ -49,40 +51,46 @@ function combine<T>(results: UseQueryResult<T[]>[]) {
   };
 }
 
+const rangeKey = (prefix: string, name: string, start: string, end: Date | null) =>
+  end ? [prefix, name, start, end.toISOString()] : [prefix, name, start];
+
 // One query per sensor over [start, end), or [start, now) when end is null.
+// Polling stops after the first fetch past end: a range that has ended doesn't
+// change, but one ending in the future still fills in.
 function useRangeQueries<T>(
   prefix: string,
   fetcher: (name: string, start: string, end?: string) => Promise<T[]>,
   sensors: SensorRef[],
   start: string,
   end: Date | null,
-  refetchInterval: number | false,
+  poll: boolean,
 ) {
   return useQueries({
     queries: sensors.map((s) => ({
-      queryKey: end ? [prefix, s.name, start, end.toISOString()] : [prefix, s.name, start],
+      queryKey: rangeKey(prefix, s.name, start, end),
       queryFn: () => fetcher(s.name, start, end?.toISOString()),
-      refetchInterval,
+      refetchInterval: (query: Query<T[]>) =>
+        poll && (end === null || query.state.dataUpdatedAt <= end.getTime()) ? REFETCH_MS : false,
     })),
     combine: combine<T>,
   });
 }
 
-// end=null means live mode. A closed range doesn't change, so it's fetched once.
-// Live timeseries stream new readings; aggregates only poll, since their stream
-// repeats the day in progress each hour and appending it would chart that day twice.
+// end=null means live mode. Live timeseries stream new readings into their
+// query; aggregates poll instead, since their stream repeats the day in progress
+// each hour and appending it would chart that day twice.
 export function useWeather(sensors: SensorRef[], start: string, end: Date | null) {
+  const queryClient = useQueryClient();
   const live = end === null;
   const tsSensors = useMemo(() => sensors.filter((s) => s.kind === "timeseries"), [sensors]);
   const aggSensors = useMemo(() => sensors.filter((s) => s.kind === "aggregate"), [sensors]);
 
-  const ts = useRangeQueries("weather", api.getWeather, tsSensors, start, end, false);
-  const agg = useRangeQueries("weather_aggregate", api.getWeatherAggregate, aggSensors, start, end, live && REFETCH_MS);
+  const ts = useRangeQueries("weather", api.getWeather, tsSensors, start, end, !live);
+  const agg = useRangeQueries("weather_aggregate", api.getWeatherAggregate, aggSensors, start, end, true);
 
-  const [liveReadings, setLiveReadings] = useState<WeatherReading[]>([]);
-
-  // Restarts, dropping the streamed readings, whenever the range moves: the
-  // refetched range already holds them.
+  // Streamed readings live in each sensor's cached range, so restarting the
+  // streams when a sensor is added keeps the others', and moving the range
+  // drops them with its old query.
   // NOTE: a live preset's start doesn't slide with time, so a tab left open for
   // days keeps every streamed reading; recompute start on a timer if that matters.
   useEffect(() => {
@@ -99,21 +107,19 @@ export function useWeather(sensors: SensorRef[], start: string, end: Date | null
         } catch {
           return;
         }
-        setLiveReadings((prev) => [...prev, reading]);
+        queryClient.setQueryData<WeatherReading[]>(
+          rangeKey("weather", s.name, start, null),
+          (prev) => [...(prev ?? []), reading],
+        );
       };
       return es;
     });
 
-    return () => {
-      sources.forEach((es) => es.close());
-      setLiveReadings([]);
-    };
-  }, [tsSensors, live, start]);
-
-  const readings = useMemo(() => [...ts.data, ...liveReadings], [ts.data, liveReadings]);
+    return () => sources.forEach((es) => es.close());
+  }, [queryClient, tsSensors, live, start]);
 
   return {
-    readings,
+    readings: ts.data,
     aggregates: agg.data,
     isLoading: ts.isLoading || agg.isLoading,
     error: ts.error ?? agg.error,

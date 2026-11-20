@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useSensorList, useSensorSearch, useWeather } from "./useSensors";
 import { queryWrapper, stubEventSource, stubFetch } from "../test/utils";
@@ -83,7 +83,7 @@ describe("useWeather", () => {
       sources[0].onmessage?.(new MessageEvent("message", { data: "not json" }));
       sources[0].emit(reading("ts", "t2"));
     });
-    expect(result.current.readings).toEqual([reading("ts", "t1"), reading("ts", "t2")]);
+    await waitFor(() => expect(result.current.readings).toEqual([reading("ts", "t1"), reading("ts", "t2")]));
 
     unmount();
     expect(sources.every((s) => s.closed)).toBe(true);
@@ -96,8 +96,9 @@ describe("useWeather", () => {
       wrapper: queryWrapper(),
       initialProps: { start: "a" },
     });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
     act(() => sources[0].emit(reading("ts", "t1")));
-    expect(result.current.readings).toHaveLength(1);
+    await waitFor(() => expect(result.current.readings).toHaveLength(1));
 
     rerender({ start: "b" });
     expect(result.current.readings).toEqual([]);
@@ -105,10 +106,66 @@ describe("useWeather", () => {
     expect(sources).toHaveLength(2);
   });
 
+  it("keeps streamed readings when a sensor is added", async () => {
+    stubFetch({ "/api/sensors/ts/weather": [], "/api/sensors/ts2/weather": [] });
+    const sources = stubEventSource();
+    const { result, rerender } = renderHook(({ picked }) => useWeather(picked, "start", null), {
+      wrapper: queryWrapper(),
+      initialProps: { picked: [sensors[0]] },
+    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    act(() => sources[0].emit(reading("ts", "t1")));
+    await waitFor(() => expect(result.current.readings).toHaveLength(1));
+
+    rerender({ picked: [sensors[0], { name: "ts2", kind: "timeseries" }] });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.readings).toEqual([reading("ts", "t1")]);
+  });
+
   it("does not stream without sensors", () => {
     stubFetch({});
     const sources = stubEventSource();
     renderHook(() => useWeather([], "start", null), { wrapper: queryWrapper() });
     expect(sources).toHaveLength(0);
+  });
+});
+
+describe("useWeather polling", () => {
+  const NOW = new Date("2026-01-02T12:00:00Z");
+  const POLL_MS = 30_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Paths fetched within ms of rendering, without their query strings.
+  async function fetchedAfter(ms: number, end: Date | null) {
+    const fetch = stubFetch({ "/api/sensors/ts/weather": [], "/api/sensors/agg/weather/aggregate": [] });
+    stubEventSource();
+    renderHook(() => useWeather(sensors, "2026-01-01T00:00:00Z", end), { wrapper: queryWrapper() });
+    await vi.advanceTimersByTimeAsync(ms);
+    return fetch.mock.calls.map(([url]) => String(url).split("?")[0]);
+  }
+
+  it("polls only aggregates in live mode, since timeseries stream", async () => {
+    const fetched = await fetchedAfter(POLL_MS, null);
+    expect(fetched.filter((p) => p.endsWith("/aggregate"))).toHaveLength(2);
+    expect(fetched.filter((p) => p.endsWith("/ts/weather"))).toHaveLength(1);
+  });
+
+  it("polls a range ending in the future until one fetch past its end", async () => {
+    const fetched = await fetchedAfter(3 * POLL_MS, new Date(NOW.getTime() + POLL_MS / 2));
+    expect(fetched).toHaveLength(4);
+  });
+
+  it("fetches an ended range once", async () => {
+    const fetched = await fetchedAfter(POLL_MS, new Date("2026-01-02T00:00:00Z"));
+    expect(fetched).toHaveLength(2);
   });
 });
