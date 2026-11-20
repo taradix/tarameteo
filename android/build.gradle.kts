@@ -15,7 +15,12 @@ val keystore = providers.gradleProperty("releaseKeystore").orNull
 
 android {
     namespace = "ca.taram.meteo"
-    compileSdk = 37
+    // Compose 1.13 needs the 37.1 APIs; compileSdk only changes which APIs the build sees.
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
 
     defaultConfig {
         applicationId = "ca.taram.meteo"
