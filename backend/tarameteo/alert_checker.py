@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 from attrs import define
 
@@ -33,6 +34,14 @@ ALERT_MANAGE_EXPIRY = timedelta(days=7)
 MANAGE_EXPIRY = timedelta(hours=1)
 
 
+class Action(StrEnum):
+    """What an email link does: its path under /api/alerts/, and the action its token is signed for."""
+
+    confirm = "confirm"
+    unsubscribe = "unsubscribe"
+    manage = "manage"
+
+
 def _crossed(value: float, alert: Alert) -> bool:
     return value > alert.threshold if alert.condition == Condition.above else value < alert.threshold
 
@@ -61,21 +70,21 @@ class AlertService:
     base_url: str
     push: Notifier | None = None
 
-    def _url(self, action: str, payload: dict, expires_in: timedelta | None = None) -> str:
+    def _url(self, action: Action, payload: dict, expires_in: timedelta | None = None) -> str:
         token = sign_token({**payload, "action": action}, self.secret, expires_in=expires_in and expires_in.total_seconds())
         return f"{self.base_url}/api/alerts/{action}/{token}"
 
-    def verify(self, token: str, action: str) -> dict | None:
+    def verify(self, token: str, action: Action) -> dict | None:
         """The token's payload, if it's valid and signed for this action."""
         payload = verify_token(token, self.secret)
         return payload if payload and payload.get("action") == action else None
 
     async def send_confirm(self, alert: Alert, label: str | None = None) -> None:
-        url = self._url("confirm", {"alert_id": alert.id}, CONFIRM_EXPIRY)
+        url = self._url(Action.confirm, {"alert_id": alert.id}, CONFIRM_EXPIRY)
         await self.notifier.send(alert.email, *alert_text.email(alert, "confirm", url, label=label))
 
     async def send_manage(self, email: str, language: str) -> None:
-        url = self._url("manage", {"email": email.lower(), "language": language}, MANAGE_EXPIRY)
+        url = self._url(Action.manage, {"email": email.lower(), "language": language}, MANAGE_EXPIRY)
         text = alert_text.TEXT[language]
         await self.notifier.send(email, text["manage_subject"], text["manage_body"].format(url=url))
 
@@ -89,8 +98,8 @@ class AlertService:
             subject, body = alert_text.push(alert, key, value, label)
         else:
             notifier, recipient = self.notifier, alert.email
-            url = self._url("unsubscribe", {"alert_id": alert.id})
-            manage = self._url("manage", {"email": who.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
+            url = self._url(Action.unsubscribe, {"alert_id": alert.id})
+            manage = self._url(Action.manage, {"email": who.lower(), "language": alert.language}, ALERT_MANAGE_EXPIRY)
             subject, body = alert_text.email(alert, key, url, value, manage, label)
             # One-click unsubscribe (RFC 8058): the mail client POSTs to the URL.
             headers = {"List-Unsubscribe": f"<{url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
