@@ -7,15 +7,14 @@
 
 #ifdef UNIT_TEST
 #include "Arduino.h"
-// Forward declaration for unit tests
-class WiFiManager;
+#include "../../WiFiManager/WiFiManager.h"
 #else
 #include "WiFiManager.h"
 #endif
 
 CertificateManager::CertificateManager(Preferences &prefs, IArduino *arduino)
-    : _passkey(0), _latitude(0.0f), _longitude(0.0f), _prefs(prefs), _arduino(arduino), _wifiManager(nullptr),
-      _clientCert(nullptr), _clientKey(nullptr), _caCert(nullptr) {
+    : _provisioningStatus("idle"), _passkey(0), _latitude(0.0f), _longitude(0.0f), _prefs(prefs), _arduino(arduino),
+      _wifiManager(nullptr), _clientCert(nullptr), _clientKey(nullptr), _caCert(nullptr) {
   _lastError[0] = '\0';
   _cn[0] = '\0';
   _label[0] = '\0';
@@ -206,57 +205,61 @@ bool CertificateManager::extractCNFromCert(const char *certPem) {
   return true;
 }
 
-// Validates and persists what the BLE transport received. On failure sets
-// _lastError and returns false.
+// Validates what the BLE transport received, joins the WiFi with it, then
+// persists it. On failure sets _lastError and _provisioningStatus and returns false.
 bool CertificateManager::applyProvisioning(const char *wifiSsid, const char *wifiPassword, float latitude,
                                            float longitude, const char *label) {
-  if (!wifiSsid || !wifiPassword || strlen(wifiSsid) == 0 || strlen(wifiPassword) == 0) {
-    setError("WiFi SSID and password must not be empty");
-    return false;
+  if (!wifiSsid || strlen(wifiSsid) == 0 || strlen(wifiSsid) > WiFiManager::MAX_SSID_BYTES) {
+    return rejectProvisioning("error:ssid", "Invalid WiFi SSID: 1 to 32 bytes");
   }
-  if (latitude < -90.0f || latitude > 90.0f) {
-    setError("Invalid latitude: must be between -90 and 90");
-    return false;
+  if (!wifiPassword || strlen(wifiPassword) == 0 || strlen(wifiPassword) > WiFiManager::MAX_PASSWORD_BYTES) {
+    return rejectProvisioning("error:password", "Invalid WiFi password: 1 to 64 bytes");
   }
-  if (longitude < -180.0f || longitude > 180.0f) {
-    setError("Invalid longitude: must be between -180 and 180");
-    return false;
+  // Written so NaN fails too
+  if (!(latitude >= -90.0f && latitude <= 90.0f)) {
+    return rejectProvisioning("error:location", "Invalid latitude: must be between -90 and 90");
+  }
+  if (!(longitude >= -180.0f && longitude <= 180.0f)) {
+    return rejectProvisioning("error:location", "Invalid longitude: must be between -180 and 180");
   }
   if (!isValidLabel(label)) {
-    setError("Invalid label: at most 32 bytes of UTF-8, no control characters");
-    return false;
+    return rejectProvisioning("error:label", "Invalid label: at most 32 bytes of UTF-8, no control characters");
+  }
+  if (!_wifiManager) {
+    return rejectProvisioning("error:wifi", "WiFi manager not available");
+  }
+
+  // Join before saving anything, so a typo in the password can't lock the board out.
+  if (!_wifiManager->tryConnect(wifiSsid, wifiPassword)) {
+    return rejectProvisioning("error:wifi", _wifiManager->getLastError());
   }
 
   // Store location and label in NVS; put* returns 0 bytes written on failure.
   // NOTE: putString also returns 0 for an empty label, so that write can't be
   // checked; a failed clear keeps the previous label until reprovisioning.
   if (_prefs.putFloat("latitude", latitude) == 0 || _prefs.putFloat("longitude", longitude) == 0) {
-    setError("Failed to store location in NVS");
-    return false;
+    return rejectProvisioning("error:storage", "Failed to store location in NVS");
   }
   if (_prefs.putString("label", label) == 0 && label[0] != '\0') {
-    setError("Failed to store label in NVS");
-    return false;
+    return rejectProvisioning("error:storage", "Failed to store label in NVS");
+  }
+  // Credentials last: they end the provisioning window on the next boot.
+  if (!_wifiManager->storeCredentials(wifiSsid, wifiPassword)) {
+    return rejectProvisioning("error:storage", _wifiManager->getLastError());
   }
   _latitude = latitude;
   _longitude = longitude;
   memcpy(_label, label, strlen(label) + 1); // isValidLabel checked it fits
 
-#ifndef UNIT_TEST
-  if (!_wifiManager || !_wifiManager->storeCredentials(wifiSsid, wifiPassword)) {
-    setError("Failed to store WiFi credentials");
-    return false;
-  }
-  _arduino->log("CertificateManager: WiFi credentials stored successfully");
-#else
-  if (!_wifiManager) {
-    setError("WiFi manager not available");
-    return false;
-  }
-  _arduino->log("CertificateManager: WiFi credentials stored successfully (mock)");
-#endif
-
+  _arduino->log("CertificateManager: Provisioning saved");
+  _provisioningStatus = "ok";
   return true;
+}
+
+bool CertificateManager::rejectProvisioning(const char *status, const char *error) {
+  _provisioningStatus = status;
+  setError(error);
+  return false;
 }
 
 // The backend drops a whole reading whose label isn't well-formed UTF-8 or has

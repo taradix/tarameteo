@@ -98,55 +98,63 @@ void setup() {
   printStatus("Factory Identity", true);
   Serial.printf("Sensor ID: %s\n", certManager.getCN());
 
-  // Provisioning is only needed for WiFi credentials (the identity is in NVS).
-  // Guarded: NimBLEProvisionerAdapter wraps NimBLE, which has no host build, so
-  // the analysis (clang-tidy, -DUNIT_TEST) pass skips this device-only glue.
+  // A board without WiFi credentials waits for them over BLE. A cold boot opens
+  // a shorter window too, so the owner can move a board to a new network by
+  // power-cycling it, with no chip erase (that would wipe the identity).
+  // Deep-sleep wakeups skip it. Guarded: NimBLEProvisionerAdapter wraps NimBLE,
+  // which has no host build, so the analysis (clang-tidy, -DUNIT_TEST) pass
+  // skips this device-only glue.
 #ifndef UNIT_TEST
-  if (wifiManager.needsProvisioning()) {
+  bool coldBoot = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED;
+  if (wifiManager.needsProvisioning() || coldBoot) {
     // Advertise the sensor ID printed on the sticker next to the passkey.
     const char *deviceName = certManager.getCN();
+    unsigned long windowMs = wifiManager.needsProvisioning() ? 300000 : 120000;
 
     Serial.println("===========================================");
     Serial.println("PROVISIONING MODE (BLE)");
     Serial.println("===========================================");
-    Serial.println("WiFi credentials not found!");
     Serial.printf("Open the TaraMeteo app and connect to: %s\n", deviceName);
     Serial.println("Pair with the passkey printed on the sticker.");
     Serial.println("Then enter WiFi credentials, sensor name and location.");
-    Serial.println("Device will wait up to 5 minutes for provisioning...");
+    Serial.printf("Device will wait up to %lu minutes for provisioning...\n", windowMs / 60000);
     Serial.println("===========================================");
 
     NimBLEProvisionerAdapter ble;
-    if (!ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel())) {
+    if (!ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLatitude(),
+                   certManager.getLongitude())) {
       Serial.println("Failed to start BLE provisioning!");
       delay(5000);
       ESP.restart();
     }
 
+    bool saved = false;
     unsigned long startTime = millis();
-    while (wifiManager.needsProvisioning() && (millis() - startTime) < 300000) {
+    while (!saved && (millis() - startTime) < windowMs) {
       if (ble.poll()) {
-        bool ok = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
-                                                ble.label());
-        ble.notifyStatus(ok ? "ok" : certManager.getLastError());
-        if (!ok) {
+        ble.notifyStatus("provisioning");
+        saved = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
+                                              ble.label());
+        ble.notifyStatus(certManager.getProvisioningStatus());
+        if (!saved) {
           Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
         }
       }
       delay(10); // Small delay to prevent watchdog issues
     }
 
+    // Give the client time to receive the final notification.
+    delay(1000);
     ble.stop();
 
-    if (wifiManager.needsProvisioning()) {
+    if (saved) {
+      // No restart: that would be a cold boot, opening the window again.
+      Serial.println("\nProvisioning completed!");
+    } else if (wifiManager.needsProvisioning()) {
       Serial.println("\nProvisioning timeout. Rebooting...");
       delay(2000);
       ESP.restart();
     }
-
-    Serial.println("\nProvisioning completed! Rebooting...");
-    delay(1000);
-    ESP.restart();
   }
 #endif // UNIT_TEST
 

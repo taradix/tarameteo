@@ -28,13 +28,13 @@ typedef enum {
 // Mock WiFi class
 class MockWiFiClass {
 public:
-    MockWiFiClass() : _status(WL_DISCONNECTED), _rssi(-70) {}
+    MockWiFiClass() : _status(WL_DISCONNECTED), _rssi(-70), _beginFails(false) {}
 
     // Connection management
     wl_status_t begin(const char* ssid, const char* password = nullptr) {
         (void)ssid;
         (void)password;
-        _status = WL_CONNECTED;
+        _status = _beginFails ? WL_CONNECT_FAILED : WL_CONNECTED;
         return _status;
     }
 
@@ -175,10 +175,16 @@ public:
         _rssi = rssi;
     }
 
+    // Every begin() fails to join, like a wrong password
+    void setBeginFails(bool fails) {
+        _beginFails = fails;
+    }
+
 private:
     wl_status_t _status;
     wifi_mode_t _mode;
     int32_t _rssi;
+    bool _beginFails;
 };
 
 extern MockWiFiClass WiFi;

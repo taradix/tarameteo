@@ -17,13 +17,20 @@ partition. On a new board, flash the firmware, then give it an identity::
     export PKI_API_TOKEN=<CA_TOKEN>
     make -C firmware factory PORT=<serial_port>
 
-This picks a random sensor ID (like ``tm-3f9a1c``), issues a never-expiring
-client certificate for it and writes the certificate, key, CA and a BLE
-passkey into NVS. Write the printed ID and passkey on the sticker.
+This derives the sensor ID from the board's MAC (like ``tm-3f9a1c``), issues
+a never-expiring client certificate for it and writes the certificate, key,
+CA and a BLE passkey into NVS. Write the printed ID and passkey on the sticker.
 
 On first boot, the sensor enters **provisioning mode**: it advertises its ID
-over Bluetooth. Pair with the passkey from the sticker, then enter WiFi
-credentials and the sensor location in the TaraMeteo app.
+over Bluetooth for 5 minutes. Pair with the passkey from the sticker, then
+enter WiFi credentials, a name and the sensor location in the TaraMeteo app.
+The sensor saves them once it has joined the WiFi; if it can't, it reports
+the error and waits for another try.
+
+To move a sensor to a new network, power-cycle it: every power-on opens
+provisioning mode for 2 minutes, then the sensor carries on with its saved
+settings. Without the app, ``firmware/scripts/provision.py`` does the same
+from a computer.
 
 Flash a sensor
 --------------

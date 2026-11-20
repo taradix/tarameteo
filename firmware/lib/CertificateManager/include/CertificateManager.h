@@ -33,10 +33,14 @@ public:
     bool loadCertificates(IWiFiClient& client);
     bool validateCertificates();
 
-    // Provisioning
+    // Provisioning: validates, joins the WiFi, and only then saves everything.
+    // A rejected payload saves nothing, so the board keeps its working settings.
     void setWiFiManager(WiFiManager* wifiManager) { _wifiManager = wifiManager; }
     bool applyProvisioning(const char* wifiSsid, const char* wifiPassword, float latitude, float longitude,
                            const char* label);
+    // What to notify over BLE for the last applyProvisioning: "ok" or "error:<code>",
+    // code being ssid, password, location, label, wifi or storage.
+    const char* getProvisioningStatus() const { return _provisioningStatus; }
     static bool isValidLabel(const char* label);
 
     // Getters
@@ -52,6 +56,7 @@ private:
     char _lastError[128];
     char _cn[MAX_CN_LENGTH];
     char _label[MAX_LABEL_BYTES + 1];
+    const char* _provisioningStatus;
     uint32_t _passkey;
     float _latitude;
     float _longitude;
@@ -77,6 +82,7 @@ private:
     void clearClientCredentials();
     void clearCACertificate();
     void setError(const char* error);
+    bool rejectProvisioning(const char* status, const char* error);
 };
 
 #endif // CERTIFICATE_MANAGER_H

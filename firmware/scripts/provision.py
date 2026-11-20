@@ -1,8 +1,11 @@
 """Provision a board over BLE, like the app does: WiFi, location and label.
 
 Writes the provisioning characteristics, commits, and prints the status
-notifications until the board reports ok or an error. The fields need an
-encrypted link, so pair first with the sticker passkey:
+notifications until the board reports ok or an error. The board only saves
+what it was sent once it has joined the WiFi, and keeps its location and label
+when they aren't given. It listens for a few minutes after it powers on, so
+power-cycle a board that already has WiFi. The fields need an encrypted link,
+so pair first with the sticker passkey:
 
     bluetoothctl -- pair <MAC>
 """
@@ -22,6 +25,9 @@ def uuid(n: int) -> str:
 
 SSID, PASSWORD, LOCATION, COMMIT, STATUS, LABEL = (uuid(n) for n in range(2, 8))
 
+# The board tries the WiFi for up to WIFI_TIMEOUT_MS (30 s, config.h) before it answers.
+RESULT_TIMEOUT = 60
+
 
 async def provision(args) -> int:
     device = await BleakScanner.find_device_by_name(args.name, timeout=args.timeout)
@@ -34,25 +40,23 @@ async def provision(args) -> int:
     def on_status(_, data: bytearray) -> None:
         status = data.decode()
         print("status:", status)
-        if (status == "ok" or status.startswith("error")) and not final.done():
+        if (status == "ok" or status.startswith("error:")) and not final.done():
             final.set_result(status)
 
     async with BleakClient(device) as client:
         await client.start_notify(STATUS, on_status)
-        fields = [
-            (SSID, args.ssid.encode()),
-            (PASSWORD, args.password.encode()),
-            (LOCATION, struct.pack("<ff", args.lat, args.lon)),
-        ]
+        fields = [(SSID, args.ssid.encode()), (PASSWORD, args.password.encode())]
+        if args.lat is not None:
+            fields.append((LOCATION, struct.pack("<ff", args.lat, args.lon)))
         if args.label is not None:
             fields.append((LABEL, args.label.encode()))
         for char, value in fields:
             await client.write_gatt_char(char, value, response=True)
         await client.write_gatt_char(COMMIT, b"\x01", response=True)
         try:
-            status = await asyncio.wait_for(final, args.timeout)
+            status = await asyncio.wait_for(final, RESULT_TIMEOUT)
         except TimeoutError:
-            print("No final status; the board may have dropped BLE to join WiFi", file=sys.stderr)
+            print("No final status from the board", file=sys.stderr)
             return 1
 
     return 0 if status == "ok" else 1
@@ -64,10 +68,13 @@ def main(argv=None) -> int:
     parser.add_argument("ssid")
     parser.add_argument("password")
     parser.add_argument("--label", help="Name shown for the sensor (empty clears it)")
-    parser.add_argument("--lat", type=float, default=0.0, help="Latitude (default: %(default)s)")
-    parser.add_argument("--lon", type=float, default=0.0, help="Longitude (default: %(default)s)")
-    parser.add_argument("--timeout", type=float, default=30, help="Seconds per wait (default: %(default)s)")
-    return asyncio.run(provision(parser.parse_args(argv)))
+    parser.add_argument("--lat", type=float, help="Latitude, with --lon (omitted: keep the saved location)")
+    parser.add_argument("--lon", type=float, help="Longitude, with --lat")
+    parser.add_argument("--timeout", type=float, default=30, help="Seconds to find the board (default: %(default)s)")
+    args = parser.parse_args(argv)
+    if (args.lat is None) != (args.lon is None):
+        parser.error("--lat and --lon go together")
+    return asyncio.run(provision(args))
 
 
 if __name__ == "__main__":

@@ -44,7 +44,12 @@ bool WiFiManager::begin() {
   return true;
 }
 
-bool WiFiManager::connect() { return attemptConnection(); }
+bool WiFiManager::connect() { return isConnected() || attemptConnection(_ssid, _password); }
+
+bool WiFiManager::tryConnect(const char *ssid, const char *password) {
+  WiFi.mode(WIFI_STA); // begin() skips it on a board with no credentials yet
+  return attemptConnection(ssid, password);
+}
 
 bool WiFiManager::reconnect() {
   if (_reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -56,7 +61,7 @@ bool WiFiManager::reconnect() {
 
   // Try to reconnect with exponential backoff
   for (int attempt = 0; attempt < MAX_RECONNECT_ATTEMPTS; attempt++) {
-    if (attemptConnection()) {
+    if (isConnected() || attemptConnection(_ssid, _password)) {
       _reconnectAttempts = 0; // Reset counter on successful connection
       return true;
     }
@@ -70,15 +75,11 @@ bool WiFiManager::reconnect() {
   return false;
 }
 
-bool WiFiManager::attemptConnection() {
-  if (WiFi.status() == WL_CONNECTED) {
-    return true; // Already connected
-  }
-
+bool WiFiManager::attemptConnection(const char *ssid, const char *password) {
   WiFi.disconnect();
   delay(100); // Short delay to ensure disconnect
 
-  WiFi.begin(_ssid, _password);
+  WiFi.begin(ssid, password);
 
   // Wait for connection with timeout
   unsigned long startTime = millis();
@@ -172,30 +173,14 @@ bool WiFiManager::saveToNVS() {
 }
 
 bool WiFiManager::storeCredentials(const char *ssid, const char *password) {
-  if (!ssid || !password || strlen(ssid) == 0 || strlen(password) == 0) {
+  if (!ssid || !password || strlen(ssid) == 0 || strlen(password) == 0 || strlen(ssid) > MAX_SSID_BYTES ||
+      strlen(password) > MAX_PASSWORD_BYTES) {
     updateLastError("Invalid WiFi credentials");
     return false;
   }
 
-  strncpy(_ssid, ssid, sizeof(_ssid) - 1);
-  _ssid[sizeof(_ssid) - 1] = '\0';
-  strncpy(_password, password, sizeof(_password) - 1);
-  _password[sizeof(_password) - 1] = '\0';
+  memcpy(_ssid, ssid, strlen(ssid) + 1);
+  memcpy(_password, password, strlen(password) + 1);
 
   return saveToNVS();
-}
-
-bool WiFiManager::clearCredentials() {
-  if (!_prefs.begin("tarameteo_wifi", false)) {
-    return false;
-  }
-
-  _prefs.clear();
-  _prefs.end();
-
-  _ssid[0] = '\0';
-  _password[0] = '\0';
-
-  Serial.println("WiFiManager: Cleared WiFi credentials from NVS");
-  return true;
 }

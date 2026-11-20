@@ -4,6 +4,8 @@
 #include "IBleProvisioner.h"
 
 #ifndef UNIT_TEST
+#include "CertificateManager.h"
+#include "WiFiManager.h"
 #include <NimBLEDevice.h>
 #include <atomic>
 #include <cstring>
@@ -23,9 +25,11 @@ public:
     _label[0] = '\0';
   }
 
-  bool begin(const char *deviceName, uint32_t passkey, const char *label) override {
-    // A client that never writes Label keeps the current one.
+  bool begin(const char *deviceName, uint32_t passkey, const char *label, float latitude, float longitude) override {
+    // A client that never writes Label or Location keeps the current ones.
     copyString(_label, sizeof(_label), reinterpret_cast<const uint8_t *>(label), strlen(label));
+    _lat = latitude;
+    _lon = longitude;
 
     NimBLEDevice::init(deviceName);
 
@@ -67,7 +71,12 @@ public:
 
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
     adv->addServiceUUID(BleProvisioningUUID::SERVICE);
-    adv->setName(deviceName);
+    // Flags + the 128-bit UUID take 21 of the 31 advertising bytes, too few
+    // for the name, so it goes in the scan response.
+    NimBLEAdvertisementData scanResponse;
+    scanResponse.setName(deviceName);
+    adv->setScanResponseData(scanResponse);
+    adv->enableScanResponse(true);
     NimBLEDevice::startAdvertising();
     return true;
   }
@@ -93,7 +102,8 @@ private:
   enum class Field { Ssid, Password, Location, Label, Commit };
 
   // Copies a written field into the matching buffer. On Commit, raises the flag
-  // poll() watches. Bounds are enforced against the fixed buffers.
+  // poll() watches. The string buffers hold one byte more than allowed, so an
+  // over-long value reaches applyProvisioning and fails there instead of being cut.
   void onFieldWrite(Field field, const uint8_t *data, size_t len) {
     switch (field) {
     case Field::Ssid:
@@ -144,9 +154,9 @@ private:
   NimBLECharacteristic *_commitChar;
   NimBLECharacteristic *_statusChar;
 
-  char _ssid[33]; // 32-byte SSID max + NUL
-  char _password[64];
-  char _label[64]; // Longer than allowed, so applyProvisioning rejects a long label instead of cutting it
+  char _ssid[WiFiManager::MAX_SSID_BYTES + 2];
+  char _password[WiFiManager::MAX_PASSWORD_BYTES + 2];
+  char _label[CertificateManager::MAX_LABEL_BYTES + 2];
   std::atomic<bool> _committed;
   float _lat;
   float _lon;
