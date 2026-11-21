@@ -19,7 +19,6 @@ from tempfile import TemporaryDirectory
 from tarameteo.ca_client import CAClient
 from tarameteo.crypto import (
     KeyAlgorithm,
-    cert_expires_at,
     key_matches_cert,
 )
 from tarameteo.pki import NO_EXPIRY
@@ -99,8 +98,8 @@ def main(argv=None) -> int:
         cert_pem = cert.read_text()
         if not key_matches_cert(key.read_text(), cert_pem):
             raise SystemExit("Issued certificate does not match its key")
-        if cert_expires_at(cert_pem) != NO_EXPIRY:
-            raise SystemExit(f"Certificate expires at {cert_expires_at(cert_pem)}; is the CA up to date?")
+        if result.expires_at != NO_EXPIRY:
+            raise SystemExit(f"Certificate expires at {result.expires_at}; is the CA up to date?")
 
         csv_path, image = tmp / "nvs.csv", tmp / "nvs.bin"
         csv_path.write_text(nvs_csv(key, cert, ca_cert, passkey))
