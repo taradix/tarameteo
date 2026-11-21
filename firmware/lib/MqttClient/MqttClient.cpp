@@ -3,8 +3,7 @@
 #include "WiFiClientSecureAdapter.h"
 #include <WiFi.h>
 
-MqttClient::MqttClient(const char *server, int port, CertificateManager *certManager)
-    : _server(server), _port(port), _certManager(certManager), _mqttClient(_wifiClientSecure) {
+MqttClient::MqttClient(CertificateManager *certManager) : _certManager(certManager), _mqttClient(_wifiClientSecure) {
 
   _lastError[0] = '\0';
 
@@ -46,14 +45,16 @@ bool MqttClient::connect() {
     return true;
   }
 
-  Serial.printf("Connecting to MQTT broker at %s:%d using mTLS...\n", _server, _port);
+  // Provisioned over BLE, else the config.h defaults (CertificateManager::begin).
+  const MqttServer server = _certManager->getMqttServer();
+  Serial.printf("Connecting to MQTT server at %s:%u using mTLS...\n", server.host, (unsigned)server.port);
 
   // Pre-resolve hostname with retries — DNS over UDP is unreliable at weak signal.
   IPAddress serverIP;
   bool resolved = false;
   for (int i = 0; i < DNS_RETRIES && !resolved; i++) {
     if (i > 0) delay(DNS_RETRY_DELAY_MS);
-    resolved = WiFi.hostByName(_server, serverIP);
+    resolved = WiFi.hostByName(server.host, serverIP);
   }
   if (!resolved) {
     setError("DNS resolution failed");
@@ -62,7 +63,7 @@ bool MqttClient::connect() {
   // Pass hostname (not IP) so PubSubClient calls connect(hostname) on WiFiClientSecure,
   // giving mbedTLS the name it needs for SNI and DNS-SAN hostname verification.
   (void)serverIP;
-  _mqttClient.setServer(_server, _port);
+  _mqttClient.setServer(server.host, server.port);
 
   const char *lwMessage = "offline";
 
@@ -114,7 +115,7 @@ bool MqttClient::connect() {
   // Publish online status
   _mqttClient.publish(_lwTopic, "online", true);
 
-  Serial.printf("Connected to MQTT broker with mTLS (CN=%s)\n", _certManager->getCN());
+  Serial.printf("Connected to MQTT server with mTLS (CN=%s)\n", _certManager->getCN());
   return true;
 }
 
@@ -145,7 +146,7 @@ bool MqttClient::publishWeatherData(const WeatherData &data) {
 
     if (success) {
       Serial.printf("Published to topic: %s\n", _topic);
-      // Pump the network loop until the broker acknowledges or times out.
+      // Pump the network loop until the server acknowledges or times out.
       // publish() only writes to the TLS send buffer; without this the WiFi
       // stack is powered down by deep sleep before the packet leaves the chip.
       unsigned long deadline = millis() + 2000;
@@ -187,8 +188,8 @@ bool MqttClient::buildPayload(const WeatherData &data, int retryCount, char *buf
   doc["temperature"] = data.temperature;
   doc["humidity"] = data.humidity;
   doc["pressure"] = data.pressure;
-  doc["latitude"] = data.latitude;
-  doc["longitude"] = data.longitude;
+  doc["latitude"] = data.location.latitude;
+  doc["longitude"] = data.location.longitude;
 
   if (data.label[0] != '\0') {
     doc["label"] = data.label;

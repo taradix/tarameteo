@@ -3,6 +3,12 @@
 
 #include <Preferences.h>
 
+// A network to join. Points into buffers the caller owns.
+struct WiFiCredentials {
+    const char* ssid;
+    const char* password;
+};
+
 // Joins the WiFi with the credentials provisioning saved in NVS.
 class WiFiManager {
 public:
@@ -11,7 +17,8 @@ public:
     static constexpr size_t MAX_SSID_BYTES = 32;      // 802.11 limit
     static constexpr size_t MAX_PASSWORD_BYTES = 64;  // WPA2: 63-character passphrase or 64 hex digits
 
-    explicit WiFiManager(int connectTimeoutMs);
+    // prefs holds the credentials (tarameteo_wifi namespace); injected so tests can inspect it.
+    WiFiManager(Preferences& prefs, int connectTimeoutMs);
     ~WiFiManager();
 
     bool begin();  // Loads the credentials from NVS
@@ -28,22 +35,23 @@ public:
     bool isProvisioned() const;
     bool needsProvisioning() const;
     // Joins with these credentials without saving them or touching the stored ones.
-    bool tryConnect(const char* ssid, const char* password);
-    bool storeCredentials(const char* ssid, const char* password);
+    bool tryConnect(const WiFiCredentials& credentials);
+    // Saves the pair, or leaves NVS and memory as they were when a write fails.
+    bool storeCredentials(const WiFiCredentials& credentials);
     const char* getSSID() const { return _ssid; }
 
 private:
     char _ssid[MAX_SSID_BYTES + 1];
     char _password[MAX_PASSWORD_BYTES + 1];
     char _lastError[128];
-    Preferences _prefs;
+    Preferences& _prefs;
 
     int _connectTimeoutMs;
 
     void setError(const char* error);
-    bool attemptConnection(const char* ssid, const char* password);
+    bool attemptConnection(const WiFiCredentials& credentials);
     bool loadFromNVS();
-    bool saveToNVS();
+    bool saveToNVS(const WiFiCredentials& credentials);
 };
 
 #endif // WIFI_MANAGER_H

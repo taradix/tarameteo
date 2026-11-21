@@ -8,7 +8,8 @@
 #include <WiFi.h>
 #endif
 
-WiFiManager::WiFiManager(int connectTimeoutMs) : _connectTimeoutMs(connectTimeoutMs) {
+WiFiManager::WiFiManager(Preferences &prefs, int connectTimeoutMs)
+    : _prefs(prefs), _connectTimeoutMs(connectTimeoutMs) {
   _lastError[0] = '\0';
   _ssid[0] = '\0';
   _password[0] = '\0';
@@ -26,17 +27,17 @@ bool WiFiManager::begin() {
   return true;
 }
 
-bool WiFiManager::connect() { return isConnected() || attemptConnection(_ssid, _password); }
+bool WiFiManager::connect() { return isConnected() || attemptConnection({_ssid, _password}); }
 
-bool WiFiManager::tryConnect(const char *ssid, const char *password) {
+bool WiFiManager::tryConnect(const WiFiCredentials &credentials) {
   WiFi.mode(WIFI_STA); // begin() skips it on a board with no credentials yet
-  return attemptConnection(ssid, password);
+  return attemptConnection(credentials);
 }
 
 bool WiFiManager::reconnect() {
   // Try to reconnect with exponential backoff
   for (int attempt = 0; attempt < MAX_RECONNECT_ATTEMPTS; attempt++) {
-    if (isConnected() || attemptConnection(_ssid, _password)) {
+    if (isConnected() || attemptConnection({_ssid, _password})) {
       return true;
     }
 
@@ -49,11 +50,11 @@ bool WiFiManager::reconnect() {
   return false;
 }
 
-bool WiFiManager::attemptConnection(const char *ssid, const char *password) {
+bool WiFiManager::attemptConnection(const WiFiCredentials &credentials) {
   WiFi.disconnect();
   delay(100); // Short delay to ensure disconnect
 
-  WiFi.begin(ssid, password);
+  WiFi.begin(credentials.ssid, credentials.password);
 
   // Wait for connection with timeout
   unsigned long startTime = millis();
@@ -118,26 +119,35 @@ bool WiFiManager::loadFromNVS() {
   return true;
 }
 
-bool WiFiManager::saveToNVS() {
+// Writes both keys. When one fails, puts back the pair memory holds (the stored one),
+// or removes both when there was none, so NVS never pairs one SSID with another's password.
+bool WiFiManager::saveToNVS(const WiFiCredentials &credentials) {
   if (!_prefs.begin("tarameteo_wifi", false)) { // Read-write mode
     setError("Failed to open NVS for writing");
     return false;
   }
 
-  if (_prefs.putString("ssid", _ssid) == 0) {
-    _prefs.end();
-    setError("Failed to save SSID to NVS");
-    return false;
+  const char *failure = nullptr;
+  if (_prefs.putString("ssid", credentials.ssid) == 0) {
+    failure = "Failed to save SSID to NVS";
+  } else if (_prefs.putString("password", credentials.password) == 0) {
+    failure = "Failed to save password to NVS";
   }
-
-  if (_prefs.putString("password", _password) == 0) {
+  if (failure != nullptr) {
+    if (isProvisioned()) {
+      _prefs.putString("ssid", _ssid);
+      _prefs.putString("password", _password);
+    } else {
+      _prefs.remove("ssid");
+      _prefs.remove("password");
+    }
     _prefs.end();
-    setError("Failed to save password to NVS");
+    setError(failure);
     return false;
   }
 
   _prefs.end();
-  Serial.printf("WiFiManager: Saved WiFi credentials to NVS (SSID: %s)\n", _ssid);
+  Serial.printf("WiFiManager: Saved WiFi credentials to NVS (SSID: %s)\n", credentials.ssid);
   return true;
 }
 
@@ -149,15 +159,17 @@ bool WiFiManager::isValidPassword(const char *password) {
   return password && password[0] != '\0' && strlen(password) <= MAX_PASSWORD_BYTES;
 }
 
-bool WiFiManager::storeCredentials(const char *ssid, const char *password) {
+bool WiFiManager::storeCredentials(const WiFiCredentials &credentials) {
   // Guards the buffers below; applyProvisioning has already checked both.
-  if (!isValidSsid(ssid) || !isValidPassword(password)) {
+  if (!isValidSsid(credentials.ssid) || !isValidPassword(credentials.password)) {
     setError("Invalid WiFi credentials");
     return false;
   }
 
-  memcpy(_ssid, ssid, strlen(ssid) + 1);
-  memcpy(_password, password, strlen(password) + 1);
-
-  return saveToNVS();
+  if (!saveToNVS(credentials)) {
+    return false;
+  }
+  memcpy(_ssid, credentials.ssid, strlen(credentials.ssid) + 1);
+  memcpy(_password, credentials.password, strlen(credentials.password) + 1);
+  return true;
 }

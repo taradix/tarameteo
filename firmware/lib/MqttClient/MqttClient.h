@@ -5,9 +5,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-
-// Forward declaration
-class CertificateManager;
+#include "CertificateManager.h"
 
 struct WeatherData {
     float temperature;
@@ -16,8 +14,7 @@ struct WeatherData {
     float altitude;
     int rssi;
     unsigned long timestamp;
-    float latitude;
-    float longitude;
+    Location location;
     const char* label;  // Empty when the owner gave none
 };
 
@@ -28,7 +25,8 @@ public:
     static const int DNS_RETRIES = 3;
     static const int DNS_RETRY_DELAY_MS = 2000;
 
-    MqttClient(const char* server, int port, CertificateManager* certManager);
+    // Connects to the MQTT server the certificate manager holds.
+    explicit MqttClient(CertificateManager* certManager);
 
     bool begin();
     bool connect();
@@ -38,8 +36,6 @@ public:
     const char* getLastError() const { return _lastError; }
 
 private:
-    const char* _server;
-    int _port;
     CertificateManager* _certManager;
     char _lastError[128];
     char _topic[64];

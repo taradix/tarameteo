@@ -6,17 +6,11 @@
 
 class PowerManager {
 public:
-    // Constructor takes sleep duration in seconds
-    PowerManager(unsigned long sleepDurationSeconds);
-
-    // Initialize power management
-    void begin();
+    // Wake from the next sleep() after this many seconds; calling it again replaces the duration
+    void armWakeup(unsigned long seconds);
 
     // Enter deep sleep mode
     void sleep();
-
-private:
-    unsigned long _sleepDuration;
 };
 
 #endif // POWER_MANAGER_H

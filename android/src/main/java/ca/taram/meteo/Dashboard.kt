@@ -13,6 +13,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -92,7 +93,7 @@ private val AGO = mapOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Dashboard(onChoose: () -> Unit, onOpen: (SensorEntry) -> Unit, model: DashboardModel = viewModel()) {
+fun Dashboard(onChoose: () -> Unit, onSetUp: () -> Unit, onOpen: (SensorEntry) -> Unit, model: DashboardModel = viewModel()) {
     val state by model.state.collectAsStateWithLifecycle()
     val names by shown.names.collectAsStateWithLifecycle()
     PullToRefreshBox(state.refreshing, model::refresh, Modifier.fillMaxSize()) {
@@ -102,7 +103,10 @@ fun Dashboard(onChoose: () -> Unit, onOpen: (SensorEntry) -> Unit, model: Dashbo
             items(state.cards, key = { it.sensor.name }) { SensorCard(it) { onOpen(it.sensor) } }
             if (names.isEmpty()) {
                 item {
-                    Button(onChoose, Modifier.fillMaxWidth().padding(24.dp)) { Text(stringResource(R.string.sensors_choose)) }
+                    Button(onChoose, Modifier.fillMaxWidth().padding(start = 24.dp, top = 24.dp, end = 24.dp)) {
+                        Text(stringResource(R.string.sensors_choose))
+                    }
+                    OutlinedButton(onSetUp, Modifier.fillMaxWidth().padding(24.dp)) { Text(stringResource(R.string.setup_title)) }
                 }
             } else if (state.cards.isEmpty() && state.error == null && !state.refreshing) {
                 item { Message(stringResource(R.string.dashboard_empty)) }

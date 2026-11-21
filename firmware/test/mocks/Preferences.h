@@ -16,8 +16,10 @@ public:
         return true;
     }
 
+    // Closing drops the open mode, so a test that opened read-only can't leave
+    // the next one unable to write.
     void end() {
-        // Nothing to do
+        _readOnly = false;
     }
 
     size_t putString(const char* key, const char* value) {
@@ -73,8 +75,15 @@ public:
         return it->second;
     }
 
+    // Any type, like the real one.
     bool isKey(const char* key) {
-        return _storage.find(std::string(key)) != _storage.end();
+        const std::string k(key);
+        return _storage.count(k) || _ulongs.count(k) || _ints.count(k) || _floats.count(k);
+    }
+
+    bool remove(const char* key) {
+        const std::string k(key);
+        return _storage.erase(k) + _ulongs.erase(k) + _ints.erase(k) + _floats.erase(k) > 0;
     }
 
     bool clear() {

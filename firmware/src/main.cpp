@@ -27,6 +27,7 @@
 #include "ArduinoAdapter.h"
 
 // BLE provisioning transport
+#include "NetworkList.h"
 #include "NimBLEProvisionerAdapter.h"
 
 static constexpr unsigned long SERIAL_START_DELAY_MS = 1000;
@@ -35,15 +36,22 @@ static constexpr unsigned long SERIAL_START_DELAY_MS = 1000;
 BME280Sensor sensor(BME280_ADDRESS, BME280_SDA, BME280_SCL, SEA_LEVEL_PRESSURE);
 
 // WiFi credentials are loaded from NVS (supports "flash once, provision many")
-WiFiManager wifiManager(WIFI_TIMEOUT_MS);
+Preferences wifiPrefs;
+WiFiManager wifiManager(wifiPrefs, WIFI_TIMEOUT_MS);
 
 // CertificateManager dependencies (must be global to persist)
 Preferences certPrefs;
 ArduinoAdapter arduinoAdapter;
 CertificateManager certManager(certPrefs, &arduinoAdapter);
 
-MqttClient mqttClient(MQTT_SERVER, MQTT_PORT, &certManager);
-PowerManager powerManager(SLEEP_DURATION);
+MqttClient mqttClient(&certManager);
+// The defaults; provisioning over BLE can change them (CertificateManager). The board
+// sleeps for the interval between readings, sending one each time it wakes.
+static_assert(READING_INTERVAL >= CertificateManager::MIN_INTERVAL &&
+                  READING_INTERVAL <= CertificateManager::MAX_INTERVAL,
+              "READING_INTERVAL must be between 60 seconds (1 minute) and 86400 (1 day)");
+static_assert(MQTT_PORT >= 1 && MQTT_PORT <= 65535, "MQTT_PORT must be between 1 and 65535");
+PowerManager powerManager;
 TimeManager timeManager(NTP_TIMEOUT_MS);
 
 void printStatus(const char *component, bool success, const char *error = nullptr) {
@@ -55,6 +63,47 @@ void printStatus(const char *component, bool success, const char *error = nullpt
     Serial.println(error);
   }
 }
+
+#ifndef UNIT_TEST
+#include <WiFi.h>
+#include <vector>
+
+// The scan's networks the board can join, encoded for the Networks characteristic into out. It
+// joins with a password only, so open and enterprise networks are left out. Runs before BLE
+// starts, so the scan has the radio to itself; it takes a few seconds.
+static size_t scanNetworks(uint8_t *out, size_t capacity) {
+  WiFi.mode(WIFI_STA);
+  int found = WiFi.scanNetworks();
+  if (found <= 0) {
+    WiFi.scanDelete();
+    return 0;
+  }
+  std::vector<ScannedNetwork> networks;
+  networks.reserve(found);
+  for (int i = 0; i < found; i++) {
+    // The records last until scanDelete(), so their SSIDs need no copy.
+    auto *record = static_cast<wifi_ap_record_t *>(WiFi.getScanInfoByIndex(i));
+    switch (record->authmode) {
+    case WIFI_AUTH_WEP:
+    case WIFI_AUTH_WPA_PSK:
+    case WIFI_AUTH_WPA2_PSK:
+    case WIFI_AUTH_WPA_WPA2_PSK:
+    case WIFI_AUTH_WPA3_PSK:
+    case WIFI_AUTH_WPA2_WPA3_PSK:
+    case WIFI_AUTH_WAPI_PSK:
+      networks.push_back({reinterpret_cast<const char *>(record->ssid), record->rssi});
+      break;
+    default:
+      break;
+    }
+  }
+  size_t written = encodeNetworks(networks.data(), networks.size(), out, capacity);
+  WiFi.scanDelete();
+  Serial.printf("WiFi scan: %d access points, %u networks to offer in %u bytes\n", found, (unsigned)networks.size(),
+                (unsigned)written);
+  return written;
+}
+#endif // UNIT_TEST
 
 void setup() {
   Serial.begin(115200);
@@ -70,7 +119,7 @@ void setup() {
   }
 
   // Configure deep sleep timer before any possible sleep() call.
-  powerManager.begin();
+  powerManager.armWakeup(READING_INTERVAL);
 
   Serial.println("\n=== TaraMeteo Weather Station ===");
   Serial.println("Sensor: (will be determined from certificate CN)");
@@ -93,7 +142,7 @@ void setup() {
   // Load the identity the factory step wrote into NVS (scripts/factory.py)
   Serial.println("Initializing certificate manager...");
   certManager.setWiFiManager(&wifiManager); // Link for unified provisioning
-  if (!certManager.begin()) {
+  if (!certManager.begin({MQTT_SERVER, MQTT_PORT}, READING_INTERVAL)) {
     printStatus("Factory Identity", false, certManager.getLastError());
     powerManager.sleep();
   }
@@ -130,18 +179,22 @@ void setup() {
     Serial.printf("Device will wait up to %lu minutes for provisioning...\n", windowMs / 60000);
     Serial.println("===========================================");
 
+    // The networks the app offers to pick from.
+    static uint8_t networks[NETWORKS_MAX_BYTES];
+    size_t networksLength = scanNetworks(networks, sizeof(networks));
+
     NimBLEProvisionerAdapter ble;
     bool saved = false;
     // A provisioned board skips the window when BLE fails: restarting would
     // be another cold boot, so it would fail again and never publish.
-    if (ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLatitude(),
-                  certManager.getLongitude())) {
+    if (ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLocation(),
+                  certManager.getMqttServer(), certManager.getInterval(), networks, networksLength)) {
       unsigned long startTime = millis();
       while (!saved && (millis() - startTime) < windowMs) {
         if (ble.poll()) {
           ble.notifyStatus("provisioning");
-          saved = certManager.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(),
-                                                ble.label());
+          saved =
+              certManager.applyProvisioning(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval());
           ble.notifyStatus(certManager.getProvisioningStatus());
           if (!saved) {
             Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
@@ -166,6 +219,9 @@ void setup() {
   }
 #endif // UNIT_TEST
 
+  // The provisioned interval, or config.h's, from here on
+  powerManager.armWakeup(certManager.getInterval());
+
   // Connect to WiFi (credentials now loaded from NVS)
   Serial.println("Connecting to WiFi...");
   if (!wifiManager.connect()) {
@@ -177,11 +233,11 @@ void setup() {
   Serial.printf("Connected to %s (IP: %s)\n", wifiManager.getSSID(), wifiManager.getIP());
   Serial.printf("WiFi RSSI: %d dBm\n", wifiManager.getRSSI());
 
-  // Sync before TLS, which checks the broker certificate dates
+  // Sync before TLS, which checks the MQTT server certificate dates
   Serial.println("Synchronizing time with NTP servers...");
   if (!timeManager.syncTime()) {
     printStatus("Time Sync", false, timeManager.getLastError());
-    Serial.println("NTP sync failed. Cannot validate the broker certificate without current time. Sleeping.");
+    Serial.println("NTP sync failed. Cannot validate the MQTT server certificate without current time. Sleeping.");
     powerManager.sleep();
   }
   printStatus("Time Sync", true);
@@ -200,18 +256,20 @@ void setup() {
   }
   printStatus("MQTT Client", true);
 
-  // Connect to MQTT broker
-  Serial.println("Connecting to MQTT broker...");
+  // Connect to MQTT server
+  Serial.println("Connecting to MQTT server...");
   if (!mqttClient.connect()) {
     printStatus("MQTT Connection", false, mqttClient.getLastError());
     // Continue anyway - will retry in loop
   } else {
     printStatus("MQTT Connection", true);
-    Serial.printf("Connected to %s:%d\n", MQTT_SERVER, MQTT_PORT);
+    const MqttServer server = certManager.getMqttServer();
+    Serial.printf("Connected to %s:%u\n", server.host, (unsigned)server.port);
   }
 
   Serial.println("All components initialized successfully");
-  Serial.printf("Sleep duration: %d seconds (%.1f minutes)\n", SLEEP_DURATION, SLEEP_DURATION / 60.0);
+  Serial.printf("Sleep duration: %lu seconds (%.1f minutes)\n", (unsigned long)certManager.getInterval(),
+                certManager.getInterval() / 60.0);
   Serial.println("Starting main loop...\n");
 }
 
@@ -228,17 +286,9 @@ void loop() {
   }
 
   // Read sensor data
-  const WeatherData data = {
-      sensor.getTemperature(),
-      sensor.getPressure(),
-      sensor.getHumidity(),
-      sensor.getAltitude(),
-      wifiManager.getRSSI(),
-      timeManager.getCurrentTimestamp(),
-      certManager.getLatitude(),
-      certManager.getLongitude(),
-      certManager.getLabel()
-  };
+  const WeatherData data = {sensor.getTemperature(),   sensor.getPressure(),  sensor.getHumidity(),
+                            sensor.getAltitude(),      wifiManager.getRSSI(), timeManager.getCurrentTimestamp(),
+                            certManager.getLocation(), certManager.getLabel()};
 
   // Validate sensor readings
   if (std::isnan(data.temperature) || std::isnan(data.pressure) || std::isnan(data.humidity)) {
@@ -263,8 +313,8 @@ void loop() {
     }
   }
 
-  // Publish data to MQTT broker
-  Serial.println("\nPublishing data to MQTT broker...");
+  // Publish data to MQTT server
+  Serial.println("\nPublishing data to MQTT server...");
   if (!mqttClient.publishWeatherData(data)) {
     printStatus("Data Publish", false, mqttClient.getLastError());
   } else {
@@ -275,7 +325,7 @@ void loop() {
   mqttClient.disconnect();
 
   // Enter deep sleep regardless of publish status
-  Serial.printf("Entering deep sleep for %d seconds...\n", SLEEP_DURATION);
+  Serial.printf("Entering deep sleep for %lu seconds...\n", (unsigned long)certManager.getInterval());
   Serial.println("=====================================\n");
   powerManager.sleep();
 }

@@ -94,9 +94,9 @@ private const val LIMIT = 50
 private const val NEARBY_DEGREES = 0.9
 private const val FOCUS_DEGREES = 0.2
 // A network fix can hang indefinitely. Nothing on screen waits for it, so this bound is only a last resort.
-private val LOCATION_TIMEOUT = 15.seconds
+val LOCATION_TIMEOUT = 15.seconds
 // First paint, before any fix: where the sensors are. NOTE: a constant, until the last viewport is remembered.
-private val HOME = CameraPosition.fromLatLngZoom(LatLng(46.8, -71.2), 6f)
+val HOME = CameraPosition.fromLatLngZoom(LatLng(46.8, -71.2), 6f)
 
 // The server takes west > east as crossing the antimeridian. Three decimals (about 100 m) keep requests steady.
 fun bboxOf(west: Double, south: Double, east: Double, north: Double) = listOf(west, south, east, north)
@@ -135,11 +135,11 @@ private fun locator(context: Context) = context.getSystemService(LocationManager
 
 // Whatever the phone already knows: usually instant, and close enough to recentre on.
 @SuppressLint("MissingPermission") // Only called once the permission is granted.
-private fun lastPosition(context: Context) =
+fun lastPosition(context: Context) =
     locator(context)?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let(::coarse)
 
 @SuppressLint("MissingPermission") // Only called once the permission is granted.
-private suspend fun currentPosition(context: Context): LatLng? {
+suspend fun currentPosition(context: Context): LatLng? {
     val manager = locator(context) ?: return null
     return suspendCancellableCoroutine { continuation ->
         val signal = CancellationSignal()

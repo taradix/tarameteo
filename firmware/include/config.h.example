@@ -1,7 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// MQTT Broker Configuration
+// MQTT Server Configuration (defaults: provisioning over BLE can change them)
 #define MQTT_SERVER         "meteo.taram.ca"
 #define MQTT_PORT           8883
 
@@ -12,7 +12,7 @@
 #define SEA_LEVEL_PRESSURE  1013.25f  // hPa (standard sea level pressure)
 
 // Power Management
-#define SLEEP_DURATION      3600     // Deep sleep duration in seconds (1 hour)
+#define READING_INTERVAL    3600     // Seconds between readings sent to the backend (1 hour; 60 to 86400, provisionable)
 #define BOOT_DELAY_MS       5000     // Cold-boot window for serial upload (skipped on deep-sleep wakeup)
 
 // Time Management (NTP)

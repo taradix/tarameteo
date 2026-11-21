@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include <string>
 #include <unity.h>
@@ -46,11 +47,19 @@ const char *CA_CERT_PEM = "-----BEGIN CERTIFICATE-----\n"
 
 const char *INVALID_CERT = "This is not a certificate";
 
+// config.h's defaults, which a payload sends back when the client leaves them alone.
+const MqttServer DEFAULT_SERVER = {"meteo.taram.ca", 8883};
+const uint32_t DEFAULT_INTERVAL = 3600;
+
+// A network the mock WiFi joins, for tests about something else.
+const WiFiCredentials HOME_WIFI = {"my-network", "my-password"};
+
 // Elapses on the mock clock, which delay() advances.
 const int WIFI_TIMEOUT_MS = 30000;
 
 // Global test fixtures
 Preferences testPrefs;
+Preferences wifiPrefs; // WiFiManager's tarameteo_wifi namespace
 MockArduino mockArduino;
 
 // What scripts/factory.py writes into the tarameteo_certs namespace.
@@ -76,11 +85,15 @@ void setUp(void) {
   _mock_millis = 0;
   mockArduino.reset();
   testPrefs.clear();
+  wifiPrefs.clear();
   WiFi.setBeginFails(false);
   WiFi.disconnect();
 }
 
-void tearDown(void) { testPrefs.end(); }
+void tearDown(void) {
+  testPrefs.end();
+  wifiPrefs.end();
+}
 
 // ========================================
 // Test Cases - Factory Identity
@@ -89,7 +102,7 @@ void tearDown(void) { testPrefs.end(); }
 void test_certificate_manager_begin_no_certificates(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
 
-  bool result = certMgr.begin();
+  bool result = certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   TEST_ASSERT_FALSE(result);
   TEST_ASSERT_TRUE(certMgr.needsProvisioning());
@@ -101,7 +114,7 @@ void test_certificate_manager_begin_with_factory_identity(void) {
   seedIdentity();
   CertificateManager certMgr(testPrefs, &mockArduino);
 
-  bool result = certMgr.begin();
+  bool result = certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   TEST_ASSERT_TRUE(result);
   TEST_ASSERT_TRUE(certMgr.isProvisioned());
@@ -113,7 +126,7 @@ void test_certificate_manager_begin_rejects_missing_passkey(void) {
   seedIdentity(VALID_CERT_PEM, CA_CERT_PEM, 0);
   CertificateManager certMgr(testPrefs, &mockArduino);
 
-  TEST_ASSERT_FALSE(certMgr.begin());
+  TEST_ASSERT_FALSE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "passkey") != NULL);
 }
 
@@ -121,7 +134,7 @@ void test_certificate_manager_begin_rejects_out_of_range_passkey(void) {
   seedIdentity(VALID_CERT_PEM, CA_CERT_PEM, 1000000);
   CertificateManager certMgr(testPrefs, &mockArduino);
 
-  TEST_ASSERT_FALSE(certMgr.begin());
+  TEST_ASSERT_FALSE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
 }
 
 void test_certificate_manager_invalid_certificate_keeps_nvs(void) {
@@ -130,7 +143,7 @@ void test_certificate_manager_invalid_certificate_keeps_nvs(void) {
   seedIdentity(INVALID_CERT);
   CertificateManager certMgr(testPrefs, &mockArduino);
 
-  TEST_ASSERT_FALSE(certMgr.begin());
+  TEST_ASSERT_FALSE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
   TEST_ASSERT_FALSE(certMgr.isProvisioned());
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Invalid certificate format") != NULL);
   TEST_ASSERT_TRUE(testPrefs.isKey("cli_cert"));
@@ -139,7 +152,7 @@ void test_certificate_manager_invalid_certificate_keeps_nvs(void) {
 
 void test_certificate_manager_validate_fails_without_certificates(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
+  certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   bool result = certMgr.validateCertificates();
 
@@ -155,7 +168,7 @@ void test_certificate_manager_load_certificates_to_client(void) {
   seedIdentity();
   MockWiFiClient mockClient;
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
+  certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   bool result = certMgr.loadCertificates(mockClient);
 
@@ -169,7 +182,7 @@ void test_certificate_manager_load_fails_without_ca_cert(void) {
   seedIdentity(VALID_CERT_PEM, nullptr);
   MockWiFiClient mockClient;
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
+  certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   bool result = certMgr.loadCertificates(mockClient);
 
@@ -183,7 +196,7 @@ void test_certificate_manager_load_fails_without_ca_cert(void) {
 void test_certificate_manager_load_fails_without_provisioning(void) {
   MockWiFiClient mockClient;
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
+  certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   bool result = certMgr.loadCertificates(mockClient);
 
@@ -203,37 +216,47 @@ bool provision(MockBleProvisioner &ble, CertificateManager &certMgr) {
     return false;
   }
   ble.notifyStatus("provisioning");
-  bool saved = certMgr.applyProvisioning(ble.ssid(), ble.password(), ble.latitude(), ble.longitude(), ble.label());
+  bool saved = certMgr.applyProvisioning(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval());
   ble.notifyStatus(certMgr.getProvisioningStatus());
   return saved;
 }
 
-void test_ble_provision_valid_payload(void) {
-  MockBleProvisioner ble;
-  CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
-  certMgr.setWiFiManager(&wifiMgr);
+// Opens a session as main() does: the transport starts with the board's current settings.
+void startSession(MockBleProvisioner &ble, const CertificateManager &certMgr) {
+  ble.begin(certMgr.getCN(), certMgr.getPasskey(), certMgr.getLabel(), certMgr.getLocation(), certMgr.getMqttServer(),
+            certMgr.getInterval(), nullptr, 0);
+}
 
-  ble.setPayload("my-network", "my-password", 45.504f, -73.617f);
+void test_ble_provision_valid_payload(void) {
+  seedIdentity();
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  MockBleProvisioner ble;
+  startSession(ble, certMgr);
+
+  ble.setPayload(HOME_WIFI, {45.504f, -73.617f});
 
   TEST_ASSERT_TRUE(provision(ble, certMgr));
   TEST_ASSERT_EQUAL_STRING("ok", ble.lastStatus.c_str());
   TEST_ASSERT_EQUAL_STRING("my-network", wifiMgr.getSSID());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLatitude());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLongitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLocation().latitude);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLocation().longitude);
 }
 
 void test_ble_provision_rejects_bad_location(void) {
-  MockBleProvisioner ble;
+  seedIdentity();
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
+  MockBleProvisioner ble;
+  startSession(ble, certMgr);
 
-  const float bad[][2] = {{999.0f, -73.617f}, {45.504f, -181.0f}, {NAN, -73.617f}, {45.504f, NAN}};
-  for (const auto &location : bad) {
-    ble.setPayload("my-network", "my-password", location[0], location[1]);
+  const Location bad[] = {{999.0f, -73.617f}, {45.504f, -181.0f}, {NAN, -73.617f}, {45.504f, NAN}};
+  for (const Location &location : bad) {
+    ble.setPayload(HOME_WIFI, location);
     TEST_ASSERT_FALSE(provision(ble, certMgr));
     TEST_ASSERT_EQUAL_STRING("error:location", ble.lastStatus.c_str());
   }
@@ -241,50 +264,56 @@ void test_ble_provision_rejects_bad_location(void) {
 }
 
 void test_ble_provision_rejects_empty_credentials(void) {
-  MockBleProvisioner ble;
+  seedIdentity();
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
+  MockBleProvisioner ble;
+  startSession(ble, certMgr);
 
-  ble.setPayload("", "my-password", 45.504f, -73.617f);
+  ble.setPayload({"", "my-password"}, {45.504f, -73.617f});
   TEST_ASSERT_FALSE(provision(ble, certMgr));
   TEST_ASSERT_EQUAL_STRING("error:ssid", ble.lastStatus.c_str());
 
-  ble.setPayload("my-network", "", 45.504f, -73.617f);
+  ble.setPayload({"my-network", ""}, {45.504f, -73.617f});
   TEST_ASSERT_FALSE(provision(ble, certMgr));
   TEST_ASSERT_EQUAL_STRING("error:password", ble.lastStatus.c_str());
 }
 
 void test_ble_provision_credential_lengths(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   const std::string ssid32(32, 's');
   const std::string password64(64, 'a');
-  TEST_ASSERT_TRUE(certMgr.applyProvisioning(ssid32.c_str(), password64.c_str(), 45.5f, -73.6f, ""));
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning({ssid32.c_str(), password64.c_str()}, {45.5f, -73.6f}, "", DEFAULT_SERVER,
+                                             DEFAULT_INTERVAL));
   TEST_ASSERT_EQUAL_STRING(ssid32.c_str(), wifiMgr.getSSID());
 
-  TEST_ASSERT_FALSE(certMgr.applyProvisioning((ssid32 + "s").c_str(), "my-password", 45.5f, -73.6f, ""));
+  TEST_ASSERT_FALSE(certMgr.applyProvisioning({(ssid32 + "s").c_str(), "my-password"}, {45.5f, -73.6f}, "",
+                                              DEFAULT_SERVER, DEFAULT_INTERVAL));
   TEST_ASSERT_EQUAL_STRING("error:ssid", certMgr.getProvisioningStatus());
-  TEST_ASSERT_FALSE(certMgr.applyProvisioning("my-network", (password64 + "a").c_str(), 45.5f, -73.6f, ""));
+  TEST_ASSERT_FALSE(certMgr.applyProvisioning({"my-network", (password64 + "a").c_str()}, {45.5f, -73.6f}, "",
+                                              DEFAULT_SERVER, DEFAULT_INTERVAL));
   TEST_ASSERT_EQUAL_STRING("error:password", certMgr.getProvisioningStatus());
   TEST_ASSERT_EQUAL_STRING(ssid32.c_str(), wifiMgr.getSSID());
 }
 
 void test_ble_provision_failed_join_saves_nothing(void) {
   seedIdentity();
-  MockBleProvisioner ble;
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
-  TEST_ASSERT_TRUE(certMgr.applyProvisioning("old-network", "old-password", 45.504f, -73.617f, "Gazebo"));
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning({"old-network", "old-password"}, {45.504f, -73.617f}, "Gazebo",
+                                             DEFAULT_SERVER, DEFAULT_INTERVAL));
+  MockBleProvisioner ble;
+  startSession(ble, certMgr);
 
   WiFi.setBeginFails(true);
-  ble.setPayload("new-network", "wrong-password", 10.0f, 20.0f, "Garden");
+  ble.setPayload({"new-network", "wrong-password"}, {10.0f, 20.0f}, "Garden");
   TEST_ASSERT_FALSE(provision(ble, certMgr));
   TEST_ASSERT_EQUAL_STRING("error:wifi", ble.lastStatus.c_str());
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "timeout") != NULL);
@@ -293,13 +322,13 @@ void test_ble_provision_failed_join_saves_nothing(void) {
   TEST_ASSERT_EQUAL_STRING("old-network", wifiMgr.getSSID());
   TEST_ASSERT_EQUAL_STRING("Gazebo", certMgr.getLabel());
   CertificateManager reloaded(testPrefs, &mockArduino);
-  TEST_ASSERT_TRUE(reloaded.begin());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, reloaded.getLatitude());
+  TEST_ASSERT_TRUE(reloaded.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, reloaded.getLocation().latitude);
   TEST_ASSERT_EQUAL_STRING("Gazebo", reloaded.getLabel());
 
   // The client fixes the password and commits again.
   WiFi.setBeginFails(false);
-  ble.setPayload("new-network", "right-password", 10.0f, 20.0f, "Garden");
+  ble.setPayload({"new-network", "right-password"}, {10.0f, 20.0f}, "Garden");
   TEST_ASSERT_TRUE(provision(ble, certMgr));
   TEST_ASSERT_EQUAL_STRING("ok", ble.lastStatus.c_str());
   TEST_ASSERT_EQUAL_STRING("new-network", wifiMgr.getSSID());
@@ -312,45 +341,42 @@ void test_ble_provision_wifi_only_keeps_location_and_label(void) {
   testPrefs.putFloat("longitude", -73.617f);
   testPrefs.putString("label", "Gazebo");
   CertificateManager certMgr(testPrefs, &mockArduino);
-  TEST_ASSERT_TRUE(certMgr.begin());
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
   MockBleProvisioner ble;
-  ble.begin(certMgr.getCN(), certMgr.getPasskey(), certMgr.getLabel(), certMgr.getLatitude(),
-            certMgr.getLongitude());
+  startSession(ble, certMgr);
 
-  ble.setWiFiPayload("new-network", "my-password");
+  ble.setWiFiPayload({"new-network", "my-password"});
 
   TEST_ASSERT_TRUE(provision(ble, certMgr));
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLatitude());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLongitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr.getLocation().latitude);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr.getLocation().longitude);
   TEST_ASSERT_EQUAL_STRING("Gazebo", certMgr.getLabel());
 }
 
 void test_ble_provision_rejects_failed_location_write(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
   testPrefs.begin("tarameteo_certs", true); // read-only: every put* returns 0
 
-  bool ok = certMgr.applyProvisioning("my-network", "my-password", 45.504f, -73.617f, "Gazebo");
+  bool ok = certMgr.applyProvisioning(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   TEST_ASSERT_FALSE(ok);
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Failed to store location") != NULL);
   TEST_ASSERT_EQUAL_STRING("error:storage", certMgr.getProvisioningStatus());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, certMgr.getLatitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, certMgr.getLocation().latitude);
   TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
 }
 
 void test_ble_provision_rejects_failed_label_write(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
   testPrefs.failWritesTo("label");
 
-  bool ok = certMgr.applyProvisioning("my-network", "my-password", 45.504f, -73.617f, "Gazebo");
+  bool ok = certMgr.applyProvisioning(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL);
 
   TEST_ASSERT_FALSE(ok);
   TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Failed to store label") != NULL);
@@ -360,7 +386,7 @@ void test_ble_provision_rejects_failed_label_write(void) {
 }
 
 void test_wifi_reconnect_reports_every_attempt(void) {
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   WiFi.setBeginFails(true);
 
   TEST_ASSERT_FALSE(wifiMgr.reconnect());
@@ -371,25 +397,25 @@ void test_ble_provision_location_persists_across_instances(void) {
   seedIdentity();
   {
     CertificateManager certMgr1(testPrefs, &mockArduino);
-    certMgr1.begin();
-    WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+    certMgr1.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
+    WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
     certMgr1.setWiFiManager(&wifiMgr);
 
-    TEST_ASSERT_TRUE(certMgr1.applyProvisioning("my-network", "my-password", 45.504f, -73.617f, "Gazebo"));
+    TEST_ASSERT_TRUE(
+        certMgr1.applyProvisioning(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL));
   }
 
   CertificateManager certMgr2(testPrefs, &mockArduino);
-  TEST_ASSERT_TRUE(certMgr2.begin());
+  TEST_ASSERT_TRUE(certMgr2.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
 
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLatitude());
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLongitude());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, certMgr2.getLocation().latitude);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, certMgr2.getLocation().longitude);
   TEST_ASSERT_EQUAL_STRING("Gazebo", certMgr2.getLabel());
 }
 
 void test_ble_provision_rejects_bad_label(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   const char *bad[] = {
@@ -399,7 +425,8 @@ void test_ble_provision_rejects_bad_label(void) {
       "\xed\xa0\x80",                         // surrogate
   };
   for (const char *label : bad) {
-    TEST_ASSERT_FALSE_MESSAGE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, label), label);
+    TEST_ASSERT_FALSE_MESSAGE(
+        certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, label, DEFAULT_SERVER, DEFAULT_INTERVAL), label);
     TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Invalid label") != NULL);
     TEST_ASSERT_EQUAL_STRING("error:label", certMgr.getProvisioningStatus());
   }
@@ -408,17 +435,242 @@ void test_ble_provision_rejects_bad_label(void) {
 
 void test_ble_provision_accepts_utf8_and_empty_labels(void) {
   CertificateManager certMgr(testPrefs, &mockArduino);
-  certMgr.begin();
-  WiFiManager wifiMgr(WIFI_TIMEOUT_MS);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   certMgr.setWiFiManager(&wifiMgr);
 
   // 16 two-byte characters: 32 bytes, the most there is room for.
-  TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f,
-                                             "éééééééééééééééé"));
-  TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, "Abri 🌧"));
+  TEST_ASSERT_TRUE(
+      certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "éééééééééééééééé", DEFAULT_SERVER, DEFAULT_INTERVAL));
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "Abri 🌧", DEFAULT_SERVER, DEFAULT_INTERVAL));
   TEST_ASSERT_EQUAL_STRING("Abri 🌧", certMgr.getLabel());
-  TEST_ASSERT_TRUE(certMgr.applyProvisioning("my-network", "my-password", 45.5f, -73.6f, ""));
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "", DEFAULT_SERVER, DEFAULT_INTERVAL));
   TEST_ASSERT_EQUAL_STRING("", certMgr.getLabel());
+}
+
+// ========================================
+// Test Cases - MQTT server and interval
+// ========================================
+
+void test_server_and_interval_default_until_provisioned(void) {
+  seedIdentity();
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin({"default.example", 1883}, 900));
+
+  TEST_ASSERT_EQUAL_STRING("default.example", certMgr.getMqttServer().host);
+  TEST_ASSERT_EQUAL_UINT16(1883, certMgr.getMqttServer().port);
+  TEST_ASSERT_EQUAL_UINT32(900, certMgr.getInterval());
+}
+
+void test_provisioned_server_and_interval_persist(void) {
+  seedIdentity();
+  {
+    CertificateManager certMgr(testPrefs, &mockArduino);
+    TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+    WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+    certMgr.setWiFiManager(&wifiMgr);
+    MockBleProvisioner ble;
+    startSession(ble, certMgr);
+    ble.setPayload(HOME_WIFI, {45.5f, -73.6f});
+    ble.setServer({"192.168.1.20", 18883});
+    ble.setInterval(60);
+
+    TEST_ASSERT_TRUE(provision(ble, certMgr));
+    TEST_ASSERT_EQUAL_STRING("192.168.1.20", certMgr.getMqttServer().host);
+    TEST_ASSERT_EQUAL_UINT16(18883, certMgr.getMqttServer().port);
+    TEST_ASSERT_EQUAL_UINT32(60, certMgr.getInterval());
+  }
+
+  // A new firmware with other defaults keeps what was provisioned.
+  CertificateManager reloaded(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(reloaded.begin({"default.example", 1883}, 900));
+  TEST_ASSERT_EQUAL_STRING("192.168.1.20", reloaded.getMqttServer().host);
+  TEST_ASSERT_EQUAL_UINT16(18883, reloaded.getMqttServer().port);
+  TEST_ASSERT_EQUAL_UINT32(60, reloaded.getInterval());
+}
+
+void test_wifi_only_keeps_server_and_interval(void) {
+  seedIdentity();
+  testPrefs.begin("tarameteo_certs", false);
+  testPrefs.putString("mqtt_server", "mqtt.example");
+  testPrefs.putULong("mqtt_port", 8884);
+  testPrefs.putULong("interval", 600);
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  MockBleProvisioner ble;
+  startSession(ble, certMgr);
+
+  ble.setWiFiPayload({"new-network", "my-password"});
+
+  TEST_ASSERT_TRUE(provision(ble, certMgr));
+  TEST_ASSERT_EQUAL_STRING("mqtt.example", certMgr.getMqttServer().host);
+  TEST_ASSERT_EQUAL_UINT16(8884, certMgr.getMqttServer().port);
+  TEST_ASSERT_EQUAL_UINT32(600, certMgr.getInterval());
+}
+
+void test_rejects_bad_host(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  const std::string host254(254, 'a');
+
+  const char *bad[] = {"", "mqtt://meteo.taram.ca", "meteo.taram.ca:8883", "my server", "météo.ca", host254.c_str()};
+  for (const char *host : bad) {
+    TEST_ASSERT_FALSE_MESSAGE(certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "", {host, 8883}, DEFAULT_INTERVAL),
+                              host);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("error:server", certMgr.getProvisioningStatus(), host);
+  }
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+}
+
+// 0 is also what a port of the wrong length decodes as (FieldCodec.h).
+void test_rejects_port_zero(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+
+  TEST_ASSERT_FALSE(certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "", {"meteo.taram.ca", 0}, DEFAULT_INTERVAL));
+
+  TEST_ASSERT_EQUAL_STRING("error:port", certMgr.getProvisioningStatus());
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+}
+
+void test_rejects_interval_out_of_range(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+
+  const uint32_t bad[] = {0, 59, 86401};
+  for (uint32_t interval : bad) {
+    char message[16];
+    snprintf(message, sizeof(message), "%lu s", (unsigned long)interval);
+    TEST_ASSERT_FALSE_MESSAGE(certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "", DEFAULT_SERVER, interval),
+                              message);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("error:interval", certMgr.getProvisioningStatus(), message);
+  }
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+}
+
+void test_accepts_host_port_and_interval_bounds(void) {
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  const std::string host253(253, 'a');
+
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "", {host253.c_str(), 65535}, 60));
+  TEST_ASSERT_EQUAL_UINT32(60, certMgr.getInterval());
+
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning(HOME_WIFI, {45.5f, -73.6f}, "", {"10.0.0.1", 1}, 86400));
+  TEST_ASSERT_EQUAL_UINT32(86400, certMgr.getInterval());
+}
+
+// ========================================
+// Test Cases - Failed writes leave NVS as it was
+// ========================================
+
+// What the board holds before the payload that fails.
+void provisionOldSettings(CertificateManager &certMgr) {
+  TEST_ASSERT_TRUE(certMgr.applyProvisioning({"old-network", "old-password"}, {45.504f, -73.617f}, "Gazebo",
+                                             {"old.example", 8884}, 600));
+}
+
+void applyNewSettings(CertificateManager &certMgr) {
+  TEST_ASSERT_FALSE(
+      certMgr.applyProvisioning({"new-network", "new-password"}, {10.0f, 20.0f}, "Garden", {"new.example", 1883}, 120));
+  TEST_ASSERT_EQUAL_STRING("error:storage", certMgr.getProvisioningStatus());
+}
+
+// After a reboot, with other defaults, so a setting that isn't stored shows as the default.
+void assertStoredSettingsAreOld(void) {
+  CertificateManager reloaded(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(reloaded.begin({"default.example", 1}, 3600));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 45.504f, reloaded.getLocation().latitude);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -73.617f, reloaded.getLocation().longitude);
+  TEST_ASSERT_EQUAL_STRING("Gazebo", reloaded.getLabel());
+  TEST_ASSERT_EQUAL_STRING("old.example", reloaded.getMqttServer().host);
+  TEST_ASSERT_EQUAL_UINT16(8884, reloaded.getMqttServer().port);
+  TEST_ASSERT_EQUAL_UINT32(600, reloaded.getInterval());
+
+  WiFiManager reloadedWifi(wifiPrefs, WIFI_TIMEOUT_MS);
+  TEST_ASSERT_TRUE(reloadedWifi.begin());
+  TEST_ASSERT_EQUAL_STRING("old-network", reloadedWifi.getSSID());
+}
+
+void assertNothingIsStored(void) {
+  CertificateManager reloaded(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(reloaded.begin({"default.example", 1}, 3600));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, reloaded.getLocation().latitude);
+  TEST_ASSERT_EQUAL_STRING("", reloaded.getLabel());
+  TEST_ASSERT_EQUAL_STRING("default.example", reloaded.getMqttServer().host);
+  TEST_ASSERT_EQUAL_UINT16(1, reloaded.getMqttServer().port);
+  TEST_ASSERT_EQUAL_UINT32(3600, reloaded.getInterval());
+
+  WiFiManager reloadedWifi(wifiPrefs, WIFI_TIMEOUT_MS);
+  TEST_ASSERT_FALSE(reloadedWifi.begin());
+}
+
+void test_failed_settings_write_keeps_the_stored_ones(void) {
+  seedIdentity();
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  provisionOldSettings(certMgr);
+  testPrefs.failWritesTo("interval"); // The last setting, after the others are written
+
+  applyNewSettings(certMgr);
+
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "Failed to store interval") != NULL);
+  TEST_ASSERT_EQUAL_STRING("old.example", certMgr.getMqttServer().host);
+  TEST_ASSERT_EQUAL_UINT32(600, certMgr.getInterval());
+  TEST_ASSERT_EQUAL_STRING("old-network", wifiMgr.getSSID());
+  assertStoredSettingsAreOld();
+}
+
+void test_failed_settings_write_on_a_new_board_stores_nothing(void) {
+  seedIdentity();
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  testPrefs.failWritesTo("interval");
+
+  applyNewSettings(certMgr);
+
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+  assertNothingIsStored();
+}
+
+void test_failed_credentials_write_keeps_the_stored_settings(void) {
+  seedIdentity();
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  provisionOldSettings(certMgr);
+  wifiPrefs.failWritesTo("password"); // After the settings and the SSID are written
+
+  applyNewSettings(certMgr);
+
+  TEST_ASSERT_TRUE(strstr(certMgr.getLastError(), "password") != NULL);
+  TEST_ASSERT_EQUAL_STRING("Gazebo", certMgr.getLabel());
+  TEST_ASSERT_EQUAL_STRING("old-network", wifiMgr.getSSID());
+  assertStoredSettingsAreOld();
+}
+
+void test_failed_credentials_write_on_a_new_board_stores_nothing(void) {
+  seedIdentity();
+  CertificateManager certMgr(testPrefs, &mockArduino);
+  TEST_ASSERT_TRUE(certMgr.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  certMgr.setWiFiManager(&wifiMgr);
+  wifiPrefs.failWritesTo("password");
+
+  applyNewSettings(certMgr);
+
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+  assertNothingIsStored();
 }
 
 // ========================================
@@ -453,6 +705,21 @@ int main(int argc, char **argv) {
   RUN_TEST(test_ble_provision_location_persists_across_instances);
   RUN_TEST(test_ble_provision_rejects_bad_label);
   RUN_TEST(test_ble_provision_accepts_utf8_and_empty_labels);
+
+  // MQTT server and interval tests
+  RUN_TEST(test_server_and_interval_default_until_provisioned);
+  RUN_TEST(test_provisioned_server_and_interval_persist);
+  RUN_TEST(test_wifi_only_keeps_server_and_interval);
+  RUN_TEST(test_rejects_bad_host);
+  RUN_TEST(test_rejects_port_zero);
+  RUN_TEST(test_rejects_interval_out_of_range);
+  RUN_TEST(test_accepts_host_port_and_interval_bounds);
+
+  // Failed write tests
+  RUN_TEST(test_failed_settings_write_keeps_the_stored_ones);
+  RUN_TEST(test_failed_settings_write_on_a_new_board_stores_nothing);
+  RUN_TEST(test_failed_credentials_write_keeps_the_stored_settings);
+  RUN_TEST(test_failed_credentials_write_on_a_new_board_stores_nothing);
 
   // WiFi manager tests
   RUN_TEST(test_wifi_reconnect_reports_every_attempt);

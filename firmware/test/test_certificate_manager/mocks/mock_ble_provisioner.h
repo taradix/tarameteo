@@ -2,18 +2,26 @@
 #define MOCK_BLE_PROVISIONER_H
 
 #include "../../../lib/BleProvisioning/include/IBleProvisioner.h"
+#include "../../../lib/CertificateManager/include/CertificateManager.h"
+#include "../../../lib/WiFiManager/WiFiManager.h"
 #include <string>
 
 class MockBleProvisioner : public IBleProvisioner {
 public:
-    MockBleProvisioner() : payloadReady(false), _lat(0.0f), _lon(0.0f) {}
+    // Holds nothing until begin() seeds it with the board's settings, as a real session does.
+    MockBleProvisioner() : payloadReady(false), _location{0.0f, 0.0f}, _port(0), _interval(0) {}
 
-    bool begin(const char* deviceName, uint32_t passkey, const char* label, float latitude, float longitude) override {
+    bool begin(const char* deviceName, uint32_t passkey, const char* label, const Location& location,
+               const MqttServer& server, uint32_t interval, const uint8_t* networks, size_t networksLength) override {
         (void)deviceName;
         (void)passkey;
+        (void)networks;
+        (void)networksLength;
         _label = label ? label : "";
-        _lat = latitude;
-        _lon = longitude;
+        _location = location;
+        _host = server.host ? server.host : "";
+        _port = server.port;
+        _interval = interval;
         return true;
     }
 
@@ -29,32 +37,36 @@ public:
         return true;
     }
 
-    const char* ssid() override { return _ssid.c_str(); }
-    const char* password() override { return _password.c_str(); }
-    float latitude() override { return _lat; }
-    float longitude() override { return _lon; }
+    WiFiCredentials wifi() override { return {_ssid.c_str(), _password.c_str()}; }
+    Location location() override { return _location; }
     const char* label() override { return _label.c_str(); }
+    MqttServer mqttServer() override { return {_host.c_str(), _port}; }
+    uint32_t interval() override { return _interval; }
 
     void notifyStatus(const char* status) override {
         lastStatus = status ? std::string(status) : std::string();
     }
 
     // Test helper: stage a payload the next poll() will surface.
-    void setPayload(const char* ssid, const char* password, float lat, float lon, const char* label = "Gazebo") {
-        _ssid = ssid ? ssid : "";
-        _password = password ? password : "";
-        _lat = lat;
-        _lon = lon;
+    void setPayload(const WiFiCredentials& wifi, const Location& location, const char* label = "Gazebo") {
+        setWiFiPayload(wifi);
+        _location = location;
         _label = label;
+    }
+
+    // Test helper: stage WiFi alone, as a client that skips the other fields.
+    void setWiFiPayload(const WiFiCredentials& wifi) {
+        _ssid = wifi.ssid;
+        _password = wifi.password;
         payloadReady = true;
     }
 
-    // Test helper: stage WiFi alone, as a client that skips Label and Location.
-    void setWiFiPayload(const char* ssid, const char* password) {
-        _ssid = ssid;
-        _password = password;
-        payloadReady = true;
+    // Test helpers: stage a server or interval on top of the payload, as a client writing them.
+    void setServer(const MqttServer& server) {
+        _host = server.host;
+        _port = server.port;
     }
+    void setInterval(uint32_t interval) { _interval = interval; }
 
     bool payloadReady;
     std::string lastStatus;
@@ -62,9 +74,11 @@ public:
 private:
     std::string _ssid;
     std::string _password;
-    float _lat;
-    float _lon;
+    Location _location;
     std::string _label;
+    std::string _host;
+    uint16_t _port;
+    uint32_t _interval;
 };
 
 #endif // MOCK_BLE_PROVISIONER_H

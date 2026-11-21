@@ -1,6 +1,7 @@
 #ifndef NIMBLE_PROVISIONER_ADAPTER_H
 #define NIMBLE_PROVISIONER_ADAPTER_H
 
+#include "FieldCodec.h"
 #include "IBleProvisioner.h"
 
 #ifndef UNIT_TEST
@@ -19,17 +20,21 @@
 // buffer writes before Commit visible to poll() — no locks needed.
 class NimBLEProvisionerAdapter : public IBleProvisioner {
 public:
-  NimBLEProvisionerAdapter() : _committed(false), _lat(0.0f), _lon(0.0f), _statusChar(nullptr) {
+  NimBLEProvisionerAdapter() : _committed(false), _location{0.0f, 0.0f}, _port(0), _interval(0), _statusChar(nullptr) {
     _ssid[0] = '\0';
     _password[0] = '\0';
     _label[0] = '\0';
+    _mqttHost[0] = '\0';
   }
 
-  bool begin(const char *deviceName, uint32_t passkey, const char *label, float latitude, float longitude) override {
-    // A client that never writes Label or Location keeps the current ones.
-    copyString(_label, sizeof(_label), reinterpret_cast<const uint8_t *>(label), strlen(label));
-    _lat = latitude;
-    _lon = longitude;
+  bool begin(const char *deviceName, uint32_t passkey, const char *label, const Location &location,
+             const MqttServer &server, uint32_t interval, const uint8_t *networks, size_t networksLength) override {
+    // A client that never writes Label, Location, Server, Port or Interval keeps the current ones.
+    copyString(_label, reinterpret_cast<const uint8_t *>(label), strlen(label));
+    _location = location;
+    copyString(_mqttHost, reinterpret_cast<const uint8_t *>(server.host), strlen(server.host));
+    _port = server.port;
+    _interval = interval;
 
     if (!NimBLEDevice::init(deviceName)) {
       return false;
@@ -41,8 +46,8 @@ public:
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEDevice::setSecurityPasskey(passkey);
 
-    _server = NimBLEDevice::createServer();
-    NimBLEService *service = _server->createService(BleProvisioningUUID::SERVICE);
+    _gattServer = NimBLEDevice::createServer();
+    NimBLEService *service = _gattServer->createService(BleProvisioningUUID::SERVICE);
 
     // Field writes require an encrypted + authenticated link.
     const uint32_t writeSecure = NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN;
@@ -62,8 +67,32 @@ public:
     _labelChar->setValue(_label);
     _labelChar->setCallbacks(new FieldCallback(this, Field::Label));
 
+    // Readable like Label, so the client can show the current values.
+    const uint32_t readWriteSecure =
+        writeSecure | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN;
+    _serverChar = service->createCharacteristic(BleProvisioningUUID::SERVER, readWriteSecure);
+    _serverChar->setValue(_mqttHost);
+    _serverChar->setCallbacks(new FieldCallback(this, Field::Server));
+
+    _portChar = service->createCharacteristic(BleProvisioningUUID::PORT, readWriteSecure);
+    uint8_t portBytes[2];
+    encodePort(_port, portBytes);
+    _portChar->setValue(portBytes, sizeof(portBytes));
+    _portChar->setCallbacks(new FieldCallback(this, Field::Port));
+
+    _intervalChar = service->createCharacteristic(BleProvisioningUUID::INTERVAL, readWriteSecure);
+    uint8_t intervalBytes[4];
+    encodeInterval(_interval, intervalBytes);
+    _intervalChar->setValue(intervalBytes, sizeof(intervalBytes));
+    _intervalChar->setCallbacks(new FieldCallback(this, Field::Interval));
+
     _commitChar = service->createCharacteristic(BleProvisioningUUID::COMMIT, writeSecure);
     _commitChar->setCallbacks(new FieldCallback(this, Field::Commit));
+
+    // Read only: the client never writes it, so it has no callback.
+    NimBLECharacteristic *networksChar = service->createCharacteristic(
+        BleProvisioningUUID::NETWORKS, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
+    networksChar->setValue(networks, networksLength);
 
     _statusChar = service->createCharacteristic(BleProvisioningUUID::STATUS,
                                                 NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
@@ -85,11 +114,11 @@ public:
 
   bool poll() override { return _committed.exchange(false, std::memory_order_acquire); }
 
-  const char *ssid() override { return _ssid; }
-  const char *password() override { return _password; }
-  float latitude() override { return _lat; }
-  float longitude() override { return _lon; }
+  WiFiCredentials wifi() override { return {_ssid, _password}; }
+  Location location() override { return _location; }
   const char *label() override { return _label; }
+  MqttServer mqttServer() override { return {_mqttHost, _port}; }
+  uint32_t interval() override { return _interval; }
 
   void notifyStatus(const char *status) override {
     if (_statusChar) {
@@ -99,7 +128,7 @@ public:
   }
 
 private:
-  enum class Field { Ssid, Password, Location, Label, Commit };
+  enum class Field { Ssid, Password, Location, Label, Server, Port, Interval, Commit };
 
   // Copies a written field into the matching buffer. On Commit, raises the flag
   // poll() watches. The string buffers hold one byte more than allowed, so an
@@ -107,30 +136,30 @@ private:
   void onFieldWrite(Field field, const uint8_t *data, size_t len) {
     switch (field) {
     case Field::Ssid:
-      copyString(_ssid, sizeof(_ssid), data, len);
+      copyString(_ssid, data, len);
       break;
     case Field::Password:
-      copyString(_password, sizeof(_password), data, len);
+      copyString(_password, data, len);
       break;
     case Field::Location:
-      if (len == 8) { // two little-endian float32: lat, lon
-        memcpy(&_lat, data, 4);
-        memcpy(&_lon, data + 4, 4);
-      }
+      decodeLocation(data, len, _location.latitude, _location.longitude);
       break;
     case Field::Label:
-      copyString(_label, sizeof(_label), data, len);
+      copyString(_label, data, len);
+      break;
+    case Field::Server:
+      copyString(_mqttHost, data, len);
+      break;
+    case Field::Port:
+      _port = decodePort(data, len);
+      break;
+    case Field::Interval:
+      _interval = decodeInterval(data, len);
       break;
     case Field::Commit:
       _committed.store(true, std::memory_order_release);
       break;
     }
-  }
-
-  static void copyString(char *dst, size_t dstSize, const uint8_t *data, size_t len) {
-    size_t n = (len < dstSize - 1) ? len : dstSize - 1;
-    memcpy(dst, data, n);
-    dst[n] = '\0';
   }
 
   class FieldCallback : public NimBLECharacteristicCallbacks {
@@ -146,20 +175,25 @@ private:
     Field _field;
   };
 
-  NimBLEServer *_server;
+  NimBLEServer *_gattServer;
   NimBLECharacteristic *_ssidChar;
   NimBLECharacteristic *_passwordChar;
   NimBLECharacteristic *_locationChar;
   NimBLECharacteristic *_labelChar;
+  NimBLECharacteristic *_serverChar;
+  NimBLECharacteristic *_portChar;
+  NimBLECharacteristic *_intervalChar;
   NimBLECharacteristic *_commitChar;
   NimBLECharacteristic *_statusChar;
 
   char _ssid[WiFiManager::MAX_SSID_BYTES + 2];
   char _password[WiFiManager::MAX_PASSWORD_BYTES + 2];
   char _label[CertificateManager::MAX_LABEL_BYTES + 2];
+  char _mqttHost[CertificateManager::MAX_HOST_BYTES + 2];
   std::atomic<bool> _committed;
-  float _lat;
-  float _lon;
+  Location _location;
+  uint16_t _port;
+  uint32_t _interval;
 };
 
 #endif // UNIT_TEST

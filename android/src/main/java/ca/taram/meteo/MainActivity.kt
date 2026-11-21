@@ -42,6 +42,10 @@ class Shown(context: Context) {
         val picked = names.updateAndGet { if (name in it) it - name else it + name }
         prefs.edit { putStringSet("shown", picked) }
     }
+
+    fun show(name: String) {
+        if (name !in names.value) toggle(name)
+    }
 }
 
 lateinit var shown: Shown
@@ -57,6 +61,7 @@ class App : Application() {
 @Serializable object Home
 @Serializable object Sensors
 @Serializable object Alerts
+@Serializable object Setup
 // The card passes the kind so the screen doesn't wait on the sensor list.
 @Serializable data class Detail(val name: String, val kind: String, val label: String? = null)
 
@@ -79,6 +84,7 @@ fun Screens() {
     val destination = entry?.destination
     val home = destination == null || destination.hasRoute<Home>()
     val pick = { nav.navigate(Sensors) { launchSingleTop = true } }
+    val setUp = { nav.navigate(Setup) { launchSingleTop = true } }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -87,6 +93,7 @@ fun Screens() {
                         when {
                             destination?.hasRoute<Sensors>() == true -> stringResource(R.string.sensors_title)
                             destination?.hasRoute<Alerts>() == true -> stringResource(R.string.alerts_title)
+                            destination?.hasRoute<Setup>() == true -> stringResource(R.string.setup_title)
                             destination?.hasRoute<Detail>() == true -> entry!!.toRoute<Detail>().let { it.label ?: it.name }
                             else -> stringResource(R.string.app_name)
                         },
@@ -99,14 +106,19 @@ fun Screens() {
                         }
                         TextButton(pick) { Text(stringResource(R.string.sensors_title)) }
                     }
+                    // Setting up an owned station is one more way to add a sensor.
+                    if (destination?.hasRoute<Sensors>() == true) {
+                        TextButton(setUp) { Text(stringResource(R.string.setup_title)) }
+                    }
                 },
             )
         },
     ) { padding ->
         NavHost(nav, Home, Modifier.padding(padding)) {
-            composable<Home> { Dashboard(pick, { nav.navigate(Detail(it.name, it.kind, it.label)) }) }
+            composable<Home> { Dashboard(pick, setUp, { nav.navigate(Detail(it.name, it.kind, it.label)) }) }
             composable<Sensors> { Picker() }
             composable<Alerts> { AlertsScreen() }
+            composable<Setup> { SetupScreen({ nav.popBackStack(Home, inclusive = false) }) }
             composable<Detail> {
                 val route = it.toRoute<Detail>()
                 SensorScreen(route.name, route.kind, route.label)

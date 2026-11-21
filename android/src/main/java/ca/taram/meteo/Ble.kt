@@ -22,6 +22,7 @@ import android.os.Build
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
+import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withTimeoutOrNull
@@ -40,6 +41,10 @@ val LOCATION: UUID = uuid(4)
 val COMMIT: UUID = uuid(5)
 val STATUS: UUID = uuid(6)
 val LABEL: UUID = uuid(7)
+val NETWORKS: UUID = uuid(8)
+val SERVER: UUID = uuid(9)
+val PORT: UUID = uuid(10)
+val INTERVAL: UUID = uuid(11)
 // Client Characteristic Configuration: turns notifications on.
 private val CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
@@ -57,12 +62,53 @@ class Lost(message: String) : IOException(message)
 
 class PairingFailed : IOException("Pairing failed")
 
-// The station said no; code is what follows "error:" (ssid, password, location, label, wifi, storage).
+// The station said no; code is what follows "error:" (ssid, password, location, label, server, port,
+// interval, wifi, storage).
 class Rejected(val code: String) : IOException("Rejected: $code")
 
+// A network for the station to join.
+data class WiFiCredentials(val ssid: String, val password: String)
+
+// Where the station sends its readings.
+data class MqttServer(val host: String, val port: Int)
+
+// The station's bounds, like CertificateManager's: a port, and seconds between readings.
+val PORTS = 1..65535
+val INTERVALS = 60..86400
+
 // Two little-endian float32: latitude, then longitude.
-fun location(latitude: Double, longitude: Double): ByteArray =
-    ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putFloat(latitude.toFloat()).putFloat(longitude.toFloat()).array()
+fun location(at: LatLng): ByteArray =
+    ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putFloat(at.latitude.toFloat()).putFloat(at.longitude.toFloat()).array()
+
+// A little-endian uint16, for Port.
+fun uint16(value: Int): ByteArray = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(value.toShort()).array()
+
+// A little-endian uint32, for Interval.
+fun uint32(value: Int): ByteArray = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(value).array()
+
+// The Server and Port values.
+fun mqttServerOf(host: ByteArray, port: ByteArray): MqttServer =
+    MqttServer(host.decodeToString(), ByteBuffer.wrap(port).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xffff)
+
+// The Interval value: seconds between readings.
+fun intervalOf(value: ByteArray): Int = ByteBuffer.wrap(value).order(ByteOrder.LITTLE_ENDIAN).int
+
+// A WiFi network the station found, with its signal there in dBm.
+data class Network(val ssid: String, val rssi: Int)
+
+// A Networks value: entries of [int8 RSSI][uint8 length][SSID bytes], strongest first. A cut entry,
+// which the station never sends, ends the list.
+fun networksOf(value: ByteArray): List<Network> = buildList {
+    var at = 0
+    while (at + 2 <= value.size) {
+        val rssi = value[at].toInt()
+        val length = value[at + 1].toInt() and 0xff
+        val end = at + 2 + length
+        if (end > value.size) break
+        add(Network(value.decodeToString(at + 2, end), rssi))
+        at = end
+    }
+}
 
 // The station's verdict in a Status value, or null for "idle" and "provisioning", which aren't one yet.
 fun verdict(status: String): Result<Unit>? = when {
@@ -134,7 +180,8 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
                 pair(context, device)
                 station.request { it.requestMtu(MTU) }
                 station.notifyStatus()
-            } catch (e: IOException) {
+            } catch (e: Throwable) {
+                // Leaving the screen cancels this mid-way; the station stops advertising while connected.
                 station.close()
                 throw e
             }
@@ -172,14 +219,27 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
     }
 
     // The name the station has now, to prefill; empty for none.
-    suspend fun label(): String = request { it.readCharacteristic(characteristic(LABEL)) }.decodeToString()
+    suspend fun label(): String = read(LABEL).decodeToString()
 
-    // Sends the settings and waits for the station's verdict, which throws Rejected when it says no.
-    suspend fun provision(ssid: String, password: String, latitude: Double, longitude: Double, label: String) {
-        write(SSID, ssid.encodeToByteArray())
-        write(PASSWORD, password.encodeToByteArray())
-        write(LOCATION, location(latitude, longitude))
+    // The networks the station found when it powered on, to pick from.
+    suspend fun networks(): List<Network> = networksOf(read(NETWORKS))
+
+    // Where the station sends its readings now, and how often, to prefill.
+    suspend fun mqttServer(): MqttServer = mqttServerOf(read(SERVER), read(PORT))
+    suspend fun interval(): Int = intervalOf(read(INTERVAL))
+
+    // Sends the settings and waits for the station's verdict, which throws Rejected when it says no. A null
+    // server or interval isn't sent, so the station keeps its own.
+    suspend fun provision(wifi: WiFiCredentials, at: LatLng, label: String, server: MqttServer?, interval: Int?) {
+        write(SSID, wifi.ssid.encodeToByteArray())
+        write(PASSWORD, wifi.password.encodeToByteArray())
+        write(LOCATION, location(at))
         write(LABEL, label.encodeToByteArray())
+        server?.let {
+            write(SERVER, it.host.encodeToByteArray())
+            write(PORT, uint16(it.port))
+        }
+        interval?.let { write(INTERVAL, uint32(it)) }
         // A verdict a timed-out commit got late isn't this one's.
         while (events.statuses.tryReceive().isSuccess) continue
         write(COMMIT, byteArrayOf(1))
@@ -214,6 +274,11 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
                 it.writeDescriptor(descriptor)
             }
         }
+    }
+
+    private suspend fun read(uuid: UUID): ByteArray {
+        val characteristic = characteristic(uuid)
+        return request { it.readCharacteristic(characteristic) }
     }
 
     private suspend fun write(uuid: UUID, value: ByteArray) {
