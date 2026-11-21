@@ -6,6 +6,13 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Android 13+ shows no notification until the user allows it; the alerts screen asks. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Setting up a station: the companion device chooser finds it, so no scan or location permission. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Not required: a phone without them still shows the weather. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.software.companion_device_setup" android:required="false" />
 
     <application
         android:name=".App"

@@ -7,6 +7,7 @@ plugins {
 }
 
 val openapi = file("../backend/openapi.json")
+val bleContract = file("../firmware/lib/BleProvisioning/include/IBleProvisioner.h")
 // Push alerts need a Firebase project: drop its google-services.json next to this file. The file ships
 // inside every APK, so it is not a secret; without it the app still builds, only alerts don't work.
 val firebase = file("google-services.json").exists()
@@ -67,6 +68,8 @@ android {
     testOptions.unitTests.all {
         it.inputs.file(openapi)
         it.systemProperty("openapi", openapi.path)
+        it.inputs.file(bleContract)
+        it.systemProperty("bleContract", bleContract.path)
     }
 }
 
