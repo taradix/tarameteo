@@ -10,15 +10,15 @@ from argparse import ArgumentParser
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from taraqueue import Queue
-
-from tarameteo.alert_checker import AlertService
-from tarameteo.ingest import ingest
-from tarameteo.logger import (
+from taralog import (
     LoggerHandlerAction,
     LoggerLevelAction,
     setup_logger,
 )
+from taraqueue import Queue
+
+from tarameteo.alert_checker import AlertService
+from tarameteo.ingest import ingest
 from tarameteo.melccfp import source as melccfp_source
 from tarameteo.metar import source as metar_source
 from tarameteo.msc import source as msc_source

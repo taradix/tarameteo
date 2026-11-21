@@ -1,7 +1,5 @@
 """Testing fixtures."""
 
-import logging
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -11,9 +9,7 @@ from tarameteo.ca import app as _ca_app
 from tarameteo.ca_client import IssueCertificateRequest
 from tarameteo.crypto import generate_key_pem
 from tarameteo.fs import atomic_write
-from tarameteo.logger import setup_logger
 from tarameteo.pki import create_csr_pem
-from tarameteo.testing.logger import LoggerHandler
 from tarameteo.ts import (
     MemoryReader,
     MemoryStore,
@@ -57,17 +53,6 @@ def ca_app():
     """CA testing app."""
     with TestClient(_ca_app) as client:
         yield client
-
-
-@pytest.fixture(autouse=True)
-def logger_handler():
-    """Logger handler fixture."""
-    handler = LoggerHandler()
-    setup_logger(logging.DEBUG, handler)
-    try:
-        yield handler
-    finally:
-        setup_logger()
 
 
 @pytest.fixture
