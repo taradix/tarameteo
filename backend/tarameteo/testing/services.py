@@ -2,13 +2,12 @@
 
 import sys
 from functools import partial
-from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
+from pytest_xdocker.compose import ComposeServer, find_compose_files
 
 from tarameteo.ca_client import get_ca_client
-from tarameteo.testing.compose import ComposeServer
 from tarameteo.ts import (
     InfluxReader,
     InfluxWriter,
@@ -56,20 +55,7 @@ def env_file(env_vars, request):
 
 @pytest.fixture(scope="session")
 def compose_files(request):
-    directory = Path(request.config.rootdir)
-    filenames = ["docker-compose.yml", "compose.yaml", "compose.yml"]
-    while True:
-        for filename in filenames:
-            path = directory / filename
-            if path.exists():
-                all_files = directory.glob(f"{path.stem}.*")
-                ordered_files = sorted(all_files, key=lambda p: len(p.name))
-                return list(ordered_files)
-
-        if directory == directory.parent:
-            raise KeyError("Docker compose file not found")
-
-        directory = directory.parent
+    return find_compose_files(request.config.rootdir)
 
 
 @pytest.fixture(scope="session")
