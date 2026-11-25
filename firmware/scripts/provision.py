@@ -30,7 +30,7 @@ def uuid(n: int) -> str:
 
 SSID, PASSWORD, LOCATION, COMMIT, STATUS, LABEL, NETWORKS, SERVER, PORT, INTERVAL = (uuid(n) for n in range(2, 12))
 
-# Seconds between readings the board takes, like CertificateManager::MIN_INTERVAL and MAX_INTERVAL.
+# Seconds between readings the board takes, like StationSettings::MIN_INTERVAL and MAX_INTERVAL.
 MIN_INTERVAL = 60
 MAX_INTERVAL = 86400
 

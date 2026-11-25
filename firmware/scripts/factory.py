@@ -54,7 +54,7 @@ def board_mac(port: list[str]) -> str:
 
 
 def nvs_csv(key: Path, cert: Path, ca_cert: Path, passkey: int) -> str:
-    """Input for esp_idf_nvs_partition_gen; keys match CertificateManager::loadFromNVS."""
+    """Input for esp_idf_nvs_partition_gen; keys match FactoryIdentity::loadFromNVS."""
     return "\n".join([
         "key,type,encoding,value",
         "tarameteo_certs,namespace,,",

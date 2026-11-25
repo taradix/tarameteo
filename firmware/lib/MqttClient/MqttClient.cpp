@@ -1,9 +1,9 @@
 #include "MqttClient.h"
-#include "CertificateManager.h"
 #include "WiFiClientSecureAdapter.h"
 #include <WiFi.h>
 
-MqttClient::MqttClient(CertificateManager *certManager) : _certManager(certManager), _mqttClient(_wifiClientSecure) {
+MqttClient::MqttClient(FactoryIdentity &identity, StationSettings &settings)
+    : _identity(identity), _settings(settings), _mqttClient(_wifiClientSecure) {
 
   _lastError[0] = '\0';
 
@@ -19,14 +19,14 @@ bool MqttClient::begin() {
   // Load client certificates for mTLS authentication
   // Wrap WiFiClientSecure with adapter to match IWiFiClient interface
   WiFiClientSecureAdapter clientAdapter(_wifiClientSecure);
-  if (!_certManager->loadCertificates(clientAdapter)) {
+  if (!_identity.loadCertificates(clientAdapter)) {
     setError("Failed to load certificates for mTLS");
     return false;
   }
   Serial.println("MqttClient: mTLS certificates loaded successfully");
 
   // Initialize topics using sensor name from certificate CN
-  const char *sensorName = _certManager->getCN();
+  const char *sensorName = _identity.getCN();
   if (sensorName && strlen(sensorName) > 0) {
     snprintf(_topic, sizeof(_topic), "weather/%s/event", sensorName);
     snprintf(_clientId, sizeof(_clientId), "tarameteo-%s", sensorName);
@@ -45,8 +45,8 @@ bool MqttClient::connect() {
     return true;
   }
 
-  // Provisioned over BLE, else the config.h defaults (CertificateManager::begin).
-  const MqttServer server = _certManager->getMqttServer();
+  // Provisioned over BLE, else the config.h defaults (StationSettings::begin).
+  const MqttServer server = _settings.getMqttServer();
   Serial.printf("Connecting to MQTT server at %s:%u using mTLS...\n", server.host, (unsigned)server.port);
 
   // Pre-resolve hostname with retries — DNS over UDP is unreliable at weak signal.
@@ -115,7 +115,7 @@ bool MqttClient::connect() {
   // Publish online status
   _mqttClient.publish(_lwTopic, "online", true);
 
-  Serial.printf("Connected to MQTT server with mTLS (CN=%s)\n", _certManager->getCN());
+  Serial.printf("Connected to MQTT server with mTLS (CN=%s)\n", _identity.getCN());
   return true;
 }
 

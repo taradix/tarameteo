@@ -5,10 +5,10 @@
 #include "Arduino.h"
 #endif
 
-#include "../../lib/CertificateManager/include/X509Parser.h"
+#include "../../lib/Station/include/X509Parser.h"
 
 // Include implementation files for linking
-#include "../../lib/CertificateManager/src/X509Parser.cpp"
+#include "../../lib/Station/src/X509Parser.cpp"
 
 // Test certificate with known values
 // CN=station-01

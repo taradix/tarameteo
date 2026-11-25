@@ -29,7 +29,7 @@ constexpr const char *PORT = "6d5a000a-8b6e-4b3a-9c1d-2f7a5e0c1a01";     // Read
 constexpr const char *INTERVAL = "6d5a000b-8b6e-4b3a-9c1d-2f7a5e0c1a01"; // Read + Write: LE uint32 seconds between readings, 60 to 86400
 } // namespace BleProvisioningUUID
 
-// Defined in WiFiManager.h and CertificateManager.h; declarations need no more, which
+// Defined in WiFiManager.h and StationSettings.h; declarations need no more, which
 // keeps this contract free of their dependencies.
 struct WiFiCredentials;
 struct Location;

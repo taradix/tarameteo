@@ -5,7 +5,7 @@
 #include "IBleProvisioner.h"
 
 #ifndef UNIT_TEST
-#include "CertificateManager.h"
+#include "StationSettings.h"
 #include "WiFiManager.h"
 #include <NimBLEDevice.h>
 #include <atomic>
@@ -188,8 +188,8 @@ private:
 
   char _ssid[WiFiManager::MAX_SSID_BYTES + 2];
   char _password[WiFiManager::MAX_PASSWORD_BYTES + 2];
-  char _label[CertificateManager::MAX_LABEL_BYTES + 2];
-  char _mqttHost[CertificateManager::MAX_HOST_BYTES + 2];
+  char _label[StationSettings::MAX_LABEL_BYTES + 2];
+  char _mqttHost[StationSettings::MAX_HOST_BYTES + 2];
   std::atomic<bool> _committed;
   Location _location;
   uint16_t _port;

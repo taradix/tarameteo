@@ -72,7 +72,7 @@ data class WiFiCredentials(val ssid: String, val password: String)
 // Where the station sends its readings.
 data class MqttServer(val host: String, val port: Int)
 
-// The station's bounds, like CertificateManager's: a port, and seconds between readings.
+// The station's bounds, like StationSettings': a port, and seconds between readings.
 val PORTS = 1..65535
 val INTERVALS = 60..86400
 

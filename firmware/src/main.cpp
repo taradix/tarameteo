@@ -11,19 +11,20 @@
  * - Last Will and Testament for offline detection
  */
 
-#include <Arduino.h>
 #include "BME280Sensor.h"
-#include "CertificateManager.h"
+#include "FactoryIdentity.h"
 #include "MqttClient.h"
 #include "PowerManager.h"
+#include "StationSettings.h"
 #include "TimeManager.h"
 #include "WiFiManager.h"
 #include "config.h"
+#include <Arduino.h>
 #include <Preferences.h>
 #include <cmath>
 #include <esp_sleep.h>
 
-// CertificateManager adapters
+// Logging for FactoryIdentity and StationSettings
 #include "ArduinoAdapter.h"
 
 // BLE provisioning transport
@@ -39,16 +40,18 @@ BME280Sensor sensor(BME280_ADDRESS, BME280_SDA, BME280_SCL, SEA_LEVEL_PRESSURE);
 Preferences wifiPrefs;
 WiFiManager wifiManager(wifiPrefs, WIFI_TIMEOUT_MS);
 
-// CertificateManager dependencies (must be global to persist)
-Preferences certPrefs;
+// Both keep their keys in the tarameteo_certs namespace, each through its own
+// Preferences, since one can't be begun twice. Global, so they outlive setup().
 ArduinoAdapter arduinoAdapter;
-CertificateManager certManager(certPrefs, &arduinoAdapter);
+Preferences identityPrefs;
+FactoryIdentity identity(identityPrefs, &arduinoAdapter);
+Preferences settingsPrefs;
+StationSettings settings(settingsPrefs, &arduinoAdapter, wifiManager);
 
-MqttClient mqttClient(&certManager);
-// The defaults; provisioning over BLE can change them (CertificateManager). The board
+MqttClient mqttClient(identity, settings);
+// The defaults; provisioning over BLE can change them (StationSettings). The board
 // sleeps for the interval between readings, sending one each time it wakes.
-static_assert(READING_INTERVAL >= CertificateManager::MIN_INTERVAL &&
-                  READING_INTERVAL <= CertificateManager::MAX_INTERVAL,
+static_assert(READING_INTERVAL >= StationSettings::MIN_INTERVAL && READING_INTERVAL <= StationSettings::MAX_INTERVAL,
               "READING_INTERVAL must be between 60 seconds (1 minute) and 86400 (1 day)");
 static_assert(MQTT_PORT >= 1 && MQTT_PORT <= 65535, "MQTT_PORT must be between 1 and 65535");
 PowerManager powerManager;
@@ -140,14 +143,19 @@ void setup() {
   }
 
   // Load the identity the factory step wrote into NVS (scripts/factory.py)
-  Serial.println("Initializing certificate manager...");
-  certManager.setWiFiManager(&wifiManager); // Link for unified provisioning
-  if (!certManager.begin({MQTT_SERVER, MQTT_PORT}, READING_INTERVAL)) {
-    printStatus("Factory Identity", false, certManager.getLastError());
+  Serial.println("Loading factory identity...");
+  if (!identity.begin()) {
+    printStatus("Factory Identity", false, identity.getLastError());
     powerManager.sleep();
   }
   printStatus("Factory Identity", true);
-  Serial.printf("Sensor ID: %s\n", certManager.getCN());
+  Serial.printf("Sensor ID: %s\n", identity.getCN());
+
+  // What provisioning set, else config.h's defaults
+  if (!settings.begin({MQTT_SERVER, MQTT_PORT}, READING_INTERVAL)) {
+    printStatus("Station Settings", false, settings.getLastError());
+    powerManager.sleep();
+  }
 
   // A board without WiFi credentials waits for them over BLE. A cold boot opens
   // a shorter window too, so the owner can move a board to a new network by
@@ -167,7 +175,7 @@ void setup() {
   constexpr unsigned long RESTART_DELAY_MS = 2000;
   if (wifiManager.needsProvisioning() || coldBoot) {
     // Advertise the sensor ID printed on the sticker next to the passkey.
-    const char *deviceName = certManager.getCN();
+    const char *deviceName = identity.getCN();
     unsigned long windowMs = wifiManager.needsProvisioning() ? UNPROVISIONED_WINDOW_MS : COLD_BOOT_WINDOW_MS;
 
     Serial.println("===========================================");
@@ -187,17 +195,16 @@ void setup() {
     bool saved = false;
     // A provisioned board skips the window when BLE fails: restarting would
     // be another cold boot, so it would fail again and never publish.
-    if (ble.begin(deviceName, certManager.getPasskey(), certManager.getLabel(), certManager.getLocation(),
-                  certManager.getMqttServer(), certManager.getInterval(), networks, networksLength)) {
+    if (ble.begin(deviceName, identity.getPasskey(), settings.getLabel(), settings.getLocation(),
+                  settings.getMqttServer(), settings.getInterval(), networks, networksLength)) {
       unsigned long startTime = millis();
       while (!saved && (millis() - startTime) < windowMs) {
         if (ble.poll()) {
           ble.notifyStatus("provisioning");
-          saved =
-              certManager.applyProvisioning(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval());
-          ble.notifyStatus(certManager.getProvisioningStatus());
+          saved = settings.apply(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval());
+          ble.notifyStatus(settings.getStatus());
           if (!saved) {
-            Serial.printf("Provisioning rejected: %s\n", certManager.getLastError());
+            Serial.printf("Provisioning rejected: %s\n", settings.getLastError());
           }
         }
         delay(BLE_POLL_INTERVAL_MS);
@@ -220,7 +227,7 @@ void setup() {
 #endif // UNIT_TEST
 
   // The provisioned interval, or config.h's, from here on
-  powerManager.armWakeup(certManager.getInterval());
+  powerManager.armWakeup(settings.getInterval());
 
   // Connect to WiFi (credentials now loaded from NVS)
   Serial.println("Connecting to WiFi...");
@@ -248,8 +255,7 @@ void setup() {
     Serial.printf("Current time: %s\n", timeString);
   }
 
-
-  // Initialize MQTT client (certificates already loaded by CertificateManager)
+  // Initialize MQTT client (certificates already loaded by FactoryIdentity)
   if (!mqttClient.begin()) {
     printStatus("MQTT Client", false, mqttClient.getLastError());
     powerManager.sleep();
@@ -263,13 +269,13 @@ void setup() {
     // Continue anyway - will retry in loop
   } else {
     printStatus("MQTT Connection", true);
-    const MqttServer server = certManager.getMqttServer();
+    const MqttServer server = settings.getMqttServer();
     Serial.printf("Connected to %s:%u\n", server.host, (unsigned)server.port);
   }
 
   Serial.println("All components initialized successfully");
-  Serial.printf("Sleep duration: %lu seconds (%.1f minutes)\n", (unsigned long)certManager.getInterval(),
-                certManager.getInterval() / 60.0);
+  Serial.printf("Sleep duration: %lu seconds (%.1f minutes)\n", (unsigned long)settings.getInterval(),
+                settings.getInterval() / 60.0);
   Serial.println("Starting main loop...\n");
 }
 
@@ -286,9 +292,9 @@ void loop() {
   }
 
   // Read sensor data
-  const WeatherData data = {sensor.getTemperature(),   sensor.getPressure(),  sensor.getHumidity(),
-                            sensor.getAltitude(),      wifiManager.getRSSI(), timeManager.getCurrentTimestamp(),
-                            certManager.getLocation(), certManager.getLabel()};
+  const WeatherData data = {sensor.getTemperature(), sensor.getPressure(),  sensor.getHumidity(),
+                            sensor.getAltitude(),    wifiManager.getRSSI(), timeManager.getCurrentTimestamp(),
+                            settings.getLocation(),  settings.getLabel()};
 
   // Validate sensor readings
   if (std::isnan(data.temperature) || std::isnan(data.pressure) || std::isnan(data.humidity)) {
@@ -325,7 +331,7 @@ void loop() {
   mqttClient.disconnect();
 
   // Enter deep sleep regardless of publish status
-  Serial.printf("Entering deep sleep for %lu seconds...\n", (unsigned long)certManager.getInterval());
+  Serial.printf("Entering deep sleep for %lu seconds...\n", (unsigned long)settings.getInterval());
   Serial.println("=====================================\n");
   powerManager.sleep();
 }

@@ -1,9 +1,9 @@
 #ifndef MOCK_BLE_PROVISIONER_H
 #define MOCK_BLE_PROVISIONER_H
 
-#include "../../../lib/BleProvisioning/include/IBleProvisioner.h"
-#include "../../../lib/CertificateManager/include/CertificateManager.h"
-#include "../../../lib/WiFiManager/WiFiManager.h"
+#include "../../lib/BleProvisioning/include/IBleProvisioner.h"
+#include "../../lib/Station/include/StationSettings.h"
+#include "../../lib/WiFiManager/WiFiManager.h"
 #include <string>
 
 class MockBleProvisioner : public IBleProvisioner {

@@ -1,7 +1,7 @@
 #ifndef MOCK_ARDUINO_CORE_H
 #define MOCK_ARDUINO_CORE_H
 
-#include "../../../lib/CertificateManager/include/IArduino.h"
+#include "../../lib/Station/include/IArduino.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>

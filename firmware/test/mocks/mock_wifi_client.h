@@ -1,7 +1,7 @@
 #ifndef MOCK_WIFI_CLIENT_H
 #define MOCK_WIFI_CLIENT_H
 
-#include "../../../lib/CertificateManager/include/IWiFiClient.h"
+#include "../../lib/Station/include/IWiFiClient.h"
 #include <string.h>
 
 class MockWiFiClient : public IWiFiClient {

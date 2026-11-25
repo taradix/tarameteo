@@ -61,7 +61,7 @@ class BleTest {
         val header = File(System.getProperty("settingsContract")!!).readText()
         fun constant(name: String) =
             Regex("""static const uint32_t $name = (\d+);""").find(header)?.groupValues?.get(1)?.toInt()
-                ?: error("$name not found in the firmware's CertificateManager.h")
+                ?: error("$name not found in the firmware's StationSettings.h")
         assertEquals(constant("MIN_INTERVAL")..constant("MAX_INTERVAL"), INTERVALS)
     }
 

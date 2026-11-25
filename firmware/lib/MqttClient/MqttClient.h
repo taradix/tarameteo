@@ -5,7 +5,8 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "CertificateManager.h"
+#include "FactoryIdentity.h"
+#include "StationSettings.h"
 
 struct WeatherData {
     float temperature;
@@ -25,8 +26,8 @@ public:
     static const int DNS_RETRIES = 3;
     static const int DNS_RETRY_DELAY_MS = 2000;
 
-    // Connects to the MQTT server the certificate manager holds.
-    explicit MqttClient(CertificateManager* certManager);
+    // Connects to the settings' MQTT server with the identity's certificates.
+    MqttClient(FactoryIdentity& identity, StationSettings& settings);
 
     bool begin();
     bool connect();
@@ -36,7 +37,8 @@ public:
     const char* getLastError() const { return _lastError; }
 
 private:
-    CertificateManager* _certManager;
+    FactoryIdentity& _identity;
+    StationSettings& _settings;
     char _lastError[128];
     char _topic[64];
     char _clientId[32];

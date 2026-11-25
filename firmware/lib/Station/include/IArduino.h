@@ -1,7 +1,7 @@
 #ifndef I_ARDUINO_H
 #define I_ARDUINO_H
 
-// The logging CertificateManager needs, so tests can check what it reports.
+// The logging FactoryIdentity and StationSettings need, so tests can check what it reports.
 class IArduino {
 public:
     virtual ~IArduino() {}
