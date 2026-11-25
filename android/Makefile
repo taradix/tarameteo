@@ -15,11 +15,13 @@ check:
 test:
 	@$(GRADLE) testDebugUnitTest
 
-# NOTE: no coverage gate yet; add Kover when one is wanted.
-# Debug build onto the phone connected over adb.
 .PHONY: install
 install:
 	@$(GRADLE) installDebug
+
+.PHONY: uninstall
+uninstall:
+	@$(GRADLE) uninstallDebug
 
 # Signed when the release* properties are set (see build.gradle.kts);
 # CI does this on android-v* tags.

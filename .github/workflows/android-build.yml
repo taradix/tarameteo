@@ -61,4 +61,4 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" build/outputs/apk/release/tarameteo-release.apk --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" build/outputs/apk/release/tarameteo-release.apk build/outputs/bundle/release/tarameteo-release.aab --generate-notes

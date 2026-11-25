@@ -66,7 +66,8 @@ Install the app
 
 Pushing an ``android-v<version>`` tag builds a signed APK and attaches it to
 the GitHub release; download it on the phone to sideload it. With the phone
-on USB debugging, ``make -C android install`` installs a debug build instead.
+on USB debugging, ``make -C android install`` installs a debug build instead,
+and ``make -C android uninstall`` uninstalls it.
 
 ``make -C android release`` builds the APK and the Play bundle locally. It
 signs them only when ``releaseKeystore``, ``releaseKeystorePassword``,
