@@ -29,6 +29,17 @@ factory: .pio/libdeps/esp32/integrity.dat include/config.h
 	@echo "==> Flashing firmware and factory identity..."
 	@$(PIO) run -e esp32 -t upload $(if $(PORT),--upload-port $(PORT))
 	@$(PYTHON) scripts/factory.py $(if $(PORT),--port $(PORT))
+
+# Flashes the app only; NVS keeps the identity and settings.
+.PHONY: flash
+flash: .pio/libdeps/esp32/integrity.dat include/config.h
+	@echo "==> Flashing firmware..."
+	@$(PIO) run -e esp32 -t upload $(if $(PORT),--upload-port $(PORT))
+
+.PHONY: monitor
+monitor: .venv/pyvenv.cfg
+	@$(PIO) device monitor -e esp32 $(if $(PORT),--port $(PORT))
+
 .PHONY: check
 check: .pio/libdeps/analysis/integrity.dat include/config.h
 	@echo "==> Running static analysis..."

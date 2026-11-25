@@ -3,3 +3,9 @@
 build/
 local.properties
 *.jks
+
+# Copies of build outputs.
+*.apk
+*.aab
+/apk/
+/bundle/

@@ -29,8 +29,8 @@ the error and waits for another try.
 
 To move a sensor to a new network, power-cycle it: every power-on opens
 provisioning mode for 2 minutes, then the sensor carries on with its saved
-settings. Without the app, ``firmware/scripts/station.py setup`` does the same
-from a computer.
+settings. Without the app, ``station.py setup`` does the same from a
+computer; run ``uv run python scripts/station.py --help`` in ``firmware``.
 
 To shelve a sensor or give it away, power-cycle it and pick **Reset a
 station** in the app (or run ``station.py reset <id>``). It forgets its
@@ -45,7 +45,7 @@ Flash a sensor
 To update the firmware, flash the app only; NVS keeps the identity and WiFi
 settings::
 
-    uv run pio run -e esp32 --target upload
+    make -C firmware flash PORT=<serial_port>
 
 Never erase the chip (``pio run -t erase``) or move the nvs partition in
 ``firmware/partitions.csv``: both lose the identity, and the board then needs
@@ -53,7 +53,22 @@ a new one from ``make factory``.
 
 To monitor serial output::
 
-    uv run pio device monitor
+    make -C firmware monitor PORT=<serial_port>
+
+``PORT`` is optional for both; PlatformIO picks the board when only one is
+plugged in.
+
+Install the app
+---------------
+
+Pushing an ``android-v<version>`` tag builds a signed APK and attaches it to
+the GitHub release; download it on the phone to sideload it. With the phone
+on USB debugging, ``make -C android install`` installs a debug build instead.
+
+``make -C android release`` builds the APK and the Play bundle locally. It
+signs them only when ``releaseKeystore``, ``releaseKeystorePassword``,
+``releaseKeyAlias`` and ``releaseKeyPassword`` are set, and the map needs
+``mapsApiKey``; put them in ``~/.gradle/gradle.properties``.
 
 Wire a sensor
 -------------

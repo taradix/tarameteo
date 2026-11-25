@@ -8,3 +8,6 @@ __pycache__/
 coverage.info
 coverage_html/
 compile_commands.json
+
+# Old per-device certs: keys and passkeys.
+certs/
