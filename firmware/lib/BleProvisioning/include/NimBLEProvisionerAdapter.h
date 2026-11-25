@@ -47,6 +47,9 @@ public:
     NimBLEDevice::setSecurityPasskey(passkey);
 
     _gattServer = NimBLEDevice::createServer();
+    // NimBLE stops advertising once a client connects and, by default, doesn't start again when it
+    // leaves: a session that failed or was abandoned would hide the board for the rest of its window.
+    _gattServer->advertiseOnDisconnect(true);
     NimBLEService *service = _gattServer->createService(BleProvisioningUUID::SERVICE);
 
     // Field writes require an encrypted + authenticated link.

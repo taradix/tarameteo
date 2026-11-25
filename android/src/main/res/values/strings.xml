@@ -80,6 +80,7 @@
     <string name="setup_permission">Allow nearby devices to set up a station.</string>
     <string name="setup_not_found">No station found: power it on, or power cycle it, and try again.</string>
     <string name="setup_pairing">Pairing failed: check the passkey on the sticker and try again.</string>
+    <string name="setup_stale_pairing">The phone\'s pairing with this station is out of date: forget the station in the phone\'s Bluetooth settings, then try again.</string>
     <string name="setup_lost">The connection to the station was lost: bring the phone closer, or power cycle the station, and try again.</string>
     <string name="setup_wifi_rejected">The station couldn\'t join the WiFi: check the network and password.</string>
     <string name="setup_ssid_rejected">The station doesn\'t take this network name.</string>

@@ -78,6 +78,7 @@
     <string name="setup_permission">Autorisez les appareils à proximité pour installer une station.</string>
     <string name="setup_not_found">Aucune station trouvée : allumez-la, ou redémarrez-la, et réessayez.</string>
     <string name="setup_pairing">L\'association a échoué : vérifiez la clé d\'accès sur l\'autocollant et réessayez.</string>
+    <string name="setup_stale_pairing">L\'association du téléphone avec cette station est périmée : oubliez la station dans les réglages Bluetooth du téléphone, puis réessayez.</string>
     <string name="setup_lost">La connexion à la station a été perdue : rapprochez le téléphone, ou redémarrez la station, et réessayez.</string>
     <string name="setup_wifi_rejected">La station n\'a pas pu rejoindre le WiFi : vérifiez le réseau et le mot de passe.</string>
     <string name="setup_ssid_rejected">La station n\'accepte pas ce nom de réseau.</string>

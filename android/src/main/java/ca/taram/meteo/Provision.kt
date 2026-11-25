@@ -127,6 +127,7 @@ data class Problem(@StringRes val message: Int, val field: String? = null)
 // The station's error codes; the ones a field owns show under it.
 private fun problemOf(error: IOException) = when (error) {
     is PairingFailed -> Problem(R.string.setup_pairing)
+    is StalePairing -> Problem(R.string.setup_stale_pairing)
     is Rejected -> when (error.code) {
         "ssid" -> Problem(R.string.setup_ssid_rejected, "ssid")
         "password" -> Problem(R.string.setup_password_rejected, "password")

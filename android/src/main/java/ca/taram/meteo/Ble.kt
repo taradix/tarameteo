@@ -25,12 +25,15 @@ import androidx.core.content.IntentCompat
 import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 // The station's side of this is firmware/lib/BleProvisioning/include/IBleProvisioner.h; BleTest checks them.
 private fun uuid(n: Int) = UUID.fromString("6d5a%04x-8b6e-4b3a-9c1d-2f7a5e0c1a01".format(n))
@@ -51,9 +54,23 @@ const val RESET: Byte = 0x02
 // Client Characteristic Configuration: turns notifications on.
 private val CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
-// Room for the longest field (a 64-byte password) in one write.
+// As much as Android allows. The station takes 255, so every field fits one write but a Server
+// over 252 bytes, which Android sends as a long write.
 private const val MTU = 517
 private val CONNECT_TIMEOUT = 30.seconds
+// Android often refuses a connection with GATT_ERROR (133) within a fraction of a second, e.g.
+// right after the chooser's scan; a moment later the same connection goes through.
+private const val GATT_ERROR = 133
+private const val CONNECT_ATTEMPTS = 3
+private val CONNECT_RETRY_DELAY = 1.seconds
+// A refusal comes back within this; a 133 later is Android's own connect timeout: no station there.
+private val QUICK_REFUSAL = 2.seconds
+// Why the link went down when the station no longer knows this phone's keys: PIN or Key Missing,
+// and MIC Failure (HCI reasons).
+private const val HCI_KEY_MISSING = 0x06
+private const val HCI_MIC_FAILURE = 0x3d
+// Some phones never deliver the bond broadcast, so pairing also looks at the bond this often.
+private val BOND_POLL = 500.milliseconds
 private val REQUEST_TIMEOUT = 10.seconds
 // Long enough to read the sticker and type the passkey.
 private val PAIRING_TIMEOUT = 60.seconds
@@ -61,7 +78,14 @@ private val PAIRING_TIMEOUT = 60.seconds
 private val ANSWER_TIMEOUT = 60.seconds
 
 // The link failed: out of range, or the station stopped listening.
-class Lost(message: String) : IOException(message)
+open class Lost(message: String) : IOException(message)
+
+// The link went down, with the GATT status Android gave.
+class Disconnected(val status: Int) : Lost("Disconnected ($status)")
+
+// The phone holds a pairing the station no longer has: it was re-flashed, or dropped this phone's
+// bond to make room for another's. Only forgetting the station in Bluetooth settings fixes it.
+class StalePairing : Lost("Pairing out of date")
 
 class PairingFailed : IOException("Pairing failed")
 
@@ -174,12 +198,8 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
     companion object {
         // Connects and pairs; Android asks for the passkey on the sticker the first time.
         suspend fun open(context: Context, device: BluetoothDevice): Station {
-            val events = Events()
-            val gatt = device.connectGatt(context, false, events, BluetoothDevice.TRANSPORT_LE)
-                ?: throw Lost("Bluetooth is off")
-            val station = Station(gatt, events)
+            val station = connect(context, device)
             try {
-                withTimeoutOrNull(CONNECT_TIMEOUT) { events.connected.await() } ?: throw Lost("No connection")
                 station.request { it.discoverServices() }
                 pair(context, device)
                 station.request { it.requestMtu(MTU) }
@@ -192,15 +212,43 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
             return station
         }
 
-        // NOTE: a phone paired before the station's identity was re-flashed holds stale keys, and every
-        // read then fails; forgetting the station in the phone's Bluetooth settings fixes it.
+        // Retries a connection Android refused with GATT_ERROR; any other failure ends it at once.
+        private suspend fun connect(context: Context, device: BluetoothDevice): Station {
+            repeat(CONNECT_ATTEMPTS - 1) {
+                val started = TimeSource.Monotonic.markNow()
+                try {
+                    return attempt(context, device)
+                } catch (e: Disconnected) {
+                    if (e.status != GATT_ERROR || started.elapsedNow() > QUICK_REFUSAL) throw e
+                }
+                delay(CONNECT_RETRY_DELAY)
+            }
+            return attempt(context, device)
+        }
+
+        private suspend fun attempt(context: Context, device: BluetoothDevice): Station {
+            val events = Events(device)
+            val gatt = device.connectGatt(context, false, events, BluetoothDevice.TRANSPORT_LE)
+                ?: throw Lost("Bluetooth is off")
+            val station = Station(gatt, events)
+            try {
+                withTimeoutOrNull(CONNECT_TIMEOUT) { events.connected.await() } ?: throw Lost("No connection")
+            } catch (e: Throwable) {
+                station.close()
+                throw e
+            }
+            return station
+        }
+
+        // A phone already paired skips this, even when the station has lost the pairing: the first
+        // secured request then fails, as a StalePairing.
         private suspend fun pair(context: Context, device: BluetoothDevice) {
             if (device.bondState == BluetoothDevice.BOND_BONDED) return
             val states = Channel<Int>(Channel.UNLIMITED)
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
                     val from = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    if (from?.address == device.address) {
+                    if (from?.address.equals(device.address, ignoreCase = true)) {
                         states.trySend(intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE))
                     }
                 }
@@ -209,10 +257,16 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
             ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
             try {
                 if (!device.createBond()) throw PairingFailed()
-                // BOND_NONE after BOND_BONDING: a wrong passkey, or the dialog dismissed.
+                // BOND_NONE after BOND_BONDING: a wrong passkey, or the dialog dismissed. Before
+                // BOND_BONDING, BOND_NONE is only pairing not started yet.
                 val paired = withTimeoutOrNull(PAIRING_TIMEOUT) {
-                    var state = states.receive()
-                    while (state == BluetoothDevice.BOND_BONDING) state = states.receive()
+                    var bonding = false
+                    var state = BluetoothDevice.BOND_NONE
+                    while (state != BluetoothDevice.BOND_BONDED && !(bonding && state == BluetoothDevice.BOND_NONE)) {
+                        // The broadcast, else the bond as it stands.
+                        state = withTimeoutOrNull(BOND_POLL) { states.receive() } ?: device.bondState
+                        if (state == BluetoothDevice.BOND_BONDING) bonding = true
+                    }
                     state == BluetoothDevice.BOND_BONDED
                 }
                 if (paired != true) throw PairingFailed()
@@ -318,22 +372,32 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
     }
 
     // Runs on a binder thread; hands each answer to the waiting request.
-    private class Events : BluetoothGattCallback() {
+    private class Events(private val device: BluetoothDevice) : BluetoothGattCallback() {
         val connected = CompletableDeferred<Unit>()
         @Volatile var pending: CompletableDeferred<ByteArray>? = null
         val statuses = Channel<String>(Channel.UNLIMITED)
 
         private fun answer(status: Int, value: ByteArray = ByteArray(0)) {
             val pending = pending ?: return
-            // Insufficient authentication or encryption lands here too: see the NOTE on pair().
-            if (status == BluetoothGatt.GATT_SUCCESS) pending.complete(value) else pending.completeExceptionally(Lost("GATT status $status"))
+            when {
+                status == BluetoothGatt.GATT_SUCCESS -> pending.complete(value)
+                // The station refused this phone's keys, or the link never got them.
+                (status == BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION ||
+                    status == BluetoothGatt.GATT_INSUFFICIENT_ENCRYPTION) && paired() ->
+                    pending.completeExceptionally(StalePairing())
+                else -> pending.completeExceptionally(Lost("GATT status $status"))
+            }
         }
+
+        // Before pairing, an insufficient authentication is only pairing not done yet.
+        private fun paired() = device.bondState == BluetoothDevice.BOND_BONDED
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 connected.complete(Unit)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                val lost = Lost("Disconnected ($status)")
+                val stale = (status == HCI_KEY_MISSING || status == HCI_MIC_FAILURE) && paired()
+                val lost = if (stale) StalePairing() else Disconnected(status)
                 connected.completeExceptionally(lost)
                 pending?.completeExceptionally(lost)
                 statuses.close(lost)
