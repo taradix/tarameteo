@@ -44,7 +44,7 @@ def nvs_partition(partitions: Path) -> tuple[str, str]:
 def board_mac(port: list[str]) -> str:
     """Base MAC from eFuse, as 12 lowercase hex digits."""
     out = subprocess.run(
-        [sys.executable, "-m", "esptool", "--chip", "esp32c3", *port, "read-mac"],
+        [sys.executable, "-m", "esptool", *port, "read-mac"],
         check=True, capture_output=True, text=True,
     ).stdout
     match = re.search(r"MAC:\s*((?:[0-9a-f]{2}:){5}[0-9a-f]{2})", out, re.IGNORECASE)
@@ -108,7 +108,7 @@ def main(argv=None) -> int:
             check=True,
         )
         subprocess.run(
-            [sys.executable, "-m", "esptool", "--chip", "esp32c3", *port, "write-flash", offset, str(image)],
+            [sys.executable, "-m", "esptool", *port, "write-flash", offset, str(image)],
             check=True,
         )
 

@@ -7,8 +7,8 @@
 
 // BME280 I2C Configuration
 #define BME280_ADDRESS      0x77    // I2C address: 0x76 or 0x77
-#define BME280_SDA          6       // SDA pin for BME280
-#define BME280_SCL          7       // SCL pin for BME280
+#define BME280_SDA          SDA     // The board's I2C pins: D4/D5 on the XIAO C3 and S3
+#define BME280_SCL          SCL
 #define SEA_LEVEL_PRESSURE  1013.25f  // hPa (standard sea level pressure)
 
 // Power Management

@@ -1,6 +1,8 @@
 RUN := uv run
 PYTHON := $(RUN) python
 PIO := $(RUN) pio
+# The board: esp32 (XIAO ESP32C3) or esp32s3 (XIAO ESP32S3)
+ENV ?= esp32
 TOUCH := $(PYTHON) -c 'import sys; from pathlib import Path; Path(sys.argv[1]).touch()'
 
 uv.lock: pyproject.toml
@@ -20,25 +22,25 @@ include/config.h: include/config.h.example
 	@$(TOUCH) $@
 
 .PHONY: setup
-setup: .pio/libdeps/esp32/integrity.dat include/config.h
-	@echo "==> Building ESP32 firmware..."
-	@$(PIO) run -e esp32
+setup: .pio/libdeps/$(ENV)/integrity.dat include/config.h
+	@echo "==> Building $(ENV) firmware..."
+	@$(PIO) run -e $(ENV)
 
 .PHONY: factory
-factory: .pio/libdeps/esp32/integrity.dat include/config.h
+factory: .pio/libdeps/$(ENV)/integrity.dat include/config.h
 	@echo "==> Flashing firmware and factory identity..."
-	@$(PIO) run -e esp32 -t upload $(if $(PORT),--upload-port $(PORT))
+	@$(PIO) run -e $(ENV) -t upload $(if $(PORT),--upload-port $(PORT))
 	@$(PYTHON) scripts/factory.py $(if $(PORT),--port $(PORT))
 
 # Flashes the app only; NVS keeps the identity and settings.
 .PHONY: flash
-flash: .pio/libdeps/esp32/integrity.dat include/config.h
+flash: .pio/libdeps/$(ENV)/integrity.dat include/config.h
 	@echo "==> Flashing firmware..."
-	@$(PIO) run -e esp32 -t upload $(if $(PORT),--upload-port $(PORT))
+	@$(PIO) run -e $(ENV) -t upload $(if $(PORT),--upload-port $(PORT))
 
 .PHONY: monitor
 monitor: .venv/pyvenv.cfg
-	@$(PIO) device monitor -e esp32 $(if $(PORT),--port $(PORT))
+	@$(PIO) device monitor -e $(ENV) $(if $(PORT),--port $(PORT))
 
 .PHONY: check
 check: .pio/libdeps/analysis/integrity.dat include/config.h

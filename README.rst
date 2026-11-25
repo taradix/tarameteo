@@ -58,6 +58,9 @@ To monitor serial output::
 ``PORT`` is optional for both; PlatformIO picks the board when only one is
 plugged in.
 
+The targets build for the XIAO ESP32-C3; add ``ENV=esp32s3`` to ``make``
+for the XIAO ESP32-S3.
+
 Install the app
 ---------------
 
@@ -78,6 +81,8 @@ This configuration uses the
 and the
 `Adafruit BME280 Sensor <https://www.adafruit.com/product/2652>`_
 in I²C mode.
+The XIAO ESP32-S3 wires the same way: its SDA and SCL pads sit in the same
+place.
 
 +----------------------+---------------------------+------------------------------+
 | BME280 Pin           | XIAO ESP32-C3 Pin         | Description                  |

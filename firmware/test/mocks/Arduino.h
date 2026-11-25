@@ -21,6 +21,9 @@ typedef bool boolean;
 #define INPUT 0
 #define OUTPUT 1
 #define INPUT_PULLUP 2
+// The board's I2C pins, which pins_arduino.h gives each variant (XIAO ESP32C3 values)
+static const uint8_t SDA = 6;
+static const uint8_t SCL = 7;
 
 // PROGMEM and Flash memory macros (for ArduinoJson compatibility)
 #define PROGMEM
