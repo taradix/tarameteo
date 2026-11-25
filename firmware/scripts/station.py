@@ -1,21 +1,24 @@
-"""Provision a board over BLE, like the app does: WiFi, location, label, MQTT server and interval.
+"""Set up, show or reset a station over BLE, like the app does.
 
-Writes the provisioning characteristics, commits, and prints the status
-notifications until the board reports ok or an error. The board only saves
-what it was sent once it has joined the WiFi, and keeps its location, label,
-MQTT server and interval between readings when they aren't given. It listens
-for a few minutes after it powers on, so power-cycle a board that already has
-WiFi. The fields need an encrypted link: on Linux, --passkey pairs with the
-sticker passkey and forgets the pairing when done (--forget also drops one an
-interrupted run left behind); elsewhere, pair from the OS Bluetooth settings.
+show prints the networks the board found when it powered on, its MQTT server
+and its interval between readings, and writes nothing.
 
-Before writing, it checks the SSID against the networks the board found when
-it powered on, and warns when the board didn't find it or finds it weak;
---list prints those networks, the MQTT server and the interval, and writes nothing.
+setup sends the WiFi and, when given, the location, label, MQTT server and
+interval, then prints the status notifications until the board reports ok or
+an error. The board only saves what it was sent once it has joined the WiFi,
+and keeps the settings left out. Before writing, it checks the SSID against
+the networks the board found, and warns when the board didn't find it or
+finds it weak.
 
---reset makes the board forget everything provisioning saved (WiFi, location,
-label, MQTT server and interval), but not its factory identity, then sleep
-until it is power-cycled.
+reset makes the board forget everything setup saved (WiFi, location, label,
+MQTT server and interval), but not its factory identity, then sleep until it
+is power-cycled.
+
+The board listens for a few minutes after it powers on, so power-cycle a board
+that already has WiFi. Every command needs an encrypted link: on Linux,
+--passkey pairs with the sticker passkey and forgets the pairing when done
+(--forget also drops one an interrupted run left behind); elsewhere, pair from
+the OS Bluetooth settings.
 """
 
 import asyncio
@@ -48,7 +51,7 @@ RESULT_TIMEOUT = 60
 # Below this, the board's WiFi tends to drop out (dBm), like WEAK in the app's Provision.kt.
 WEAK_RSSI = -80
 
-AGENT_PATH = "/ca/taram/provision/agent"
+AGENT_PATH = "/ca/taram/station/agent"
 
 
 @asynccontextmanager
@@ -155,12 +158,14 @@ def check_ssid(ssid: str, networks: list[tuple[str, int]]) -> None:
         print(f"warning: {ssid!r} is weak where the board is ({rssi} dBm): its WiFi may drop out", file=sys.stderr)
 
 
-async def provision(args) -> int:
-    device = await BleakScanner.find_device_by_name(args.name, timeout=args.timeout)
-    if device is None:
-        print(f"{args.name} not found", file=sys.stderr)
-        return 1
+async def show(client: BleakClient, args) -> int:
+    print_networks(await read_networks(client))
+    await print_settings(client)
+    return 0
 
+
+async def commit(client: BleakClient, request: bytes, fields: list[tuple[str, bytes]]) -> int:
+    """Writes the fields, then Commit, and waits for the board's final status: 0 when it is the one asked for."""
     final: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 
     def on_status(_, data: bytearray) -> None:
@@ -169,38 +174,47 @@ async def provision(args) -> int:
         if (status in DONE.values() or status.startswith("error:")) and not final.done():
             final.set_result(status)
 
+    await client.start_notify(STATUS, on_status)
+    for char, value in fields:
+        await client.write_gatt_char(char, value, response=True)
+    await client.write_gatt_char(COMMIT, request, response=True)
+    try:
+        status = await asyncio.wait_for(final, RESULT_TIMEOUT)
+    except TimeoutError:
+        print("No final status from the board", file=sys.stderr)
+        return 1
+    return 0 if status == DONE[request] else 1
+
+
+async def setup(client: BleakClient, args) -> int:
+    check_ssid(args.ssid, await read_networks(client))
+    return await commit(client, PROVISION, fields_of(args))
+
+
+async def reset(client: BleakClient, args) -> int:
+    return await commit(client, RESET, [])
+
+
+async def run(args) -> int:
+    """Finds and connects to the board, pairing first with --passkey, then runs the command."""
+    device = await BleakScanner.find_device_by_name(args.name, timeout=args.timeout)
+    if device is None:
+        print(f"{args.name} not found", file=sys.stderr)
+        return 1
+
     pair = args.passkey is not None
     agent = passkey_agent(args.passkey) if pair else nullcontext()
     client = BleakClient(device, pair=pair)
     if args.forget:
         await client.unpair()
-    commit = RESET if args.reset else PROVISION
     try:
         async with agent, client:
-            if not args.reset:
-                networks = await read_networks(client)
-                if args.list:
-                    print_networks(networks)
-                    await print_settings(client)
-                    return 0
-                check_ssid(args.ssid, networks)
-            await client.start_notify(STATUS, on_status)
-            if not args.reset:
-                for char, value in fields_of(args):
-                    await client.write_gatt_char(char, value, response=True)
-            await client.write_gatt_char(COMMIT, commit, response=True)
-            try:
-                status = await asyncio.wait_for(final, RESULT_TIMEOUT)
-            except TimeoutError:
-                print("No final status from the board", file=sys.stderr)
-                return 1
+            return await args.command(client, args)
     finally:
         if pair:
             # Leave no bond behind, so the next run pairs afresh, e.g. after a
             # factory re-flash changed the passkey.
             await client.unpair()
-
-    return 0 if status == DONE[commit] else 1
 
 
 def whole_number(low: int, high: int):
@@ -219,52 +233,55 @@ def whole_number(low: int, high: int):
 
 
 def main(argv=None) -> int:
+    # What every command takes: which board, and how to reach it.
+    board = ArgumentParser(add_help=False)
+    board.add_argument("name", help="Advertised name, the sensor ID on the sticker (tm-xxxxxx)")
+    board.add_argument("--passkey", type=int, help="Sticker passkey, to pair first (Linux only)")
+    board.add_argument(
+        "--forget", action="store_true", help="Forget a pairing left by an interrupted run first, with --passkey"
+    )
+    board.add_argument("--timeout", type=float, default=30, help="Seconds to find the board (default: %(default)s)")
+
     parser = ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("name", help="Advertised name, the sensor ID on the sticker (tm-xxxxxx)")
-    parser.add_argument("ssid", nargs="?")
-    parser.add_argument("password", nargs="?")
-    parser.add_argument(
-        "--list",
-        action="store_true",
-        help="Print the networks the board found, its MQTT server and interval, and write nothing",
+    commands = parser.add_subparsers(title="commands", required=True, metavar="{show,setup,reset}")
+
+    show_parser = commands.add_parser(
+        "show", parents=[board], help="Print the networks the board found, its MQTT server and interval"
     )
-    parser.add_argument(
-        "--reset",
-        action="store_true",
-        help="Make the board forget its WiFi and settings, keeping its identity, and write nothing else",
+    show_parser.set_defaults(command=show)
+
+    setup_parser = commands.add_parser(
+        "setup", parents=[board], help="Send the WiFi and settings; the board keeps the ones left out"
     )
-    parser.add_argument("--label", help="Name shown for the sensor (empty clears it)")
-    parser.add_argument("--lat", type=float, help="Latitude, with --lon (omitted: keep the saved location)")
-    parser.add_argument("--lon", type=float, help="Longitude, with --lat")
-    parser.add_argument("--server", help="MQTT server host name or IPv4 address (omitted: keep the board's)")
-    parser.add_argument(
+    setup_parser.add_argument("ssid")
+    setup_parser.add_argument("password")
+    setup_parser.add_argument("--label", help="Name shown for the sensor (empty clears it)")
+    setup_parser.add_argument("--lat", type=float, help="Latitude, with --lon (omitted: keep the saved location)")
+    setup_parser.add_argument("--lon", type=float, help="Longitude, with --lat")
+    setup_parser.add_argument("--server", help="MQTT server host name or IPv4 address (omitted: keep the board's)")
+    setup_parser.add_argument(
         "--port", type=whole_number(1, 65535), help="MQTT server port, 1 to 65535 (omitted: keep the board's)"
     )
-    parser.add_argument(
+    setup_parser.add_argument(
         "--interval",
         type=whole_number(MIN_INTERVAL, MAX_INTERVAL),
         help=f"Seconds between readings, {MIN_INTERVAL} to {MAX_INTERVAL} (omitted: keep the board's)",
     )
-    parser.add_argument("--passkey", type=int, help="Sticker passkey, to pair first (Linux only)")
-    parser.add_argument(
-        "--forget", action="store_true", help="Forget a pairing left by an interrupted run first, with --passkey"
+    setup_parser.set_defaults(command=setup)
+
+    reset_parser = commands.add_parser(
+        "reset", parents=[board], help="Make the board forget its WiFi and settings, keeping its identity"
     )
-    parser.add_argument("--timeout", type=float, default=30, help="Seconds to find the board (default: %(default)s)")
+    reset_parser.set_defaults(command=reset)
+
     args = parser.parse_args(argv)
-    if args.reset:
-        given = [name for name in ("ssid", "password", "label", "lat", "server", "port", "interval")
-                 if getattr(args, name) is not None]
-        if args.list or given:
-            parser.error("--reset takes no settings and no --list")
-    elif not args.list and (args.ssid is None or args.password is None):
-        parser.error("ssid and password are needed, unless --list or --reset")
-    if (args.lat is None) != (args.lon is None):
-        parser.error("--lat and --lon go together")
+    if args.command is setup and (args.lat is None) != (args.lon is None):
+        setup_parser.error("--lat and --lon go together")
     if args.forget and args.passkey is None:
         parser.error("--forget needs --passkey to pair again")
     if args.passkey is not None and sys.platform != "linux":
         parser.error("--passkey needs BlueZ; pair from the OS Bluetooth settings instead")
-    return asyncio.run(provision(args))
+    return asyncio.run(run(args))
 
 
 if __name__ == "__main__":
