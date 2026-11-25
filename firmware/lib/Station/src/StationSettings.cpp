@@ -13,7 +13,8 @@
 const char *const StationSettings::KEYS[] = {"latitude", "longitude", "label", "mqtt_server", "mqtt_port", "interval"};
 
 StationSettings::StationSettings(Preferences &prefs, IArduino *arduino, WiFiManager &wifiManager)
-    : _status("idle"), _location{0.0f, 0.0f}, _mqttPort(0), _interval(0), _prefs(prefs), _arduino(arduino),
+    : _status("idle"), _location{0.0f, 0.0f}, _mqttPort(0), _interval(0), _defaultServer{"", 0}, _defaultInterval(0),
+      _prefs(prefs), _arduino(arduino),
       _wifiManager(wifiManager) {
   _lastError[0] = '\0';
   _label[0] = '\0';
@@ -25,7 +26,14 @@ bool StationSettings::begin(const MqttServer &defaultServer, uint32_t defaultInt
     setError("Failed to initialize NVS");
     return false;
   }
+  _defaultServer = defaultServer;
+  _defaultInterval = defaultInterval;
+  load();
+  return true;
+}
 
+// The stored settings, else the defaults.
+void StationSettings::load() {
   _location = {_prefs.getFloat("latitude", 0.0f), _prefs.getFloat("longitude", 0.0f)};
   _label[0] = '\0';
   if (_prefs.isKey("label")) {
@@ -35,15 +43,32 @@ bool StationSettings::begin(const MqttServer &defaultServer, uint32_t defaultInt
   if (_prefs.isKey("mqtt_server")) {
     _prefs.getString("mqtt_server", _mqttHost, sizeof(_mqttHost));
   } else {
-    strncpy(_mqttHost, defaultServer.host, sizeof(_mqttHost) - 1);
+    strncpy(_mqttHost, _defaultServer.host, sizeof(_mqttHost) - 1);
     _mqttHost[sizeof(_mqttHost) - 1] = '\0';
   }
-  _mqttPort = (uint16_t)_prefs.getULong("mqtt_port", defaultServer.port);
-  _interval = (uint32_t)_prefs.getULong("interval", defaultInterval);
+  _mqttPort = (uint16_t)_prefs.getULong("mqtt_port", _defaultServer.port);
+  _interval = (uint32_t)_prefs.getULong("interval", _defaultInterval);
 
   _arduino->logf("StationSettings: lat=%.6f, lon=%.6f, label=%s", _location.latitude, _location.longitude, _label);
   _arduino->logf("StationSettings: MQTT server %s:%u, a reading every %lu s", _mqttHost, (unsigned)_mqttPort,
                  (unsigned long)_interval);
+}
+
+bool StationSettings::reset() {
+  // The WiFi first: without it the board stops sending readings, whatever else stays.
+  if (!_wifiManager.clearCredentials()) {
+    return reject("error:storage", _wifiManager.getLastError());
+  }
+  // Key by key: FactoryIdentity's keys share the namespace. remove() fails on a missing key.
+  for (const char *key : KEYS) {
+    if (_prefs.isKey(key) && !_prefs.remove(key)) {
+      load(); // What is left
+      return reject("error:storage", "Failed to erase settings from NVS");
+    }
+  }
+  load(); // The defaults now
+  _arduino->log("StationSettings: Reset to factory settings");
+  _status = "reset";
   return true;
 }
 

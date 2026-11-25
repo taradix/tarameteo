@@ -45,6 +45,9 @@ val NETWORKS: UUID = uuid(8)
 val SERVER: UUID = uuid(9)
 val PORT: UUID = uuid(10)
 val INTERVAL: UUID = uuid(11)
+// What Commit takes, like BleCommit: save the fields written, or forget everything provisioning saved.
+const val PROVISION: Byte = 0x01
+const val RESET: Byte = 0x02
 // Client Characteristic Configuration: turns notifications on.
 private val CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
@@ -63,7 +66,7 @@ class Lost(message: String) : IOException(message)
 class PairingFailed : IOException("Pairing failed")
 
 // The station said no; code is what follows "error:" (ssid, password, location, label, server, port,
-// interval, wifi, storage).
+// interval, wifi, storage, commit).
 class Rejected(val code: String) : IOException("Rejected: $code")
 
 // A network for the station to join.
@@ -110,9 +113,10 @@ fun networksOf(value: ByteArray): List<Network> = buildList {
     }
 }
 
-// The station's verdict in a Status value, or null for "idle" and "provisioning", which aren't one yet.
+// The station's verdict in a Status value: "ok" answers PROVISION and "reset" RESET. Null for "idle"
+// and "provisioning", which aren't one yet.
 fun verdict(status: String): Result<Unit>? = when {
-    status == "ok" -> Result.success(Unit)
+    status == "ok" || status == "reset" -> Result.success(Unit)
     status.startsWith("error:") -> Result.failure(Rejected(status.removePrefix("error:")))
     else -> null
 }
@@ -240,9 +244,17 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
             write(PORT, uint16(it.port))
         }
         interval?.let { write(INTERVAL, uint32(it)) }
+        commit(PROVISION)
+    }
+
+    // Forgets the WiFi and everything else provisioning saved, but not the identity; the station
+    // then sleeps until it is power-cycled.
+    suspend fun reset() = commit(RESET)
+
+    private suspend fun commit(action: Byte) {
         // A verdict a timed-out commit got late isn't this one's.
         while (events.statuses.tryReceive().isSuccess) continue
-        write(COMMIT, byteArrayOf(1))
+        write(COMMIT, byteArrayOf(action))
         val result = withTimeoutOrNull(ANSWER_TIMEOUT) {
             var result: Result<Unit>? = null
             while (result == null) result = verdict(events.statuses.receive())

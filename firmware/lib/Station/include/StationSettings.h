@@ -39,14 +39,19 @@ public:
     // wifiManager joins and stores the WiFi apply() gets.
     StationSettings(Preferences& prefs, IArduino* arduino, WiFiManager& wifiManager);
 
-    // Loads the provisioned settings, else these defaults.
+    // Loads the provisioned settings, else these defaults, which reset() goes back to.
+    // defaultServer.host must outlive this object (config.h's literal does).
     bool begin(const MqttServer& defaultServer, uint32_t defaultInterval);
 
     // Validates, joins the WiFi, and only then saves everything. A rejected or
     // failed payload changes nothing, in memory or in NVS.
     bool apply(const WiFiCredentials& wifi, const Location& location, const char* label, const MqttServer& server,
                uint32_t interval);
-    // What to notify over BLE for the last apply(): "ok" or "error:<code>",
+    // Forgets the WiFi first, then everything apply() saved, keeping the factory identity:
+    // the board is as it left the factory. A failure halfway leaves the board
+    // unprovisioned all the same, so the owner can retry.
+    bool reset();
+    // What to notify over BLE for the last apply() or reset(): "ok", "reset" or "error:<code>",
     // code being ssid, password, location, label, server, port, interval, wifi or storage.
     const char* getStatus() const { return _status; }
     const char* getLastError() const { return _lastError; }
@@ -68,6 +73,8 @@ private:
     char _mqttHost[MAX_HOST_BYTES + 1];
     uint16_t _mqttPort;
     uint32_t _interval;
+    MqttServer _defaultServer;
+    uint32_t _defaultInterval;
 
     Preferences& _prefs;
     IArduino* _arduino;
@@ -78,6 +85,7 @@ private:
     static const size_t KEY_COUNT = 6;
     bool put(const Location& location, const char* label, const MqttServer& server, uint32_t interval);
     void restore(const bool (&existed)[KEY_COUNT]);
+    void load();
 
     void setError(const char* error);
     bool reject(const char* status, const char* error);

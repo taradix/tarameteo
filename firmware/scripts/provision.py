@@ -12,6 +12,10 @@ interrupted run left behind); elsewhere, pair from the OS Bluetooth settings.
 Before writing, it checks the SSID against the networks the board found when
 it powered on, and warns when the board didn't find it or finds it weak;
 --list prints those networks, the MQTT server and the interval, and writes nothing.
+
+--reset makes the board forget everything provisioning saved (WiFi, location,
+label, MQTT server and interval), but not its factory identity, then sleep
+until it is power-cycled.
 """
 
 import asyncio
@@ -29,6 +33,10 @@ def uuid(n: int) -> str:
 
 
 SSID, PASSWORD, LOCATION, COMMIT, STATUS, LABEL, NETWORKS, SERVER, PORT, INTERVAL = (uuid(n) for n in range(2, 12))
+
+# What Commit takes, like BleCommit in IBleProvisioner.h, and the status that answers each.
+PROVISION, RESET = b"\x01", b"\x02"
+DONE = {PROVISION: "ok", RESET: "reset"}
 
 # Seconds between readings the board takes, like StationSettings::MIN_INTERVAL and MAX_INTERVAL.
 MIN_INTERVAL = 60
@@ -158,7 +166,7 @@ async def provision(args) -> int:
     def on_status(_, data: bytearray) -> None:
         status = data.decode()
         print("status:", status)
-        if (status == "ok" or status.startswith("error:")) and not final.done():
+        if (status in DONE.values() or status.startswith("error:")) and not final.done():
             final.set_result(status)
 
     pair = args.passkey is not None
@@ -166,18 +174,21 @@ async def provision(args) -> int:
     client = BleakClient(device, pair=pair)
     if args.forget:
         await client.unpair()
+    commit = RESET if args.reset else PROVISION
     try:
         async with agent, client:
-            networks = await read_networks(client)
-            if args.list:
-                print_networks(networks)
-                await print_settings(client)
-                return 0
-            check_ssid(args.ssid, networks)
+            if not args.reset:
+                networks = await read_networks(client)
+                if args.list:
+                    print_networks(networks)
+                    await print_settings(client)
+                    return 0
+                check_ssid(args.ssid, networks)
             await client.start_notify(STATUS, on_status)
-            for char, value in fields_of(args):
-                await client.write_gatt_char(char, value, response=True)
-            await client.write_gatt_char(COMMIT, b"\x01", response=True)
+            if not args.reset:
+                for char, value in fields_of(args):
+                    await client.write_gatt_char(char, value, response=True)
+            await client.write_gatt_char(COMMIT, commit, response=True)
             try:
                 status = await asyncio.wait_for(final, RESULT_TIMEOUT)
             except TimeoutError:
@@ -189,7 +200,7 @@ async def provision(args) -> int:
             # factory re-flash changed the passkey.
             await client.unpair()
 
-    return 0 if status == "ok" else 1
+    return 0 if status == DONE[commit] else 1
 
 
 def whole_number(low: int, high: int):
@@ -217,6 +228,11 @@ def main(argv=None) -> int:
         action="store_true",
         help="Print the networks the board found, its MQTT server and interval, and write nothing",
     )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Make the board forget its WiFi and settings, keeping its identity, and write nothing else",
+    )
     parser.add_argument("--label", help="Name shown for the sensor (empty clears it)")
     parser.add_argument("--lat", type=float, help="Latitude, with --lon (omitted: keep the saved location)")
     parser.add_argument("--lon", type=float, help="Longitude, with --lat")
@@ -235,8 +251,13 @@ def main(argv=None) -> int:
     )
     parser.add_argument("--timeout", type=float, default=30, help="Seconds to find the board (default: %(default)s)")
     args = parser.parse_args(argv)
-    if not args.list and (args.ssid is None or args.password is None):
-        parser.error("ssid and password are needed, unless --list")
+    if args.reset:
+        given = [name for name in ("ssid", "password", "label", "lat", "server", "port", "interval")
+                 if getattr(args, name) is not None]
+        if args.list or given:
+            parser.error("--reset takes no settings and no --list")
+    elif not args.list and (args.ssid is None or args.password is None):
+        parser.error("ssid and password are needed, unless --list or --reset")
     if (args.lat is None) != (args.lon is None):
         parser.error("--lat and --lon go together")
     if args.forget and args.passkey is None:

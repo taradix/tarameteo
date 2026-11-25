@@ -173,3 +173,16 @@ bool WiFiManager::storeCredentials(const WiFiCredentials &credentials) {
   memcpy(_password, credentials.password, strlen(credentials.password) + 1);
   return true;
 }
+
+bool WiFiManager::clearCredentials() {
+  // The namespace holds the pair alone, so clearing it all leaves nothing else out.
+  if (!_prefs.begin("tarameteo_wifi", false) || !_prefs.clear()) {
+    _prefs.end();
+    setError("Failed to erase WiFi credentials from NVS");
+    return false;
+  }
+  _prefs.end();
+  _ssid[0] = '\0';
+  _password[0] = '\0';
+  return true;
+}

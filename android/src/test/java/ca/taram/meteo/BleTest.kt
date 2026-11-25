@@ -40,6 +40,7 @@ class BleTest {
         assertNull(verdict("idle"))
         assertNull(verdict("provisioning"))
         assertTrue(verdict("ok")!!.isSuccess)
+        assertTrue(verdict("reset")!!.isSuccess)
         assertEquals("wifi", (verdict("error:wifi")!!.exceptionOrNull() as Rejected).code)
     }
 
@@ -63,6 +64,16 @@ class BleTest {
             Regex("""static const uint32_t $name = (\d+);""").find(header)?.groupValues?.get(1)?.toInt()
                 ?: error("$name not found in the firmware's StationSettings.h")
         assertEquals(constant("MIN_INTERVAL")..constant("MAX_INTERVAL"), INTERVALS)
+    }
+
+    @Test
+    fun commitValuesMatchTheFirmware() {
+        val header = File(System.getProperty("bleContract")!!).readText()
+        val namespace = Regex("""namespace BleCommit \{(.*?)\}""", RegexOption.DOT_MATCHES_ALL).find(header)
+            ?.groupValues?.get(1) ?: error("BleCommit not found in the firmware's IBleProvisioner.h")
+        val firmware = Regex("""constexpr uint8_t (\w+) = 0x([0-9a-f]+);""").findAll(namespace)
+            .associate { it.groupValues[1] to it.groupValues[2].toInt(16) }
+        assertEquals(mapOf("PROVISION" to PROVISION.toInt(), "RESET" to RESET.toInt()), firmware)
     }
 
     @Test

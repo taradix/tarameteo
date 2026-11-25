@@ -38,6 +38,8 @@ public:
     bool tryConnect(const WiFiCredentials& credentials);
     // Saves the pair, or leaves NVS and memory as they were when a write fails.
     bool storeCredentials(const WiFiCredentials& credentials);
+    // Erases the stored pair, so the next boot needs provisioning again.
+    bool clearCredentials();
     const char* getSSID() const { return _ssid; }
 
 private:

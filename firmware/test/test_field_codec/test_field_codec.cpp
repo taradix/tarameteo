@@ -101,6 +101,22 @@ void test_location_of_the_wrong_length_keeps_the_old_one() {
   TEST_ASSERT_EQUAL_FLOAT(-73.6f, longitude);
 }
 
+void test_commit_values_are_provision_and_reset() {
+  const uint8_t provision[] = {BleCommit::PROVISION};
+  const uint8_t reset[] = {BleCommit::RESET};
+  TEST_ASSERT_EQUAL(BleRequest::Provision, decodeCommit(provision, 1));
+  TEST_ASSERT_EQUAL(BleRequest::Reset, decodeCommit(reset, 1));
+}
+
+// Never None: the client waits for an answer, so a bad commit gets "error:commit".
+void test_other_commits_are_unknown() {
+  const uint8_t other[] = {0x00};
+  const uint8_t twoBytes[] = {BleCommit::RESET, 0x00};
+  TEST_ASSERT_EQUAL(BleRequest::Unknown, decodeCommit(other, 1));
+  TEST_ASSERT_EQUAL(BleRequest::Unknown, decodeCommit(twoBytes, 2));
+  TEST_ASSERT_EQUAL(BleRequest::Unknown, decodeCommit(other, 0));
+}
+
 int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_copy_string_keeps_a_whole_server_name);
@@ -114,5 +130,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_interval_encodes_low_byte_first);
   RUN_TEST(test_location_is_two_little_endian_floats);
   RUN_TEST(test_location_of_the_wrong_length_keeps_the_old_one);
+  RUN_TEST(test_commit_values_are_provision_and_reset);
+  RUN_TEST(test_other_commits_are_unknown);
   return UNITY_END();
 }

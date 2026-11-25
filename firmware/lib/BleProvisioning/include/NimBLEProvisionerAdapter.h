@@ -14,13 +14,13 @@
 // Real BLE provisioning transport backed by NimBLE-Arduino v2.
 //
 // Threading: NimBLE runs its own host task; characteristic write callbacks fire
-// on it. They only copy the payload into member buffers and raise _committed.
+// on it. They only copy the payload into member buffers and set _request.
 // The main loop calls poll() to consume it. Single writer (BLE task) / single
-// reader (main loop): the release store / acquire load on _committed makes the
+// reader (main loop): the release store / acquire load on _request makes the
 // buffer writes before Commit visible to poll() — no locks needed.
 class NimBLEProvisionerAdapter : public IBleProvisioner {
 public:
-  NimBLEProvisionerAdapter() : _committed(false), _location{0.0f, 0.0f}, _port(0), _interval(0), _statusChar(nullptr) {
+  NimBLEProvisionerAdapter() : _request(BleRequest::None), _location{0.0f, 0.0f}, _port(0), _interval(0), _statusChar(nullptr) {
     _ssid[0] = '\0';
     _password[0] = '\0';
     _label[0] = '\0';
@@ -112,7 +112,7 @@ public:
 
   void stop() override { NimBLEDevice::deinit(true); }
 
-  bool poll() override { return _committed.exchange(false, std::memory_order_acquire); }
+  BleRequest poll() override { return _request.exchange(BleRequest::None, std::memory_order_acquire); }
 
   WiFiCredentials wifi() override { return {_ssid, _password}; }
   Location location() override { return _location; }
@@ -130,7 +130,7 @@ public:
 private:
   enum class Field { Ssid, Password, Location, Label, Server, Port, Interval, Commit };
 
-  // Copies a written field into the matching buffer. On Commit, raises the flag
+  // Copies a written field into the matching buffer. On Commit, sets the request
   // poll() watches. The string buffers hold one byte more than allowed, so an
   // over-long value reaches applyProvisioning and fails there instead of being cut.
   void onFieldWrite(Field field, const uint8_t *data, size_t len) {
@@ -157,7 +157,7 @@ private:
       _interval = decodeInterval(data, len);
       break;
     case Field::Commit:
-      _committed.store(true, std::memory_order_release);
+      _request.store(decodeCommit(data, len), std::memory_order_release);
       break;
     }
   }
@@ -190,7 +190,7 @@ private:
   char _password[WiFiManager::MAX_PASSWORD_BYTES + 2];
   char _label[StationSettings::MAX_LABEL_BYTES + 2];
   char _mqttHost[StationSettings::MAX_HOST_BYTES + 2];
-  std::atomic<bool> _committed;
+  std::atomic<BleRequest> _request;
   Location _location;
   uint16_t _port;
   uint32_t _interval;

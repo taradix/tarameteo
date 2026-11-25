@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +34,7 @@ import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -109,7 +111,8 @@ fun readsHere(host: String, apiBase: String): Boolean = host.trim().equals(URI(a
 // Four decimals (about 10 m), like the backend's location tags.
 private fun fourDecimals(x: Double) = (x * 10_000).roundToLong() / 10_000.0
 
-enum class Step { START, CONNECTING, FORM, SENDING, WAITING, LATE, ELSEWHERE }
+// CONFIRM, RESETTING and RESET are the reset's, which skips the form.
+enum class Step { START, CONNECTING, FORM, SENDING, WAITING, LATE, ELSEWHERE, CONFIRM, RESETTING, RESET }
 
 // The fields under Advanced settings, which show it when they have a problem.
 private val ADVANCED = setOf("server", "port", "interval")
@@ -163,6 +166,8 @@ class SetupModel(application: Application) : AndroidViewModel(application) {
     // Set once the station's first reading is in, for the screen to move on to the dashboard.
     var done by mutableStateOf(false)
     var asked = false
+    // What the user came to do, picked before the chooser: reset the station rather than set it up.
+    var resetting by mutableStateOf(false)
     private var station: Station? = null
 
     fun open(result: ScanResult) {
@@ -178,6 +183,10 @@ class SetupModel(application: Application) : AndroidViewModel(application) {
             try {
                 val opened = Station.open(context, result.device)
                 station = opened
+                if (resetting) {
+                    step = Step.CONFIRM
+                    return@launch
+                }
                 label = opened.label()
                 val server = opened.mqttServer().also { stationServer = it }
                 val interval = opened.interval().also { stationInterval = it }
@@ -255,6 +264,33 @@ class SetupModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun reset() {
+        val station = station ?: return
+        problem = null
+        step = Step.RESETTING
+        viewModelScope.launch {
+            try {
+                station.reset()
+            } catch (e: Rejected) {
+                // The station still listens, so the user can try again.
+                problem = Problem(if (e.code == "storage") R.string.reset_storage else R.string.setup_other)
+                step = Step.CONFIRM
+                return@launch
+            } catch (e: IOException) {
+                fail(e)
+                return@launch
+            }
+            close()
+            step = Step.RESET
+        }
+    }
+
+    fun cancel() {
+        close()
+        problem = null
+        step = Step.START
+    }
+
     // The sensor list has the station once a reading of it is in.
     private suspend fun listed() = try {
         api.listSensors(names = listOf(id)).sensors.isNotEmpty()
@@ -295,6 +331,12 @@ fun SetupScreen(onDone: () -> Unit, model: SetupModel = viewModel()) {
                 Text(stringResource(R.string.setup_elsewhere, model.host.trim()), Modifier.padding(vertical = 8.dp))
                 Button(onDone, Modifier.fillMaxWidth()) { Text(stringResource(R.string.setup_dashboard)) }
             }
+            Step.CONFIRM -> Confirm(model)
+            Step.RESETTING -> Busy(stringResource(R.string.reset_busy))
+            Step.RESET -> {
+                Text(stringResource(R.string.reset_done, model.id), Modifier.padding(vertical = 8.dp))
+                Button(onDone, Modifier.fillMaxWidth()) { Text(stringResource(R.string.setup_dashboard)) }
+            }
         }
     }
 }
@@ -321,16 +363,30 @@ private fun Start(model: SetupModel) {
     val ready = { if (adapter!!.isEnabled) find() else enable.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
     val permission = rememberLauncherForActivityResult(RequestPermission()) { if (it) ready() else model.refused() }
 
+    val start = { resetting: Boolean ->
+        model.resetting = resetting
+        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        if (granted) ready() else permission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+    }
+
     if (!supported) return Text(stringResource(R.string.setup_unsupported))
     Text(stringResource(R.string.setup_intro), Modifier.padding(vertical = 8.dp))
+    Button({ start(false) }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.setup_find)) }
+    // Picked before connecting, so resetting is a choice and not a slip on the form.
+    TextButton({ start(true) }, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(stringResource(R.string.setup_reset)) }
+}
+
+// The last chance to back out: a reset can't be undone, only followed by a new setup.
+@Composable
+private fun Confirm(model: SetupModel) {
+    Text(stringResource(R.string.reset_confirm, model.id), Modifier.padding(vertical = 8.dp))
     Button(
-        {
-            val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-            if (granted) ready() else permission.launch(Manifest.permission.BLUETOOTH_CONNECT)
-        },
+        model::reset,
         Modifier.fillMaxWidth(),
-    ) { Text(stringResource(R.string.setup_find)) }
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+    ) { Text(stringResource(R.string.reset_send)) }
+    TextButton(model::cancel, Modifier.fillMaxWidth()) { Text(stringResource(android.R.string.cancel)) }
 }
 
 @Composable

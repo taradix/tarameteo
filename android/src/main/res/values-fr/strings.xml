@@ -50,6 +50,12 @@
     <string name="setup_title">Installer une station</string>
     <string name="setup_intro">Allumez la station : elle écoute 5 minutes, ou 2 après un redémarrage si elle a déjà le WiFi. Gardez le téléphone près d\'elle et la clé d\'accès de son autocollant sous la main.</string>
     <string name="setup_find">Trouver la station</string>
+    <string name="setup_reset">Réinitialiser une station</string>
+    <string name="reset_confirm">Réinitialiser la station %1$s ? Elle oublie son WiFi, son nom, son emplacement et son serveur, et n\'envoie plus de mesures jusqu\'à sa prochaine installation. Ses mesures passées sont conservées.</string>
+    <string name="reset_send">Réinitialiser</string>
+    <string name="reset_busy">Réinitialisation de la station…</string>
+    <string name="reset_done">La station %1$s est réinitialisée. Elle reste éteinte jusqu\'à ce qu\'on la rallume ; elle peut alors être installée comme une neuve.</string>
+    <string name="reset_storage">La station n\'a pas pu effacer ses réglages : réessayez, ou redémarrez-la d\'abord.</string>
     <string name="setup_connecting">Connexion à la station…</string>
     <string name="setup_station">Station %1$s</string>
     <string name="setup_ssid">Réseau WiFi</string>

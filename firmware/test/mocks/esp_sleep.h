@@ -45,6 +45,11 @@ inline void esp_sleep_enable_timer_wakeup(uint64_t time_in_us) {
     (void)time_in_us;
 }
 
+inline int esp_sleep_disable_wakeup_source(esp_sleep_wakeup_cause_t source) {
+    (void)source;
+    return 0;
+}
+
 inline void esp_deep_sleep_start(void) {
     // In mock, do nothing (prevents actual sleep)
 }

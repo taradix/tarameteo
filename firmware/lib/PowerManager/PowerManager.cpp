@@ -6,3 +6,8 @@ void PowerManager::sleep() {
   Serial.println("Entering deep sleep...");
   esp_deep_sleep_start();
 }
+
+void PowerManager::sleepUntilPowerCycle() {
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  sleep();
+}

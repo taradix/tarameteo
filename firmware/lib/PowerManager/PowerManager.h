@@ -11,6 +11,9 @@ public:
 
     // Enter deep sleep mode
     void sleep();
+
+    // Deep sleep with no wakeup: only a power cycle or the reset button starts the board again
+    void sleepUntilPowerCycle();
 };
 
 #endif // POWER_MANAGER_H

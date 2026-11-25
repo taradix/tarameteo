@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstring>
 
+#include "IBleProvisioner.h"
+
 // The byte formats of the provisioning characteristics (IBleProvisioner.h), apart
 // from NimBLE so the host tests cover them.
 
@@ -55,6 +57,22 @@ inline bool decodeLocation(const uint8_t *data, size_t len, float &latitude, flo
   memcpy(&latitude, &bits[0], 4);
   memcpy(&longitude, &bits[1], 4);
   return true;
+}
+
+// Commit: one BleCommit byte. Anything else, a wrong length too, is Unknown, which the
+// board answers with "error:commit" rather than leaving the client waiting.
+inline BleRequest decodeCommit(const uint8_t *data, size_t len) {
+  if (len != 1) {
+    return BleRequest::Unknown;
+  }
+  switch (data[0]) {
+  case BleCommit::PROVISION:
+    return BleRequest::Provision;
+  case BleCommit::RESET:
+    return BleRequest::Reset;
+  default:
+    return BleRequest::Unknown;
+  }
 }
 
 #endif // FIELD_CODEC_H

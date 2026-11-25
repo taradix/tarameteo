@@ -32,6 +32,13 @@ provisioning mode for 2 minutes, then the sensor carries on with its saved
 settings. Without the app, ``firmware/scripts/provision.py`` does the same
 from a computer.
 
+To shelve a sensor or give it away, power-cycle it and pick **Reset a
+station** in the app (or run ``provision.py <id> --reset``). It forgets its
+WiFi, name, location and server, keeps its identity, and stays asleep until
+it is powered on again, when it waits to be set up like a new one. The
+backend keeps its past readings, and it drops off the map 90 days after its
+last one.
+
 Flash a sensor
 --------------
 

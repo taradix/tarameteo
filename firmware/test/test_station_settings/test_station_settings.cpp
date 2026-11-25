@@ -65,7 +65,7 @@ void tearDown(void) {
 // "provisioning" -> apply -> final status).
 
 bool provision(MockBleProvisioner &ble, StationSettings &settings) {
-  if (!ble.poll()) {
+  if (ble.poll() != BleRequest::Provision) {
     ble.notifyStatus("nothing committed");
     return false;
   }
@@ -493,6 +493,91 @@ void test_failed_credentials_write_on_a_new_board_stores_nothing(void) {
 }
 
 // ========================================
+// Test Cases - Reset
+// ========================================
+
+// FactoryIdentity's keys, which share the namespace and must survive a reset.
+void putIdentity(void) {
+  testPrefs.putString("cli_cert", "CERT");
+  testPrefs.putString("cli_key", "KEY");
+  testPrefs.putULong("passkey", 123456);
+}
+
+void test_reset_forgets_everything_provisioning_saved(void) {
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  StationSettings settings(testPrefs, &mockArduino, wifiMgr);
+  putIdentity();
+  TEST_ASSERT_TRUE(settings.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  provisionOldSettings(settings);
+  MockBleProvisioner ble;
+  startSession(ble, settings);
+  ble.pending = BleRequest::Reset;
+
+  // As main() does for a Reset commit.
+  TEST_ASSERT_EQUAL(BleRequest::Reset, ble.poll());
+  TEST_ASSERT_TRUE(settings.reset());
+  ble.notifyStatus(settings.getStatus());
+
+  TEST_ASSERT_EQUAL_STRING("reset", ble.lastStatus.c_str());
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+  // Memory holds the defaults, like the next boot.
+  TEST_ASSERT_EQUAL_STRING("", settings.getLabel());
+  TEST_ASSERT_EQUAL_STRING(DEFAULT_SERVER.host, settings.getMqttServer().host);
+  TEST_ASSERT_EQUAL_UINT32(DEFAULT_INTERVAL, settings.getInterval());
+  assertNothingIsStored();
+}
+
+void test_reset_keeps_the_factory_identity(void) {
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  StationSettings settings(testPrefs, &mockArduino, wifiMgr);
+  putIdentity();
+  TEST_ASSERT_TRUE(settings.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  provisionOldSettings(settings);
+
+  TEST_ASSERT_TRUE(settings.reset());
+
+  char value[8];
+  testPrefs.getString("cli_cert", value, sizeof(value));
+  TEST_ASSERT_EQUAL_STRING("CERT", value);
+  testPrefs.getString("cli_key", value, sizeof(value));
+  TEST_ASSERT_EQUAL_STRING("KEY", value);
+  TEST_ASSERT_EQUAL_UINT32(123456, testPrefs.getULong("passkey", 0));
+}
+
+void test_reset_of_a_new_board_succeeds(void) {
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  StationSettings settings(testPrefs, &mockArduino, wifiMgr);
+  TEST_ASSERT_TRUE(settings.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+
+  TEST_ASSERT_TRUE(settings.reset());
+
+  TEST_ASSERT_EQUAL_STRING("reset", settings.getStatus());
+  assertNothingIsStored();
+}
+
+void test_failed_reset_still_forgets_the_wifi(void) {
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  StationSettings settings(testPrefs, &mockArduino, wifiMgr);
+  TEST_ASSERT_TRUE(settings.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  provisionOldSettings(settings);
+  testPrefs.failWritesTo("label");
+
+  TEST_ASSERT_FALSE(settings.reset());
+
+  TEST_ASSERT_EQUAL_STRING("error:storage", settings.getStatus());
+  TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
+  // Memory shows what is left, so a retry starts from the truth.
+  TEST_ASSERT_EQUAL_STRING("Gazebo", settings.getLabel());
+}
+
+void test_unknown_commit_is_neither_provision_nor_reset(void) {
+  MockBleProvisioner ble;
+  ble.pending = BleRequest::Unknown;
+  TEST_ASSERT_EQUAL(BleRequest::Unknown, ble.poll());
+  TEST_ASSERT_EQUAL(BleRequest::None, ble.poll());
+}
+
+// ========================================
 // Main - Unity Test Runner
 // ========================================
 
@@ -529,6 +614,13 @@ int main(int argc, char **argv) {
 
   // WiFi manager tests
   RUN_TEST(test_wifi_reconnect_reports_every_attempt);
+
+  // Reset tests
+  RUN_TEST(test_reset_forgets_everything_provisioning_saved);
+  RUN_TEST(test_reset_keeps_the_factory_identity);
+  RUN_TEST(test_reset_of_a_new_board_succeeds);
+  RUN_TEST(test_failed_reset_still_forgets_the_wifi);
+  RUN_TEST(test_unknown_commit_is_neither_provision_nor_reset);
 
   return UNITY_END();
 }

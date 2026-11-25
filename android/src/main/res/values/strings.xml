@@ -52,6 +52,12 @@
     <string name="setup_title">Set up a station</string>
     <string name="setup_intro">Power the station on: it listens for 5 minutes, or 2 after a power cycle if it already has WiFi. Keep the phone close and have the passkey on its sticker at hand.</string>
     <string name="setup_find">Find the station</string>
+    <string name="setup_reset">Reset a station</string>
+    <string name="reset_confirm">Reset station %1$s? It forgets its WiFi, name, location and server, and stops sending readings until it is set up again. Its past readings are kept.</string>
+    <string name="reset_send">Reset</string>
+    <string name="reset_busy">Resetting the station…</string>
+    <string name="reset_done">Station %1$s is reset. It stays off until it is powered on again, then it can be set up like a new one.</string>
+    <string name="reset_storage">The station couldn\'t erase its settings: try again, or power cycle it first.</string>
     <string name="setup_connecting">Connecting to the station…</string>
     <string name="setup_station">Station %1$s</string>
     <string name="setup_ssid">WiFi network</string>

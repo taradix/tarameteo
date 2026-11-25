@@ -9,7 +9,7 @@
 class MockBleProvisioner : public IBleProvisioner {
 public:
     // Holds nothing until begin() seeds it with the board's settings, as a real session does.
-    MockBleProvisioner() : payloadReady(false), _location{0.0f, 0.0f}, _port(0), _interval(0) {}
+    MockBleProvisioner() : pending(BleRequest::None), _location{0.0f, 0.0f}, _port(0), _interval(0) {}
 
     bool begin(const char* deviceName, uint32_t passkey, const char* label, const Location& location,
                const MqttServer& server, uint32_t interval, const uint8_t* networks, size_t networksLength) override {
@@ -27,14 +27,12 @@ public:
 
     void stop() override {}
 
-    // Drains the buffered payload exactly once, like the real adapter clearing
-    // its ready flag after the main loop consumes a Commit.
-    bool poll() override {
-        if (!payloadReady) {
-            return false;
-        }
-        payloadReady = false;
-        return true;
+    // Drains the staged request exactly once, like the real adapter clearing
+    // it after the main loop consumes a Commit.
+    BleRequest poll() override {
+        BleRequest request = pending;
+        pending = BleRequest::None;
+        return request;
     }
 
     WiFiCredentials wifi() override { return {_ssid.c_str(), _password.c_str()}; }
@@ -58,7 +56,7 @@ public:
     void setWiFiPayload(const WiFiCredentials& wifi) {
         _ssid = wifi.ssid;
         _password = wifi.password;
-        payloadReady = true;
+        pending = BleRequest::Provision;
     }
 
     // Test helpers: stage a server or interval on top of the payload, as a client writing them.
@@ -68,7 +66,8 @@ public:
     }
     void setInterval(uint32_t interval) { _interval = interval; }
 
-    bool payloadReady;
+    // Test knob: what the next poll() returns, as a Commit write would set it.
+    BleRequest pending;
     std::string lastStatus;
 
 private:

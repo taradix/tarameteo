@@ -159,7 +159,7 @@ void setup() {
 
   // A board without WiFi credentials waits for them over BLE. A cold boot opens
   // a shorter window too, so the owner can move a board to a new network by
-  // power-cycling it, with no chip erase (that would wipe the identity).
+  // power-cycling it, or reset it, with no chip erase (that would wipe the identity).
   // Deep-sleep wakeups skip it. Guarded: NimBLEProvisionerAdapter wraps NimBLE,
   // which has no host build, so the analysis (clang-tidy, -DUNIT_TEST) pass
   // skips this device-only glue.
@@ -193,19 +193,34 @@ void setup() {
 
     NimBLEProvisionerAdapter ble;
     bool saved = false;
+    bool wiped = false;
     // A provisioned board skips the window when BLE fails: restarting would
     // be another cold boot, so it would fail again and never publish.
     if (ble.begin(deviceName, identity.getPasskey(), settings.getLabel(), settings.getLocation(),
                   settings.getMqttServer(), settings.getInterval(), networks, networksLength)) {
       unsigned long startTime = millis();
-      while (!saved && (millis() - startTime) < windowMs) {
-        if (ble.poll()) {
+      while (!saved && !wiped && (millis() - startTime) < windowMs) {
+        switch (ble.poll()) {
+        case BleRequest::Provision:
           ble.notifyStatus("provisioning");
           saved = settings.apply(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval());
           ble.notifyStatus(settings.getStatus());
           if (!saved) {
             Serial.printf("Provisioning rejected: %s\n", settings.getLastError());
           }
+          break;
+        case BleRequest::Reset:
+          wiped = settings.reset();
+          ble.notifyStatus(settings.getStatus());
+          if (!wiped) {
+            Serial.printf("Reset failed: %s\n", settings.getLastError());
+          }
+          break;
+        case BleRequest::Unknown:
+          ble.notifyStatus("error:commit");
+          break;
+        case BleRequest::None:
+          break;
         }
         delay(BLE_POLL_INTERVAL_MS);
       }
@@ -215,7 +230,12 @@ void setup() {
     }
     ble.stop(); // Frees the BLE stack before the WiFi needs the radio
 
-    if (saved) {
+    if (wiped) {
+      // Not a restart, which would advertise for good with nothing to join: an owner
+      // resets a board to shelve it or give it away, and its next power-on sets it up.
+      Serial.println("\nReset to factory settings. Sleeping until power-cycled.");
+      powerManager.sleepUntilPowerCycle();
+    } else if (saved) {
       // No restart: that would be a cold boot, opening the window again.
       Serial.println("\nProvisioning completed!");
     } else if (wifiManager.needsProvisioning()) {

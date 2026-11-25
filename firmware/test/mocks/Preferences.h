@@ -82,6 +82,7 @@ public:
     }
 
     bool remove(const char* key) {
+        if (!writable(key)) return false;
         const std::string k(key);
         return _storage.erase(k) + _ulongs.erase(k) + _ints.erase(k) + _floats.erase(k) > 0;
     }
@@ -95,7 +96,7 @@ public:
         return true;
     }
 
-    // Test knob: every put* to this key returns 0, like a full NVS partition.
+    // Test knob: every put* to this key returns 0, like a full NVS partition, and remove() fails.
     void failWritesTo(const char* key) {
         _failKey = key;
     }
