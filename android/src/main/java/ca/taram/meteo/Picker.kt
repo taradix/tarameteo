@@ -60,6 +60,7 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.GoogleMapComposable
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerComposable
@@ -209,6 +210,8 @@ fun Picker(model: PickerModel = viewModel()) {
     val clusters by model.clusters.collectAsStateWithLifecycle()
     val names by shown.names.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf<SensorEntry?>(null) }
+    // Picked from the list: pinned on the map, since it may sit inside a cluster with no marker of its own.
+    var focused by remember { mutableStateOf<SensorEntry?>(null) }
     val camera = rememberCameraPositionState { position = HOME }
     val scope = rememberCoroutineScope()
 
@@ -226,7 +229,11 @@ fun Picker(model: PickerModel = viewModel()) {
             clusters?.getOrNull(),
             names,
             selected,
-            { selected = it },
+            focused,
+            {
+                selected = it
+                if (it == null) focused = null
+            },
             { model.viewport.value = it },
             Modifier.weight(1f),
         )
@@ -237,7 +244,8 @@ fun Picker(model: PickerModel = viewModel()) {
             located,
             names,
             { sensor ->
-                selected = sensor
+                selected = null
+                focused = sensor
                 val at = LatLng(sensor.latitude, sensor.longitude)
                 scope.launch { camera.animate(CameraUpdateFactory.newLatLngBounds(around(at, FOCUS_DEGREES), 0)) }
             },
@@ -253,6 +261,7 @@ private fun SensorMap(
     clusters: ClusterList?,
     names: Set<String>,
     selected: SensorEntry?,
+    focused: SensorEntry?,
     onSelect: (SensorEntry?) -> Unit,
     onViewport: (Viewport) -> Unit,
     modifier: Modifier,
@@ -301,19 +310,12 @@ private fun SensorMap(
                             },
                         ) { ClusterBubble(cluster.count) }
                     }
-                } else if (sensor.kind in KINDS) {
-                    key(sensor.kind, sensor.name) {
-                        Marker(
-                            state = rememberUpdatedMarkerState(LatLng(sensor.latitude, sensor.longitude)),
-                            contentDescription = sensor.title,
-                            icon = if (sensor.name in names) BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE) else null,
-                            onClick = {
-                                onSelect(sensor)
-                                true
-                            },
-                        )
-                    }
+                } else if (sensor.kind in KINDS && !(sensor.kind == focused?.kind && sensor.name == focused.name)) {
+                    key(sensor.kind, sensor.name) { SensorMarker(sensor, names, onSelect) }
                 }
+            }
+            focused?.let { sensor ->
+                key("focused", sensor.kind, sensor.name) { SensorMarker(sensor, names, onSelect) }
             }
         }
         selected?.let {
@@ -325,6 +327,18 @@ private fun SensorMap(
         }
     }
 }
+
+@Composable
+@GoogleMapComposable
+private fun SensorMarker(sensor: SensorEntry, names: Set<String>, onSelect: (SensorEntry?) -> Unit) = Marker(
+    state = rememberUpdatedMarkerState(LatLng(sensor.latitude, sensor.longitude)),
+    contentDescription = sensor.title,
+    icon = if (sensor.name in names) BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE) else null,
+    onClick = {
+        onSelect(sensor)
+        true
+    },
+)
 
 @Composable
 private fun SensorResults(
