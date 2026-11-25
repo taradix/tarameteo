@@ -50,6 +50,7 @@
     <string name="card_ago_hours">%d h ago</string>
     <string name="card_ago_days">%d d ago</string>
     <string name="setup_title">Set up a station</string>
+    <string name="setup_configure">Configure a station</string>
     <string name="setup_intro">Power the station on: it listens for 5 minutes, or 2 after a power cycle if it already has WiFi. Keep the phone close and have the passkey on its sticker at hand.</string>
     <string name="setup_find">Find the station</string>
     <string name="setup_reset">Reset a station</string>

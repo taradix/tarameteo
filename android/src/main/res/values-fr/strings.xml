@@ -48,6 +48,7 @@
     <string name="card_ago_hours">il y a %d h</string>
     <string name="card_ago_days">il y a %d j</string>
     <string name="setup_title">Installer une station</string>
+    <string name="setup_configure">Configurer une station</string>
     <string name="setup_intro">Allumez la station : elle écoute 5 minutes, ou 2 après un redémarrage si elle a déjà le WiFi. Gardez le téléphone près d\'elle et la clé d\'accès de son autocollant sous la main.</string>
     <string name="setup_find">Trouver la station</string>
     <string name="setup_reset">Réinitialiser une station</string>

@@ -93,7 +93,7 @@ fun Screens() {
                         when {
                             destination?.hasRoute<Sensors>() == true -> stringResource(R.string.sensors_title)
                             destination?.hasRoute<Alerts>() == true -> stringResource(R.string.alerts_title)
-                            destination?.hasRoute<Setup>() == true -> stringResource(R.string.setup_title)
+                            destination?.hasRoute<Setup>() == true -> stringResource(R.string.setup_configure)
                             destination?.hasRoute<Detail>() == true -> entry!!.toRoute<Detail>().let { it.label ?: it.name }
                             else -> stringResource(R.string.app_name)
                         },
@@ -108,7 +108,7 @@ fun Screens() {
                     }
                     // Setting up an owned station is one more way to add a sensor.
                     if (destination?.hasRoute<Sensors>() == true) {
-                        TextButton(setUp) { Text(stringResource(R.string.setup_title)) }
+                        TextButton(setUp) { Text(stringResource(R.string.setup_configure)) }
                     }
                 },
             )
