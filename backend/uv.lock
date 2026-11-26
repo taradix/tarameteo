@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.13, <4.0"
 
 [[package]]
@@ -1430,7 +1430,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'check'", specifier = ">=0.15.0,<1.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.37,<3.0.0" },
     { name = "taralog", specifier = ">=0.1.0,<1.0.0" },
-    { name = "taraqueue", specifier = ">=0.6.2,<1.0.0" },
+    { name = "taraqueue", specifier = ">=0.6.3,<1.0.0" },
     { name = "urllib3", specifier = ">=2.0.0,<3.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
     { name = "yarl", specifier = ">=1.22.0,<2.0.0" },
@@ -1439,14 +1439,14 @@ provides-extras = ["test", "check"]
 
 [[package]]
 name = "taraqueue"
-version = "0.6.2"
+version = "0.6.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "yarl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/bd/848a8c858b4ae39b9bf2c5b0ad561373ec294ea55565c03c3c59c0418dd4/taraqueue-0.6.2.tar.gz", hash = "sha256:32de2795f8b6fc81018a9125b68717df3b817bb59ca2d76828581e2ff7335a39", size = 151223, upload-time = "2026-05-22T21:24:29.372Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/34/3250a645482546a25366ff889906e5714a7c8b98f78a90f85b744d0ad08c/taraqueue-0.6.3.tar.gz", hash = "sha256:2ce5fc0ed98fda8add76a246b1ced5fb0823d78807dcf1e8e31aaf06e0393003", size = 197790, upload-time = "2026-11-26T21:22:51.028Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ba/85/d4e4bde04258c6d17d04510001a4aefead8e92003fae91486585f54cdf6a/taraqueue-0.6.2-py3-none-any.whl", hash = "sha256:b8941c6d2994becc153084be78c1a3ad0c04f6e6a1dbb53cac639d8ded0dd3fe", size = 11025, upload-time = "2026-05-22T21:24:28.495Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/17/c0798c9145e8d96ac4134117c96d4e0ae36b07c60e9b1e27bce17fde5c61/taraqueue-0.6.3-py3-none-any.whl", hash = "sha256:8190c51ce0293234feeb07554292f1d2508e988a675cf742dc9e5033eb858158", size = 9616, upload-time = "2026-11-26T21:22:50.171Z" },
 ]
 
 [[package]]
