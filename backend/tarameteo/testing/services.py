@@ -54,17 +54,12 @@ def env_file(env_vars, request):
 
 
 @pytest.fixture(scope="session")
-def compose_files(request):
-    return find_compose_files(request.config.rootdir)
-
-
-@pytest.fixture(scope="session")
-def compose_server(project, env_file, compose_files, process):
+def compose_server(project, env_file, process, request):
     return partial(
         ComposeServer,
         project=project,
         env_file=env_file,
-        compose_files=compose_files,
+        compose_files=find_compose_files(request.config.rootdir),
         process=process,
     )
 
@@ -139,3 +134,19 @@ def mosquitto_service(compose_server):
     server = compose_server("mosquitto version 2.0.* running")
     with server.run("mosquitto") as service:
         yield service
+
+
+@pytest.fixture(scope="session")
+def nginx_service(compose_server):
+    """Nginx service fixture."""
+    server = compose_server("start worker process")
+    with server.run("nginx") as service:
+        yield service
+
+
+@pytest.fixture
+async def nginx_client(nginx_service):
+    """Client to the nginx service fixture, over the self-signed dev cert."""
+    url = f"https://{nginx_service.ip}"
+    async with AsyncClient(base_url=url, timeout=5.0, verify=False) as client:  # noqa: S501
+        yield client
