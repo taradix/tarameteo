@@ -54,23 +54,18 @@ def env_file(env_vars, request):
 
 
 @pytest.fixture(scope="session")
-def compose_files(request):
-    return find_compose_files(request.config.rootdir)
-
-
-@pytest.fixture(scope="session")
-def compose_server(project, env_file, compose_files, process):
+def compose_server(project, env_file, process, request):
     return partial(
         ComposeServer,
         project=project,
         env_file=env_file,
-        compose_files=compose_files,
+        compose_files=find_compose_files(request.config.rootdir),
         process=process,
     )
 
 
 @pytest.fixture(scope="session")
-def api_service(compose_server, nginx_service):
+def api_service(compose_server):
     """API service fixture."""
     server = compose_server("Application startup complete")
     with server.run("api") as service:
@@ -86,7 +81,7 @@ async def api_client(api_service):
 
 
 @pytest.fixture(scope="session")
-def ca_service(compose_server, mosquitto_service):
+def ca_service(compose_server):
     """CA service fixture."""
     server = compose_server("Application startup complete")
     with server.run("ca") as service:
@@ -104,7 +99,7 @@ def ca_client(ca_service):
 
 
 @pytest.fixture(scope="session")
-def influxdb_service(compose_server, api_service):
+def influxdb_service(compose_server):
     """InfluxDB service fixture."""
     server = compose_server("port=8086")
     with server.run("influxdb") as service:
@@ -134,7 +129,7 @@ def influxdb_writer(influxdb_service):
 
 
 @pytest.fixture(scope="session")
-def mosquitto_service(compose_server, api_service):
+def mosquitto_service(compose_server):
     """Mosquitto service fixture."""
     server = compose_server("mosquitto version 2.0.* running")
     with server.run("mosquitto") as service:
