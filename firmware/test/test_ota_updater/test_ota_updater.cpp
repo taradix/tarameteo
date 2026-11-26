@@ -71,6 +71,17 @@ void test_should_not_update() {
   TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "", ""));
 }
 
+void test_on_failure_sleeps_unless_pending() {
+  TEST_ASSERT_EQUAL(OnFailure::Sleep, onFailure(false, 0, 300000));
+  TEST_ASSERT_EQUAL(OnFailure::Sleep, onFailure(false, 900000, 300000));
+}
+
+void test_on_failure_retries_a_pending_image_until_the_deadline() {
+  TEST_ASSERT_EQUAL(OnFailure::Retry, onFailure(true, 0, 300000));
+  TEST_ASSERT_EQUAL(OnFailure::Retry, onFailure(true, 299999, 300000));
+  TEST_ASSERT_EQUAL(OnFailure::Rollback, onFailure(true, 300000, 300000));
+}
+
 void test_begin_marks_a_rolled_back_version_bad() {
   OtaUpdater before(prefs);
   TEST_ASSERT_TRUE(before.begin("1.2.0"));
@@ -141,6 +152,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_updates_are_enabled_for_releases_with_auto_update_on);
   RUN_TEST(test_should_update_to_another_version);
   RUN_TEST(test_should_not_update);
+  RUN_TEST(test_on_failure_sleeps_unless_pending);
+  RUN_TEST(test_on_failure_retries_a_pending_image_until_the_deadline);
   RUN_TEST(test_begin_marks_a_rolled_back_version_bad);
   RUN_TEST(test_begin_keeps_the_try_while_it_runs);
   RUN_TEST(test_begin_keeps_the_try_until_the_bad_version_is_stored);

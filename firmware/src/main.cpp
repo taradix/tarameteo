@@ -93,15 +93,16 @@ void printStatus(const char *component, bool success, const char *error = nullpt
 // again at the next wake. A new image can't sleep, which would roll it back, so it
 // returns to retry awake for a while, then rolls back.
 static void retryOrSleep() {
-  if (pendingVerify) {
-    if (millis() < PENDING_DEADLINE_MS) {
-      Serial.printf("New firmware not confirmed yet, retrying in %lu s...\n", PENDING_RETRY_MS / 1000);
-      delay(PENDING_RETRY_MS);
-      return;
-    }
+  switch (onFailure(pendingVerify, millis(), PENDING_DEADLINE_MS)) {
+  case OnFailure::Retry:
+    Serial.printf("New firmware not confirmed yet, retrying in %lu s...\n", PENDING_RETRY_MS / 1000);
+    delay(PENDING_RETRY_MS);
+    return;
+  case OnFailure::Rollback:
     ota.rollback();
+  case OnFailure::Sleep:
+    powerManager.sleep();
   }
-  powerManager.sleep();
 }
 
 // Installs the image the backend offers this board, when it should, and restarts into it.

@@ -27,6 +27,12 @@ bool updatesEnabled(const char* running, bool autoUpdate);
 // and not one that failed here before. Not "newer": publishing an older version rolls back to it.
 bool shouldUpdate(const char* running, const char* latest, const char* bad);
 
+// What a board that can't reach the server or read the sensor does next. It sleeps
+// and tries again at the next wake, but a new image (pending) can't: sleeping would
+// roll it back. So it retries awake until deadlineMs since boot, then rolls back.
+enum class OnFailure { Sleep, Retry, Rollback };
+OnFailure onFailure(bool pending, unsigned long nowMs, unsigned long deadlineMs);
+
 // Installs images into the inactive app slot, and remembers in NVS the version it
 // installed, so the next boot can tell whether it took. The bootloader boots a new
 // image once, pending verification; the board confirms it after its first published

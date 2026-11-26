@@ -44,6 +44,13 @@ bool updatesEnabled(const char *running, bool autoUpdate) {
   return autoUpdate && strcmp(running, FIRMWARE_DEV_VERSION) != 0;
 }
 
+OnFailure onFailure(bool pending, unsigned long nowMs, unsigned long deadlineMs) {
+  if (!pending) {
+    return OnFailure::Sleep;
+  }
+  return nowMs < deadlineMs ? OnFailure::Retry : OnFailure::Rollback;
+}
+
 bool shouldUpdate(const char *running, const char *latest, const char *bad) {
   return latest[0] != '\0' && strcmp(latest, running) != 0 && strcmp(latest, bad) != 0;
 }
