@@ -40,11 +40,12 @@ bool parseManifest(const char *json, size_t length, FirmwareManifest &out) {
          parseHex(doc["sha256"].as<const char *>(), out.sha256, sizeof(out.sha256));
 }
 
-bool updatesEnabled(const char *running, bool autoUpdate) { return autoUpdate && strcmp(running, FIRMWARE_DEV_VERSION) != 0; }
+bool updatesEnabled(const char *running, bool autoUpdate) {
+  return autoUpdate && strcmp(running, FIRMWARE_DEV_VERSION) != 0;
+}
 
-bool shouldUpdate(const char *running, const char *latest, const char *bad, bool autoUpdate) {
-  return updatesEnabled(running, autoUpdate) && latest[0] != '\0' && strcmp(latest, running) != 0 &&
-         strcmp(latest, bad) != 0;
+bool shouldUpdate(const char *running, const char *latest, const char *bad) {
+  return latest[0] != '\0' && strcmp(latest, running) != 0 && strcmp(latest, bad) != 0;
 }
 
 OtaUpdater::OtaUpdater(Preferences &prefs) : _prefs(prefs) {

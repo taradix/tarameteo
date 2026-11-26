@@ -23,9 +23,9 @@ bool parseManifest(const char* json, size_t length, FirmwareManifest& out);
 // updates, so a release can't overwrite what a developer flashed.
 bool updatesEnabled(const char* running, bool autoUpdate);
 
-// Whether to install latest: enabled, another version than the one running, and not
-// one that failed here before. Not "newer": publishing an older version rolls back to it.
-bool shouldUpdate(const char* running, const char* latest, const char* bad, bool autoUpdate);
+// Whether to install latest, once updatesEnabled(): another version than the one running,
+// and not one that failed here before. Not "newer": publishing an older version rolls back to it.
+bool shouldUpdate(const char* running, const char* latest, const char* bad);
 
 // Installs images into the inactive app slot, and remembers in NVS the version it
 // installed, so the next boot can tell whether it took. The bootloader boots a new

@@ -119,7 +119,7 @@ static void checkForUpdate() {
     Serial.println("Firmware manifest: invalid, ignored");
     return;
   }
-  if (!shouldUpdate(FIRMWARE_VERSION, manifest.version, ota.getBad(), settings.getAutoUpdate())) {
+  if (!shouldUpdate(FIRMWARE_VERSION, manifest.version, ota.getBad())) {
     return;
   }
   mqttClient.disconnect(); // Frees its TLS session for the download's

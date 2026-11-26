@@ -53,18 +53,22 @@ void test_parse_manifest_rejects_malformed() {
   }
 }
 
+void test_updates_are_enabled_for_releases_with_auto_update_on() {
+  TEST_ASSERT_TRUE(updatesEnabled("1.2.0", true));
+  TEST_ASSERT_FALSE(updatesEnabled("1.2.0", false)); // owner turned it off
+  TEST_ASSERT_FALSE(updatesEnabled("dev", true));    // local build
+}
+
 void test_should_update_to_another_version() {
-  TEST_ASSERT_TRUE(shouldUpdate("1.2.0", "1.3.0", "", true));
+  TEST_ASSERT_TRUE(shouldUpdate("1.2.0", "1.3.0", ""));
   // Older too: publishing it rolls the fleet back.
-  TEST_ASSERT_TRUE(shouldUpdate("1.2.0", "1.1.0", "", true));
+  TEST_ASSERT_TRUE(shouldUpdate("1.2.0", "1.1.0", ""));
 }
 
 void test_should_not_update() {
-  TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "1.2.0", "", true));      // running it
-  TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "1.3.0", "1.3.0", true)); // failed here
-  TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "1.3.0", "", false));     // owner turned it off
-  TEST_ASSERT_FALSE(shouldUpdate("dev", "1.3.0", "", true));        // local build
-  TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "", "", true));
+  TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "1.2.0", ""));      // running it
+  TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "1.3.0", "1.3.0")); // failed here
+  TEST_ASSERT_FALSE(shouldUpdate("1.2.0", "", ""));
 }
 
 void test_begin_marks_a_rolled_back_version_bad() {
@@ -134,6 +138,7 @@ int main(int argc, char **argv) {
   UNITY_BEGIN();
   RUN_TEST(test_parse_manifest);
   RUN_TEST(test_parse_manifest_rejects_malformed);
+  RUN_TEST(test_updates_are_enabled_for_releases_with_auto_update_on);
   RUN_TEST(test_should_update_to_another_version);
   RUN_TEST(test_should_not_update);
   RUN_TEST(test_begin_marks_a_rolled_back_version_bad);
