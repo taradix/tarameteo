@@ -34,20 +34,35 @@ def firmware_app(api_app, tmp_path, published):
         app.dependency_overrides.pop(get_firmware_publisher, None)
 
 
+# What uploading IMAGE as esp32s3 1.2.0 to the firmware_app should make the latest.
+MANIFEST = {
+    "version": "1.2.0",
+    "sha256": hashlib.sha256(IMAGE).hexdigest(),
+    "size": len(IMAGE),
+    "url": "https://example.test/api/firmware/esp32s3/1.2.0.bin",
+}
+
+
 def test_put_firmware(firmware_app, firmware_token, published):
-    """Uploading an image should store it, then publish and return its manifest."""
+    """Uploading an image should publish its manifest to the boards and return it."""
     response = firmware_app.put("/api/firmware/esp32s3/1.2.0.bin", content=IMAGE, headers=firmware_token)
 
-    manifest = {
-        "version": "1.2.0",
-        "sha256": hashlib.sha256(IMAGE).hexdigest(),
-        "size": len(IMAGE),
-        "url": "https://example.test/api/firmware/esp32s3/1.2.0.bin",
-    }
     assert_that(response.status_code, equal_to(201))
-    assert_that(response.json(), equal_to(manifest))
-    assert_that([(board, m.model_dump()) for board, m in published], equal_to([("esp32s3", manifest)]))
-    assert_that(firmware_app.get("/api/firmware/esp32s3").json(), equal_to(manifest))
+    assert_that(response.json(), equal_to(MANIFEST))
+    assert_that([(board, m.model_dump()) for board, m in published], equal_to([("esp32s3", MANIFEST)]))
+
+
+def test_get_firmware(firmware_app, firmware_token):
+    """Getting a board's firmware should return the manifest of its last upload."""
+    firmware_app.put("/api/firmware/esp32s3/1.2.0.bin", content=IMAGE, headers=firmware_token)
+
+    assert_that(firmware_app.get("/api/firmware/esp32s3").json(), equal_to(MANIFEST))
+
+
+def test_get_firmware_image(firmware_app, firmware_token):
+    """Getting an uploaded image should return its bytes, as the boards download them."""
+    firmware_app.put("/api/firmware/esp32s3/1.2.0.bin", content=IMAGE, headers=firmware_token)
+
     assert_that(firmware_app.get("/api/firmware/esp32s3/1.2.0.bin").content, equal_to(IMAGE))
 
 
