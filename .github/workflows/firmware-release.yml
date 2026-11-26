@@ -48,19 +48,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      # One folder per artifact, firmware-<env>, which names the board below.
       - name: Download images
         uses: actions/download-artifact@v8
         with:
           pattern: firmware-*
-          merge-multiple: true
           path: dist
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.bin --repo "$GITHUB_REPOSITORY" --generate-notes \
-            || gh release upload "$GITHUB_REF_NAME" dist/*.bin --repo "$GITHUB_REPOSITORY" --clobber
+          gh release create "$GITHUB_REF_NAME" dist/*/*.bin --repo "$GITHUB_REPOSITORY" --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" dist/*/*.bin --repo "$GITHUB_REPOSITORY" --clobber
 
       # Last: once uploaded, the boards install it at their next wake.
       - name: Upload images to the backend
@@ -70,11 +70,9 @@ jobs:
         run: |
           test -n "$FIRMWARE_TOKEN" || { echo "FIRMWARE_TOKEN secret is missing"; exit 1; }
           version=${GITHUB_REF_NAME#firmware-v}
-          for image in dist/*.bin; do
-            board=$(basename "$image" .bin)
-            board=${board#tarameteo-}
-            board=${board%-"$version"}
-            curl --fail-with-body -sS -X PUT --data-binary "@$image" \
+          for dir in dist/firmware-*; do
+            board=${dir#dist/firmware-}
+            curl --fail-with-body -sS -X PUT --data-binary "@$(echo "$dir"/*.bin)" \
               -H "Authorization: Bearer $FIRMWARE_TOKEN" -H "Content-Type: application/octet-stream" \
               "$FIRMWARE_API_URL/api/firmware/$board/$version.bin"
             echo
