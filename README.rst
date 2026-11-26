@@ -61,6 +61,17 @@ plugged in.
 The targets build for the XIAO ESP32-C3; add ``ENV=esp32s3`` to ``make``
 for the XIAO ESP32-S3.
 
+A build without ``FIRMWARE_VERSION`` is ``dev``, which never updates itself.
+To put a sensor on automatic updates, flash it with a release version::
+
+    make -C firmware flash FIRMWARE_VERSION=<version>
+
+Pushing a ``firmware-v<version>`` tag builds both boards, attaches the images
+to the GitHub release and uploads them to the backend. At their next wake,
+sensors with auto-update on (the default, under Advanced settings in the app)
+install it, and go back to the previous image if it fails before its first
+reading.
+
 Install the app
 ---------------
 

@@ -68,6 +68,16 @@ void test_interval_of_the_wrong_length_is_zero() {
   TEST_ASSERT_EQUAL_UINT32(0, decodeInterval(value, 5));
 }
 
+void test_auto_update_is_one_byte_else_unchanged() {
+  const uint8_t off[] = {0x00};
+  const uint8_t on[] = {0x01, 0x01};
+
+  TEST_ASSERT_FALSE(decodeAutoUpdate(off, 1, true));
+  TEST_ASSERT_TRUE(decodeAutoUpdate(on, 1, false));
+  TEST_ASSERT_FALSE(decodeAutoUpdate(on, 2, false));
+  TEST_ASSERT_TRUE(decodeAutoUpdate(on, 0, true));
+}
+
 void test_interval_encodes_low_byte_first() {
   uint8_t out[4];
 
@@ -132,5 +142,6 @@ int main(int argc, char **argv) {
   RUN_TEST(test_location_of_the_wrong_length_keeps_the_old_one);
   RUN_TEST(test_commit_values_are_provision_and_reset);
   RUN_TEST(test_other_commits_are_unknown);
+  RUN_TEST(test_auto_update_is_one_byte_else_unchanged);
   return UNITY_END();
 }

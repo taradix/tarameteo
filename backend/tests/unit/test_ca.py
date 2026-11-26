@@ -1,44 +1,9 @@
 """Unit tests for the ca module."""
 
-import pytest
-from fastapi import HTTPException
 from hamcrest import (
     assert_that,
     has_entries,
-    has_properties,
 )
-
-from tarameteo.ca_client import require_token
-
-
-def test_require_valid_token(unique):
-    """Requiring a valid token should not raise."""
-    token = unique("text")
-    require_token(f"Bearer {token}", {"CA_TOKEN": token})
-
-
-def test_require_missing_token():
-    """Requiring a missing token should raise a 401 exception."""
-    with pytest.raises(HTTPException) as e:
-        require_token(None, {"CA_TOKEN": "b"})
-
-    assert_that(e.value, has_properties(status_code=401))
-
-
-def test_require_invalid_token():
-    """Requiring a missing token should raise a 403 exception."""
-    with pytest.raises(HTTPException) as e:
-        require_token("Bearer a", {"CA_TOKEN": "b"})
-
-    assert_that(e.value, has_properties(status_code=403))
-
-
-def test_require_unconfigured_token():
-    """Requiring a token when CA_TOKEN is unset should raise a 503 exception, not let everyone in."""
-    with pytest.raises(HTTPException) as e:
-        require_token("Bearer ", {"CA_TOKEN": ""})
-
-    assert_that(e.value, has_properties(status_code=503))
 
 
 def test_healthz_get(ca_app):

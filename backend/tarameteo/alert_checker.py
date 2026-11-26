@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
@@ -69,6 +70,10 @@ class AlertService:
     secret: str
     base_url: str
     push: Notifier | None = None
+
+    @classmethod
+    def from_env(cls, notifier: Notifier | None, push: Notifier | None, env=os.environ) -> "AlertService":
+        return cls(notifier, env["ALERT_SECRET"], env["ALERT_BASE_URL"].rstrip("/"), push)
 
     def _url(self, action: AlertAction, payload: dict, expires_in: timedelta | None = None) -> str:
         token = sign_token({**payload, "action": action}, self.secret, expires_in=expires_in and expires_in.total_seconds())

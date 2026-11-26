@@ -100,6 +100,9 @@
     <string name="setup_server_rejected">The station doesn\'t take this server: give a host name or an IPv4 address.</string>
     <string name="setup_port_rejected">The station doesn\'t take this port.</string>
     <string name="setup_interval_rejected">The station doesn\'t take this interval.</string>
+    <string name="setup_auto_update">Update the firmware automatically</string>
+    <string name="setup_firmware">Firmware %1$s</string>
+    <string name="setup_firmware_available">Firmware %1$s, version %2$s available</string>
     <string name="setup_elsewhere">The station is set up. It sends its readings to %1$s, so they won\'t show in this app.</string>
     <string name="error_network">Can\'t reach the server: check the connection.</string>
     <string name="error_status">The server answered with an error (%1$d).</string>

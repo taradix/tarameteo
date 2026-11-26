@@ -98,6 +98,9 @@
     <string name="setup_server_rejected">La station n\'accepte pas ce serveur : indiquez un nom d\'hôte ou une adresse IPv4.</string>
     <string name="setup_port_rejected">La station n\'accepte pas ce port.</string>
     <string name="setup_interval_rejected">La station n\'accepte pas cet intervalle.</string>
+    <string name="setup_auto_update">Mettre à jour le micrologiciel automatiquement</string>
+    <string name="setup_firmware">Micrologiciel %1$s</string>
+    <string name="setup_firmware_available">Micrologiciel %1$s, version %2$s disponible</string>
     <string name="setup_elsewhere">La station est installée. Elle envoie ses mesures à %1$s : elles n\'apparaîtront pas dans cette application.</string>
     <string name="error_network">Serveur injoignable : vérifiez la connexion.</string>
     <string name="error_status">Le serveur a répondu par une erreur (%1$d).</string>

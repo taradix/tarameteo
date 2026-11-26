@@ -9,10 +9,10 @@ from fastapi import (
     HTTPException,
 )
 
+from tarameteo.auth import bearer_token
 from tarameteo.ca_client import (
     IssueCertificateRequest,
     IssueCertificateResponse,
-    require_token,
 )
 from tarameteo.pki import sign_csr_pem
 
@@ -24,7 +24,7 @@ CA_KEY = Path(os.getenv("CA_KEY", "/tls/ca.key"))
 CA_CERT = Path(os.getenv("CA_CERT", "/tls/ca.pem"))
 
 
-@app.post("/v1/certs", response_model=IssueCertificateResponse, dependencies=[Depends(require_token)])
+@app.post("/v1/certs", response_model=IssueCertificateResponse, dependencies=[Depends(bearer_token("CA_TOKEN"))])
 def issue_cert(request: IssueCertificateRequest) -> IssueCertificateResponse:
     ca_cert_pem = CA_CERT.read_text()
     ca_key_pem = CA_KEY.read_text()

@@ -33,6 +33,10 @@ public:
     bool connect();
     bool isConnected();
     bool publishWeatherData(const WeatherData& data);
+    // Subscribes to topic for its retained message, which the broker sends right after
+    // subscribing. Copies it into buffer, NUL-terminated, and returns its length, or 0
+    // when none came within timeoutMs or it doesn't fit.
+    size_t readRetained(const char* topic, char* buffer, size_t size, unsigned long timeoutMs);
     void disconnect();
     const char* getLastError() const { return _lastError; }
 

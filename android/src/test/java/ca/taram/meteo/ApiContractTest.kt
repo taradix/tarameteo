@@ -45,5 +45,6 @@ class ApiContractTest {
         PushTokenUpdate.serializer(),
         AlertRule.serializer(),
         PushAlert.serializer(),
+        FirmwareManifest.serializer(),
     ).forEach { check(it.descriptor) }
 }

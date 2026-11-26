@@ -43,11 +43,14 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@taram.ca}
+      ALERT_BASE_URL: https://${SERVER_HOSTNAME}
       ALERT_SECRET: ${ALERT_SECRET:-}
-      ALERT_BASE_URL: ${ALERT_BASE_URL:-https://meteo.taram.ca}
-      FCM_CREDENTIALS: ${FCM_CREDENTIALS:-}
       DBDRIVER: sqlite
       DBNAME: /data/alerts.db
+      FCM_CREDENTIALS: ${FCM_CREDENTIALS:-}
+      FIRMWARE_BASE_URL: https://${SERVER_HOSTNAME}
+      FIRMWARE_DIR: /data/firmware
+      FIRMWARE_TOKEN: ${FIRMWARE_TOKEN:-}
     networks:
       default:
         aliases:

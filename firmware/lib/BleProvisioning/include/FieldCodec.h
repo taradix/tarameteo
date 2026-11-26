@@ -43,6 +43,9 @@ inline void encodeInterval(uint32_t interval, uint8_t (&out)[4]) {
   out[3] = (uint8_t)(interval >> 24);
 }
 
+// AutoUpdate: one byte, 0 for off. A value of the wrong length leaves it as it was, like Location.
+inline bool decodeAutoUpdate(const uint8_t *data, size_t len, bool current) { return (len == 1) ? data[0] != 0 : current; }
+
 // Location: LE float32 latitude, then LE float32 longitude. A value of the wrong
 // length leaves both as they were, so the board keeps its location.
 inline bool decodeLocation(const uint8_t *data, size_t len, float &latitude, float &longitude) {

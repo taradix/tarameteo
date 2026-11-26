@@ -5,6 +5,7 @@
 #include "IBleProvisioner.h"
 
 #ifndef UNIT_TEST
+#include "Firmware.h"
 #include "StationSettings.h"
 #include "WiFiManager.h"
 #include <NimBLEDevice.h>
@@ -20,7 +21,7 @@
 // buffer writes before Commit visible to poll() — no locks needed.
 class NimBLEProvisionerAdapter : public IBleProvisioner {
 public:
-  NimBLEProvisionerAdapter() : _request(BleRequest::None), _location{0.0f, 0.0f}, _port(0), _interval(0), _statusChar(nullptr) {
+  NimBLEProvisionerAdapter() : _request(BleRequest::None), _location{0.0f, 0.0f}, _port(0), _interval(0), _autoUpdate(true), _statusChar(nullptr) {
     _ssid[0] = '\0';
     _password[0] = '\0';
     _label[0] = '\0';
@@ -28,13 +29,15 @@ public:
   }
 
   bool begin(const char *deviceName, uint32_t passkey, const char *label, const Location &location,
-             const MqttServer &server, uint32_t interval, const uint8_t *networks, size_t networksLength) override {
-    // A client that never writes Label, Location, Server, Port or Interval keeps the current ones.
+             const MqttServer &server, uint32_t interval, bool autoUpdate, const uint8_t *networks,
+             size_t networksLength) override {
+    // A client that never writes Label, Location, Server, Port, Interval or AutoUpdate keeps the current ones.
     copyString(_label, reinterpret_cast<const uint8_t *>(label), strlen(label));
     _location = location;
     copyString(_mqttHost, reinterpret_cast<const uint8_t *>(server.host), strlen(server.host));
     _port = server.port;
     _interval = interval;
+    _autoUpdate = autoUpdate;
 
     if (!NimBLEDevice::init(deviceName)) {
       return false;
@@ -89,6 +92,11 @@ public:
     _intervalChar->setValue(intervalBytes, sizeof(intervalBytes));
     _intervalChar->setCallbacks(new FieldCallback(this, Field::Interval));
 
+    _autoUpdateChar = service->createCharacteristic(BleProvisioningUUID::AUTO_UPDATE, readWriteSecure);
+    const uint8_t autoUpdateByte = _autoUpdate ? 1 : 0;
+    _autoUpdateChar->setValue(&autoUpdateByte, 1);
+    _autoUpdateChar->setCallbacks(new FieldCallback(this, Field::AutoUpdate));
+
     _commitChar = service->createCharacteristic(BleProvisioningUUID::COMMIT, writeSecure);
     _commitChar->setCallbacks(new FieldCallback(this, Field::Commit));
 
@@ -96,6 +104,10 @@ public:
     NimBLECharacteristic *networksChar = service->createCharacteristic(
         BleProvisioningUUID::NETWORKS, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
     networksChar->setValue(networks, networksLength);
+
+    NimBLECharacteristic *firmwareChar = service->createCharacteristic(
+        BleProvisioningUUID::FIRMWARE, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
+    firmwareChar->setValue(FIRMWARE_BOARD " " FIRMWARE_VERSION);
 
     _statusChar = service->createCharacteristic(BleProvisioningUUID::STATUS,
                                                 NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
@@ -122,6 +134,7 @@ public:
   const char *label() override { return _label; }
   MqttServer mqttServer() override { return {_mqttHost, _port}; }
   uint32_t interval() override { return _interval; }
+  bool autoUpdate() override { return _autoUpdate; }
 
   void notifyStatus(const char *status) override {
     if (_statusChar) {
@@ -131,7 +144,7 @@ public:
   }
 
 private:
-  enum class Field { Ssid, Password, Location, Label, Server, Port, Interval, Commit };
+  enum class Field { Ssid, Password, Location, Label, Server, Port, Interval, AutoUpdate, Commit };
 
   // Copies a written field into the matching buffer. On Commit, sets the request
   // poll() watches. The string buffers hold one byte more than allowed, so an
@@ -158,6 +171,9 @@ private:
       break;
     case Field::Interval:
       _interval = decodeInterval(data, len);
+      break;
+    case Field::AutoUpdate:
+      _autoUpdate = decodeAutoUpdate(data, len, _autoUpdate);
       break;
     case Field::Commit:
       _request.store(decodeCommit(data, len), std::memory_order_release);
@@ -186,6 +202,7 @@ private:
   NimBLECharacteristic *_serverChar;
   NimBLECharacteristic *_portChar;
   NimBLECharacteristic *_intervalChar;
+  NimBLECharacteristic *_autoUpdateChar;
   NimBLECharacteristic *_commitChar;
   NimBLECharacteristic *_statusChar;
 
@@ -197,6 +214,7 @@ private:
   Location _location;
   uint16_t _port;
   uint32_t _interval;
+  bool _autoUpdate;
 };
 
 #endif // UNIT_TEST

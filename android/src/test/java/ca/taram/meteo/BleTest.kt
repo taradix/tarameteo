@@ -36,6 +36,11 @@ class BleTest {
     }
 
     @Test
+    fun firmwareIsBoardThenVersion() {
+        assertEquals(Firmware("esp32s3", "1.2.0"), firmwareOf("esp32s3 1.2.0".encodeToByteArray()))
+    }
+
+    @Test
     fun onlyOkAndErrorsAreVerdicts() {
         assertNull(verdict("idle"))
         assertNull(verdict("provisioning"))
@@ -84,7 +89,8 @@ class BleTest {
         val app = mapOf(
             "SERVICE" to SERVICE, "SSID" to SSID, "PASSWORD" to PASSWORD, "LOCATION" to LOCATION,
             "COMMIT" to COMMIT, "STATUS" to STATUS, "LABEL" to LABEL, "NETWORKS" to NETWORKS,
-            "SERVER" to SERVER, "PORT" to PORT, "INTERVAL" to INTERVAL,
+            "SERVER" to SERVER, "PORT" to PORT, "INTERVAL" to INTERVAL, "AUTO_UPDATE" to AUTO_UPDATE,
+            "FIRMWARE" to FIRMWARE,
         ).mapValues { it.value.toString() }
         assertEquals(firmware, app)
     }

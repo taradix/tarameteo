@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -14,24 +14,33 @@ from fastapi import (
     FastAPI,
     Header,
     HTTPException,
+    Path,
     Query,
     Request,
 )
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from taraqueue import Queue, QueueEmpty
 
 from tarameteo import alert_text
 from tarameteo.alert_checker import CONFIRM_EXPIRY, AlertAction, AlertService, run_offline_checks
 from tarameteo.alerts import Alert, AlertCreate, AlertRule, AlertStore, ManageRequest, PushAlert, PushTokenUpdate
+from tarameteo.auth import bearer_token
 from tarameteo.ca_client import (
     CAClient,
     IssueCertificateRequest,
     IssueCertificateResponse,
     get_ca_client,
-    require_token,
 )
 from tarameteo.consumer import run as run_consumer
 from tarameteo.db import SessionLocal
+from tarameteo.firmware import (
+    ESP_IMAGE_MAGIC,
+    MAX_SIZE,
+    NAME_PATTERN,
+    FirmwareManifest,
+    FirmwareStore,
+    publish_manifest,
+)
 from tarameteo.notifier import FcmNotifier, SmtpNotifier
 from tarameteo.readings import AggregateReading, WeatherReading
 from tarameteo.sensors import (
@@ -64,7 +73,7 @@ async def lifespan(app: FastAPI):
     # Alerts need a secret to sign links, and at least one way to send them.
     alerts = None
     if os.environ.get("ALERT_SECRET") and (notifier or push):
-        alerts = AlertService(notifier, os.environ["ALERT_SECRET"], os.environ.get("ALERT_BASE_URL", ""), push)
+        alerts = AlertService.from_env(notifier, push)
     app.state.alerts = alerts
     app.state.manage_sent = {}
 
@@ -124,7 +133,7 @@ def get_queue(request: Request) -> Queue:
 QueueDep = Annotated[Queue, Depends(get_queue)]
 
 
-@app.post("/api/certs", response_model=IssueCertificateResponse, dependencies=[Depends(require_token)])
+@app.post("/api/certs", response_model=IssueCertificateResponse, dependencies=[Depends(bearer_token("CA_TOKEN"))])
 def post_cert(
     request: IssueCertificateRequest,
     ca_client: Annotated[CAClient, Depends(get_ca_client)],
@@ -455,6 +464,58 @@ def delete_push_alert(alert_id: str, token: PushTokenDep, alert_store: AlertStor
     if not alert_store.delete_by_token(token, alert_id):
         raise HTTPException(status_code=404, detail="Unknown alert")
     return Response(status_code=204)
+
+
+def get_firmware_store() -> FirmwareStore:
+    return FirmwareStore.from_env()
+
+
+def get_firmware_publisher() -> Callable[[str, FirmwareManifest], None]:
+    return publish_manifest
+
+
+FirmwareStoreDep = Annotated[FirmwareStore, Depends(get_firmware_store)]
+BoardPath = Annotated[str, Path(pattern=NAME_PATTERN)]
+VersionPath = Annotated[str, Path(pattern=NAME_PATTERN)]
+
+
+@app.put("/api/firmware/{board}/{version}.bin", status_code=201, dependencies=[Depends(bearer_token("FIRMWARE_TOKEN"))])
+async def put_firmware(
+    request: Request,
+    board: BoardPath,
+    version: VersionPath,
+    store: FirmwareStoreDep,
+    publish: Annotated[Callable[[str, FirmwareManifest], None], Depends(get_firmware_publisher)],
+) -> FirmwareManifest:
+    """Store a board's image, sent as the request body, and offer it to the boards as their latest."""
+    data = await request.body()
+    if not data or data[0] != ESP_IMAGE_MAGIC:
+        raise HTTPException(status_code=422, detail="Not an ESP image")
+    if len(data) > MAX_SIZE:
+        raise HTTPException(status_code=413, detail=f"Image is larger than the {MAX_SIZE} byte app slot")
+    manifest = await asyncio.to_thread(store.add, board, version, data)
+    try:
+        await asyncio.to_thread(publish, board, manifest)
+    except Exception as e:
+        # Stored but not offered: uploading again publishes it.
+        logger.exception("Failed to publish the firmware manifest for %s", board)
+        raise HTTPException(status_code=502, detail="Stored, but failed to publish the manifest") from e
+    return manifest
+
+
+@app.get("/api/firmware/{board}")
+def get_firmware(board: BoardPath, store: FirmwareStoreDep) -> FirmwareManifest:
+    """The board's latest image: version, sha256, size and url."""
+    if (manifest := store.manifest(board)) is None:
+        raise HTTPException(status_code=404, detail="Unknown board")
+    return manifest
+
+
+@app.get("/api/firmware/{board}/{version}.bin", response_class=FileResponse)
+def get_firmware_image(board: BoardPath, version: VersionPath, store: FirmwareStoreDep) -> FileResponse:
+    if (path := store.image(board, version)) is None:
+        raise HTTPException(status_code=404, detail="Unknown image")
+    return FileResponse(path, media_type="application/octet-stream")
 
 
 @app.exception_handler(Exception)

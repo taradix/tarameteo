@@ -53,7 +53,8 @@ bool MqttClient::connect() {
   IPAddress serverIP;
   bool resolved = false;
   for (int i = 0; i < DNS_RETRIES && !resolved; i++) {
-    if (i > 0) delay(DNS_RETRY_DELAY_MS);
+    if (i > 0)
+      delay(DNS_RETRY_DELAY_MS);
     resolved = WiFi.hostByName(server.host, serverIP);
   }
   if (!resolved) {
@@ -120,6 +121,46 @@ bool MqttClient::connect() {
 }
 
 bool MqttClient::isConnected() { return _mqttClient.connected(); }
+
+// The read in progress. A plain function, not a capturing lambda: off ESP32 (the
+// analysis build), PubSubClient takes a function pointer.
+static struct {
+  const char *topic;
+  char *buffer;
+  size_t size;
+  size_t length;
+  bool received;
+} retained;
+
+static void onRetained(char *from, uint8_t *payload, unsigned int len) {
+  if (strcmp(from, retained.topic) != 0) {
+    return;
+  }
+  retained.received = true;
+  if (len >= retained.size) {
+    Serial.printf("MqttClient: %u-byte retained message on %s too large, ignored\n", len, from);
+    return;
+  }
+  memcpy(retained.buffer, payload, len);
+  retained.buffer[len] = '\0';
+  retained.length = len;
+}
+
+size_t MqttClient::readRetained(const char *topic, char *buffer, size_t size, unsigned long timeoutMs) {
+  retained = {topic, buffer, size, 0, false};
+  _mqttClient.setCallback(onRetained);
+  if (!_mqttClient.subscribe(topic)) {
+    setError("Subscribe failed");
+  } else {
+    unsigned long start = millis();
+    while (!retained.received && millis() - start < timeoutMs && _mqttClient.loop()) {
+      delay(10);
+    }
+    _mqttClient.unsubscribe(topic);
+  }
+  _mqttClient.setCallback(nullptr);
+  return retained.length;
+}
 
 bool MqttClient::publishWeatherData(const WeatherData &data) {
   if (!isConnected()) {

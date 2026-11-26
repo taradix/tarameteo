@@ -14,6 +14,11 @@ public:
 
     // Deep sleep with no wakeup: only a power cycle or the reset button starts the board again
     void sleepUntilPowerCycle();
+
+    // Restarts the board once it has been awake this many seconds more, so one that
+    // hangs (a stuck connection, a firmware bug) can't drain the battery awake. A new
+    // image that hangs restarts before it is confirmed, which rolls it back.
+    void limitAwake(unsigned long seconds);
 };
 
 #endif // POWER_MANAGER_H

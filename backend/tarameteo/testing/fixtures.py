@@ -69,9 +69,9 @@ def make_certs(ca_client, tmp_path):
         cafile_path = path / "ca.pem"
 
         atomic_write([
-            (key_path, key_pem, 0o600),
-            (cert_path, response.cert_pem, 0o644),
-            (cafile_path, response.chain_pem[0], 0o644),
+            (key_path, key_pem.encode(), 0o600),
+            (cert_path, response.cert_pem.encode(), 0o644),
+            (cafile_path, response.chain_pem[0].encode(), 0o644),
         ])
 
         return {

@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts.StartActivityFo
 import androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -163,6 +165,10 @@ class SetupModel(application: Application) : AndroidViewModel(application) {
     var host by mutableStateOf("")
     var port by mutableStateOf("")
     var minutes by mutableStateOf("")
+    var autoUpdate by mutableStateOf(true)
+    // What the station runs, and the latest the backend offers it, null when it can't say.
+    var firmware by mutableStateOf<Firmware?>(null)
+    var latest by mutableStateOf<String?>(null)
     var advanced by mutableStateOf(false)
     // Set once the station's first reading is in, for the screen to move on to the dashboard.
     var done by mutableStateOf(false)
@@ -194,6 +200,13 @@ class SetupModel(application: Application) : AndroidViewModel(application) {
                 host = server.host
                 port = server.port.toString()
                 minutes = minutesOf(interval)
+                autoUpdate = opened.autoUpdate()
+                val running = opened.firmware().also { firmware = it }
+                latest = try {
+                    api.getFirmware(running.board).version
+                } catch (_: IOException) {
+                    null
+                }
                 advanced = false
                 networks = opened.networks()
                 // A station moving to a new WiFi keeps its spot; it can't say where that is, its readings can.
@@ -241,7 +254,7 @@ class SetupModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val spot = LatLng(fourDecimals(at.latitude), fourDecimals(at.longitude))
-                station.provision(WiFiCredentials(ssid, password), spot, label.trim(), server, interval)
+                station.provision(WiFiCredentials(ssid, password), spot, label.trim(), server, interval, autoUpdate)
             } catch (e: Rejected) {
                 // The station saved nothing and still listens, so the form stays as it was.
                 problem = problemOf(e)
@@ -477,6 +490,19 @@ private fun Advanced(model: SetupModel) {
         supportingText = error("interval") ?: { Text(stringResource(R.string.setup_interval_hint)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
+    )
+    val firmware = model.firmware ?: return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(model.autoUpdate, { model.autoUpdate = it })
+        Text(stringResource(R.string.setup_auto_update))
+    }
+    val latest = model.latest
+    Text(
+        if (latest != null && latest != firmware.version) {
+            stringResource(R.string.setup_firmware_available, firmware.version, latest)
+        } else {
+            stringResource(R.string.setup_firmware, firmware.version)
+        },
     )
 }
 

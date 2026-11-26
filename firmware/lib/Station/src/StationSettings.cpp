@@ -10,10 +10,10 @@
 #include "WiFiManager.h"
 #endif
 
-const char *const StationSettings::KEYS[] = {"latitude", "longitude", "label", "mqtt_server", "mqtt_port", "interval"};
+const char *const StationSettings::KEYS[] = {"latitude", "longitude", "label", "mqtt_server", "mqtt_port", "interval", "auto_update"};
 
 StationSettings::StationSettings(Preferences &prefs, IArduino *arduino, WiFiManager &wifiManager)
-    : _status("idle"), _location{0.0f, 0.0f}, _mqttPort(0), _interval(0), _defaultServer{"", 0}, _defaultInterval(0),
+    : _status("idle"), _location{0.0f, 0.0f}, _mqttPort(0), _interval(0), _autoUpdate(true), _defaultServer{"", 0}, _defaultInterval(0),
       _prefs(prefs), _arduino(arduino),
       _wifiManager(wifiManager) {
   _lastError[0] = '\0';
@@ -48,10 +48,12 @@ void StationSettings::load() {
   }
   _mqttPort = (uint16_t)_prefs.getULong("mqtt_port", _defaultServer.port);
   _interval = (uint32_t)_prefs.getULong("interval", _defaultInterval);
+  // A ULong, like the other numbers. Boards provisioned before the setting existed update too.
+  _autoUpdate = _prefs.getULong("auto_update", 1) != 0;
 
   _arduino->logf("StationSettings: lat=%.6f, lon=%.6f, label=%s", _location.latitude, _location.longitude, _label);
-  _arduino->logf("StationSettings: MQTT server %s:%u, a reading every %lu s", _mqttHost, (unsigned)_mqttPort,
-                 (unsigned long)_interval);
+  _arduino->logf("StationSettings: MQTT server %s:%u, a reading every %lu s, auto-update %s", _mqttHost,
+                 (unsigned)_mqttPort, (unsigned long)_interval, _autoUpdate ? "on" : "off");
 }
 
 bool StationSettings::reset() {
@@ -75,7 +77,7 @@ bool StationSettings::reset() {
 // Validates what the BLE transport received, joins the WiFi with it, then
 // persists it. On failure sets _lastError and _status and returns false.
 bool StationSettings::apply(const WiFiCredentials &wifi, const Location &location, const char *label,
-                            const MqttServer &server, uint32_t interval) {
+                            const MqttServer &server, uint32_t interval, bool autoUpdate) {
   if (!WiFiManager::isValidSsid(wifi.ssid)) {
     return reject("error:ssid", "Invalid WiFi SSID: 1 to 32 bytes");
   }
@@ -112,7 +114,7 @@ bool StationSettings::apply(const WiFiCredentials &wifi, const Location &locatio
   for (size_t i = 0; i < KEY_COUNT; i++) {
     existed[i] = _prefs.isKey(KEYS[i]);
   }
-  if (!put(location, label, server, interval)) {
+  if (!put(location, label, server, interval, autoUpdate)) {
     restore(existed);
     _status = "error:storage"; // put() set the error
     return false;
@@ -127,6 +129,7 @@ bool StationSettings::apply(const WiFiCredentials &wifi, const Location &locatio
   memcpy(_mqttHost, server.host, strlen(server.host) + 1); // isValidHost checked it fits
   _mqttPort = server.port;
   _interval = interval;
+  _autoUpdate = autoUpdate;
 
   _arduino->log("StationSettings: Provisioning saved");
   _status = "ok";
@@ -134,7 +137,8 @@ bool StationSettings::apply(const WiFiCredentials &wifi, const Location &locatio
 }
 
 // Writes every setting; false, with the error set, at the first that fails.
-bool StationSettings::put(const Location &location, const char *label, const MqttServer &server, uint32_t interval) {
+bool StationSettings::put(const Location &location, const char *label, const MqttServer &server, uint32_t interval,
+                          bool autoUpdate) {
   // put* returns 0 bytes written on failure.
   if (_prefs.putFloat("latitude", location.latitude) == 0 || _prefs.putFloat("longitude", location.longitude) == 0) {
     setError("Failed to store location in NVS");
@@ -154,6 +158,10 @@ bool StationSettings::put(const Location &location, const char *label, const Mqt
     setError("Failed to store interval in NVS");
     return false;
   }
+  if (_prefs.putULong("auto_update", autoUpdate ? 1 : 0) == 0) {
+    setError("Failed to store auto-update in NVS");
+    return false;
+  }
   return true;
 }
 
@@ -164,7 +172,7 @@ void StationSettings::restore(const bool (&existed)[KEY_COUNT]) {
   static_assert(sizeof(KEYS) / sizeof(KEYS[0]) == KEY_COUNT, "KEY_COUNT must match KEYS");
   char error[sizeof(_lastError)];
   memcpy(error, _lastError, sizeof(error)); // Keep the failure that caused this, not a restore's
-  if (!put(_location, _label, getMqttServer(), _interval)) {
+  if (!put(_location, _label, getMqttServer(), _interval, _autoUpdate)) {
     _arduino->log("StationSettings: Could not restore every setting in NVS");
   }
   for (size_t i = 0; i < KEY_COUNT; i++) {

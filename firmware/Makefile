@@ -1,6 +1,9 @@
 RUN := uv run
 PYTHON := $(RUN) python
-PIO := $(RUN) pio
+# The release version the build is, which the board updates from; "dev" never updates
+# (FIRMWARE_DEV_VERSION in lib/Station/include/Firmware.h).
+FIRMWARE_VERSION ?= dev
+PIO := PLATFORMIO_BUILD_FLAGS='-DFIRMWARE_VERSION=\"$(FIRMWARE_VERSION)\"' $(RUN) pio
 # The board: esp32 (XIAO ESP32C3) or esp32s3 (XIAO ESP32S3)
 ENV ?= esp32
 TOUCH := $(PYTHON) -c 'import sys; from pathlib import Path; Path(sys.argv[1]).touch()'

@@ -262,6 +262,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/firmware/{board}/{version}.bin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Firmware Image */
+        get: operations["get_firmware_image_api_firmware__board___version__bin_get"];
+        /**
+         * Put Firmware
+         * @description Store a board's image, sent as the request body, and offer it to the boards as their latest.
+         */
+        put: operations["put_firmware_api_firmware__board___version__bin_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/firmware/{board}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Firmware
+         * @description The board's latest image: version, sha256, size and url.
+         */
+        get: operations["get_firmware_api_firmware__board__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -415,6 +456,32 @@ export interface components {
          * @enum {string}
          */
         Condition: "above" | "below";
+        /**
+         * FirmwareManifest
+         * @description The latest image of a board, which the boards parse (firmware/lib/OtaUpdater).
+         */
+        FirmwareManifest: {
+            /**
+             * Version
+             * @description Release version, from the firmware-v<version> tag
+             */
+            version: string;
+            /**
+             * Sha256
+             * @description SHA-256 of the image, in lowercase hex
+             */
+            sha256: string;
+            /**
+             * Size
+             * @description Size of the image in bytes
+             */
+            size: number;
+            /**
+             * Url
+             * @description Where the boards download the image
+             */
+            url: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1303,6 +1370,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_firmware_image_api_firmware__board___version__bin_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                board: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_firmware_api_firmware__board___version__bin_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                board: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareManifest"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_firmware_api_firmware__board__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                board: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareManifest"];
+                };
             };
             /** @description Validation Error */
             422: {

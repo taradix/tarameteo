@@ -1,17 +1,18 @@
 """Set up, show or reset a station over BLE, like the app does.
 
-show prints the networks the board found when it powered on, its MQTT server
-and its interval between readings, and writes nothing.
+show prints the networks the board found when it powered on, its MQTT server,
+its interval between readings, whether it updates its firmware, the firmware it
+runs and the latest the backend offers, and writes nothing.
 
-setup sends the WiFi and, when given, the location, label, MQTT server and
-interval, then prints the status notifications until the board reports ok or
+setup sends the WiFi and, when given, the location, label, MQTT server,
+interval and auto-update, then prints the status notifications until the board reports ok or
 an error. The board only saves what it was sent once it has joined the WiFi,
 and keeps the settings left out. Before writing, it checks the SSID against
 the networks the board found, and warns when the board didn't find it or
 finds it weak.
 
 reset makes the board forget everything setup saved (WiFi, location, label,
-MQTT server and interval), but not its factory identity, then sleep until it
+MQTT server, interval and auto-update), but not its factory identity, then sleep until it
 is power-cycled.
 
 The board listens for a few minutes after it powers on, so power-cycle a board
@@ -24,9 +25,10 @@ the OS Bluetooth settings.
 import asyncio
 import struct
 import sys
-from argparse import ArgumentParser, ArgumentTypeError
+from argparse import ArgumentParser, ArgumentTypeError, BooleanOptionalAction
 from contextlib import asynccontextmanager, nullcontext
 
+import httpx
 from bleak import BleakClient, BleakScanner
 
 
@@ -35,7 +37,9 @@ def uuid(n: int) -> str:
     return f"6d5a{n:04x}-8b6e-4b3a-9c1d-2f7a5e0c1a01"
 
 
-SSID, PASSWORD, LOCATION, COMMIT, STATUS, LABEL, NETWORKS, SERVER, PORT, INTERVAL = (uuid(n) for n in range(2, 12))
+SSID, PASSWORD, LOCATION, COMMIT, STATUS, LABEL, NETWORKS, SERVER, PORT, INTERVAL, AUTO_UPDATE, FIRMWARE = (
+    uuid(n) for n in range(2, 14)
+)
 
 # What Commit takes, like BleCommit in IBleProvisioner.h, and the status that answers each.
 PROVISION, RESET = b"\x01", b"\x02"
@@ -114,12 +118,31 @@ async def read_networks(client: BleakClient) -> list[tuple[str, int]]:
 
 
 async def print_settings(client: BleakClient) -> None:
-    """Where the board sends its readings, and how often."""
+    """Where the board sends its readings, how often, and whether it updates its firmware."""
     host = (await client.read_gatt_char(SERVER)).decode()
     (port,) = struct.unpack("<H", await client.read_gatt_char(PORT))
     (interval,) = struct.unpack("<I", await client.read_gatt_char(INTERVAL))
+    auto_update = (await client.read_gatt_char(AUTO_UPDATE)) != b"\x00"
     print(f"MQTT server: {host}:{port}")
     print(f"Interval: {interval} s between readings")
+    print(f"Auto-update: {'on' if auto_update else 'off'}")
+
+
+def latest_version(api: str, board: str) -> str:
+    """The version the backend offers the board, else why not."""
+    try:
+        response = httpx.get(f"{api}/api/firmware/{board}", timeout=10)
+        if response.status_code == httpx.codes.NOT_FOUND:
+            return "none released"
+        return response.raise_for_status().json()["version"]
+    except (httpx.HTTPError, ValueError, KeyError) as e:
+        return f"unknown ({e})"
+
+
+async def print_firmware(client: BleakClient, api: str) -> None:
+    """What the board runs, and the latest the backend offers it."""
+    board, version = (await client.read_gatt_char(FIRMWARE)).decode().split(" ", 1)
+    print(f"Firmware: {version} for {board}, latest: {latest_version(api, board)}")
 
 
 def fields_of(args) -> list[tuple[str, bytes]]:
@@ -135,6 +158,8 @@ def fields_of(args) -> list[tuple[str, bytes]]:
         fields.append((PORT, struct.pack("<H", args.port)))
     if args.interval is not None:
         fields.append((INTERVAL, struct.pack("<I", args.interval)))
+    if args.auto_update is not None:
+        fields.append((AUTO_UPDATE, bytes([args.auto_update])))
     return fields
 
 
@@ -161,6 +186,7 @@ def check_ssid(ssid: str, networks: list[tuple[str, int]]) -> None:
 async def show(client: BleakClient, args) -> int:
     print_networks(await read_networks(client))
     await print_settings(client)
+    await print_firmware(client, args.api)
     return 0
 
 
@@ -246,7 +272,10 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(title="commands", required=True, metavar="{show,setup,reset}")
 
     show_parser = commands.add_parser(
-        "show", parents=[board], help="Print the networks the board found, its MQTT server and interval"
+        "show", parents=[board], help="Print the networks the board found, its settings and firmware"
+    )
+    show_parser.add_argument(
+        "--api", default="https://meteo.taram.ca", help="Backend to ask for the latest firmware (default: %(default)s)"
     )
     show_parser.set_defaults(command=show)
 
@@ -266,6 +295,11 @@ def main(argv=None) -> int:
         "--interval",
         type=whole_number(MIN_INTERVAL, MAX_INTERVAL),
         help=f"Seconds between readings, {MIN_INTERVAL} to {MAX_INTERVAL} (omitted: keep the board's)",
+    )
+    setup_parser.add_argument(
+        "--auto-update",
+        action=BooleanOptionalAction,
+        help="Install the firmware the backend offers (omitted: keep the board's, on for a new board)",
     )
     setup_parser.set_defaults(command=setup)
 

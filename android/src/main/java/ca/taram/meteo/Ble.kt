@@ -48,6 +48,8 @@ val NETWORKS: UUID = uuid(8)
 val SERVER: UUID = uuid(9)
 val PORT: UUID = uuid(10)
 val INTERVAL: UUID = uuid(11)
+val AUTO_UPDATE: UUID = uuid(12)
+val FIRMWARE: UUID = uuid(13)
 // What Commit takes, like BleCommit: save the fields written, or forget everything provisioning saved.
 const val PROVISION: Byte = 0x01
 const val RESET: Byte = 0x02
@@ -119,6 +121,12 @@ fun mqttServerOf(host: ByteArray, port: ByteArray): MqttServer =
 
 // The Interval value: seconds between readings.
 fun intervalOf(value: ByteArray): Int = ByteBuffer.wrap(value).order(ByteOrder.LITTLE_ENDIAN).int
+
+// What the station runs: the board, which names the images the backend offers it, and the version ("dev" for a local build).
+data class Firmware(val board: String, val version: String)
+
+// Firmware: UTF-8 "<board> <version>".
+fun firmwareOf(value: ByteArray): Firmware = value.decodeToString().split(" ", limit = 2).let { Firmware(it[0], it[1]) }
 
 // A WiFi network the station found, with its signal there in dBm.
 data class Network(val ssid: String, val rssi: Int)
@@ -286,9 +294,20 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
     suspend fun mqttServer(): MqttServer = mqttServerOf(read(SERVER), read(PORT))
     suspend fun interval(): Int = intervalOf(read(INTERVAL))
 
+    // Whether the station installs the firmware the backend offers, and what it runs.
+    suspend fun autoUpdate(): Boolean = read(AUTO_UPDATE).firstOrNull() != 0.toByte()
+    suspend fun firmware(): Firmware = firmwareOf(read(FIRMWARE))
+
     // Sends the settings and waits for the station's verdict, which throws Rejected when it says no. A null
     // server or interval isn't sent, so the station keeps its own.
-    suspend fun provision(wifi: WiFiCredentials, at: LatLng, label: String, server: MqttServer?, interval: Int?) {
+    suspend fun provision(
+        wifi: WiFiCredentials,
+        at: LatLng,
+        label: String,
+        server: MqttServer?,
+        interval: Int?,
+        autoUpdate: Boolean,
+    ) {
         write(SSID, wifi.ssid.encodeToByteArray())
         write(PASSWORD, wifi.password.encodeToByteArray())
         write(LOCATION, location(at))
@@ -298,6 +317,7 @@ class Station private constructor(private val gatt: BluetoothGatt, private val e
             write(PORT, uint16(it.port))
         }
         interval?.let { write(INTERVAL, uint32(it)) }
+        write(AUTO_UPDATE, byteArrayOf(if (autoUpdate) 1 else 0))
         commit(PROVISION)
     }
 

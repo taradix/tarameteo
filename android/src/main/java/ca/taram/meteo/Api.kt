@@ -24,6 +24,10 @@ data class SensorEntry(
     val title get() = label ?: name
 }
 
+// The latest firmware the backend offers a board.
+@Serializable
+data class FirmwareManifest(val version: String)
+
 @Serializable
 data class SensorList(val sensors: List<SensorEntry>, val truncated: Boolean = false)
 
@@ -161,6 +165,8 @@ class Api(private val base: String = BuildConfig.API_BASE) {
 
     suspend fun getWeatherAggregate(name: String, start: String): List<AggregateReading> =
         get(weather(name, "/aggregate", start))
+
+    suspend fun getFirmware(board: String): FirmwareManifest = get("/api/firmware/${encode(board)}")
 
     // Points this install's alerts at the token FCM replaced the old one with.
     suspend fun putPushToken(old: String, new: String) {

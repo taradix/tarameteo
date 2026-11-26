@@ -9,10 +9,11 @@
 class MockBleProvisioner : public IBleProvisioner {
 public:
     // Holds nothing until begin() seeds it with the board's settings, as a real session does.
-    MockBleProvisioner() : pending(BleRequest::None), _location{0.0f, 0.0f}, _port(0), _interval(0) {}
+    MockBleProvisioner() : pending(BleRequest::None), _location{0.0f, 0.0f}, _port(0), _interval(0), _autoUpdate(true) {}
 
     bool begin(const char* deviceName, uint32_t passkey, const char* label, const Location& location,
-               const MqttServer& server, uint32_t interval, const uint8_t* networks, size_t networksLength) override {
+               const MqttServer& server, uint32_t interval, bool autoUpdate, const uint8_t* networks,
+               size_t networksLength) override {
         (void)deviceName;
         (void)passkey;
         (void)networks;
@@ -22,6 +23,7 @@ public:
         _host = server.host ? server.host : "";
         _port = server.port;
         _interval = interval;
+        _autoUpdate = autoUpdate;
         return true;
     }
 
@@ -40,6 +42,7 @@ public:
     const char* label() override { return _label.c_str(); }
     MqttServer mqttServer() override { return {_host.c_str(), _port}; }
     uint32_t interval() override { return _interval; }
+    bool autoUpdate() override { return _autoUpdate; }
 
     void notifyStatus(const char* status) override {
         lastStatus = status ? std::string(status) : std::string();
@@ -65,6 +68,7 @@ public:
         _port = server.port;
     }
     void setInterval(uint32_t interval) { _interval = interval; }
+    void setAutoUpdate(bool autoUpdate) { _autoUpdate = autoUpdate; }
 
     // Test knob: what the next poll() returns, as a Commit write would set it.
     BleRequest pending;
@@ -78,6 +82,7 @@ private:
     std::string _host;
     uint16_t _port;
     uint32_t _interval;
+    bool _autoUpdate;
 };
 
 #endif // MOCK_BLE_PROVISIONER_H

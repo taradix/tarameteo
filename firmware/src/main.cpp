@@ -9,11 +9,14 @@
  * - Sensor data validation
  * - NTP time synchronization for accurate timestamps
  * - Last Will and Testament for offline detection
+ * - Firmware updates from the backend, rolled back when the new image fails
  */
 
 #include "BME280Sensor.h"
 #include "FactoryIdentity.h"
+#include "Firmware.h"
 #include "MqttClient.h"
+#include "OtaUpdater.h"
 #include "PowerManager.h"
 #include "StationSettings.h"
 #include "TimeManager.h"
@@ -57,6 +60,25 @@ static_assert(MQTT_PORT >= 1 && MQTT_PORT <= 65535, "MQTT_PORT must be between 1
 PowerManager powerManager;
 TimeManager timeManager(NTP_TIMEOUT_MS);
 
+Preferences otaPrefs;
+OtaUpdater ota(otaPrefs);
+// A new image, booted once: any reset before its first publish rolls it back.
+bool pendingVerify = false;
+// How long a new image retries reaching the server before rolling back, and how
+// long between tries. Within AWAKE_LIMIT_S, which restarts a hung board (and so
+// rolls a new image back too).
+static constexpr unsigned long PENDING_DEADLINE_MS = 5 * 60 * 1000;
+static constexpr unsigned long PENDING_RETRY_MS = 30 * 1000;
+static constexpr unsigned long AWAKE_LIMIT_S = 10 * 60;
+// The broker sends the retained manifest right after the subscription.
+static constexpr unsigned long MANIFEST_TIMEOUT_MS = 1500;
+
+#ifndef UNIT_TEST
+// The Arduino core confirms a new image before setup() unless this returns true;
+// the board confirms it after its first publish instead (OtaUpdater::markValid).
+extern "C" bool verifyRollbackLater() { return true; }
+#endif
+
 void printStatus(const char *component, bool success, const char *error = nullptr) {
   Serial.print(component);
   Serial.print(": ");
@@ -65,6 +87,48 @@ void printStatus(const char *component, bool success, const char *error = nullpt
     Serial.print("  Error: ");
     Serial.println(error);
   }
+}
+
+// Where the board can't reach the server or read the sensor: it sleeps and tries
+// again at the next wake. A new image can't sleep, which would roll it back, so it
+// returns to retry awake for a while, then rolls back.
+static void retryOrSleep() {
+  if (pendingVerify) {
+    if (millis() < PENDING_DEADLINE_MS) {
+      Serial.printf("New firmware not confirmed yet, retrying in %lu s...\n", PENDING_RETRY_MS / 1000);
+      delay(PENDING_RETRY_MS);
+      return;
+    }
+    ota.rollback();
+  }
+  powerManager.sleep();
+}
+
+// Installs the image the backend offers this board, when it should, and restarts into it.
+static void checkForUpdate() {
+  if (!updatesEnabled(FIRMWARE_VERSION, settings.getAutoUpdate())) {
+    return;
+  }
+  static char payload[MqttClient::MQTT_BUFFER_SIZE];
+  size_t length = mqttClient.readRetained("firmware/" FIRMWARE_BOARD, payload, sizeof(payload), MANIFEST_TIMEOUT_MS);
+  if (length == 0) {
+    return; // Nothing released for this board yet
+  }
+  FirmwareManifest manifest;
+  if (!parseManifest(payload, length, manifest)) {
+    Serial.println("Firmware manifest: invalid, ignored");
+    return;
+  }
+  if (!shouldUpdate(FIRMWARE_VERSION, manifest.version, ota.getBad(), settings.getAutoUpdate())) {
+    return;
+  }
+  mqttClient.disconnect(); // Frees its TLS session for the download's
+  if (!ota.install(manifest)) {
+    printStatus("Firmware Update", false, ota.getLastError());
+    return;
+  }
+  delay(1000); // Lets the serial log drain
+  ESP.restart();
 }
 
 #ifndef UNIT_TEST
@@ -125,6 +189,15 @@ void setup() {
   powerManager.armWakeup(READING_INTERVAL);
 
   Serial.println("\n=== TaraMeteo Weather Station ===");
+  Serial.printf("Firmware %s for %s\n", FIRMWARE_VERSION, FIRMWARE_BOARD);
+  // Without its NVS, the board still runs; it just can't tell a failed update.
+  if (!ota.begin(FIRMWARE_VERSION)) {
+    printStatus("Firmware Updater", false, ota.getLastError());
+  }
+  pendingVerify = ota.isPendingVerify();
+  if (pendingVerify) {
+    Serial.println("New firmware: confirming it once a reading is published");
+  }
   Serial.println("Sensor: (will be determined from certificate CN)");
   Serial.println("Initializing components...");
 
@@ -173,7 +246,8 @@ void setup() {
   constexpr unsigned long FINAL_NOTIFY_DELAY_MS = 1000;
   // Lets the serial log drain before ESP.restart()
   constexpr unsigned long RESTART_DELAY_MS = 2000;
-  if (wifiManager.needsProvisioning() || coldBoot) {
+  // Not for a new image, which restarted into itself: a reset before it publishes would roll it back.
+  if ((wifiManager.needsProvisioning() || coldBoot) && !pendingVerify) {
     // Advertise the sensor ID printed on the sticker next to the passkey.
     const char *deviceName = identity.getCN();
     unsigned long windowMs = wifiManager.needsProvisioning() ? UNPROVISIONED_WINDOW_MS : COLD_BOOT_WINDOW_MS;
@@ -197,13 +271,15 @@ void setup() {
     // A provisioned board skips the window when BLE fails: restarting would
     // be another cold boot, so it would fail again and never publish.
     if (ble.begin(deviceName, identity.getPasskey(), settings.getLabel(), settings.getLocation(),
-                  settings.getMqttServer(), settings.getInterval(), networks, networksLength)) {
+                  settings.getMqttServer(), settings.getInterval(), settings.getAutoUpdate(), networks,
+                  networksLength)) {
       unsigned long startTime = millis();
       while (!saved && !wiped && (millis() - startTime) < windowMs) {
         switch (ble.poll()) {
         case BleRequest::Provision:
           ble.notifyStatus("provisioning");
-          saved = settings.apply(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval());
+          saved = settings.apply(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval(),
+                                 ble.autoUpdate());
           ble.notifyStatus(settings.getStatus());
           if (!saved) {
             Serial.printf("Provisioning rejected: %s\n", settings.getLastError());
@@ -248,13 +324,13 @@ void setup() {
 
   // The provisioned interval, or config.h's, from here on
   powerManager.armWakeup(settings.getInterval());
+  powerManager.limitAwake(AWAKE_LIMIT_S);
 
   // Connect to WiFi (credentials now loaded from NVS)
   Serial.println("Connecting to WiFi...");
-  if (!wifiManager.connect()) {
+  while (!wifiManager.connect()) {
     printStatus("WiFi Connection", false, wifiManager.getLastError());
-    Serial.println("WiFi connection failed, will retry after sleep.");
-    powerManager.sleep();
+    retryOrSleep();
   }
   printStatus("WiFi Connection", true);
   Serial.printf("Connected to %s (IP: %s)\n", wifiManager.getSSID(), wifiManager.getIP());
@@ -262,10 +338,10 @@ void setup() {
 
   // Sync before TLS, which checks the MQTT server certificate dates
   Serial.println("Synchronizing time with NTP servers...");
-  if (!timeManager.syncTime()) {
+  while (!timeManager.syncTime()) {
     printStatus("Time Sync", false, timeManager.getLastError());
-    Serial.println("NTP sync failed. Cannot validate the MQTT server certificate without current time. Sleeping.");
-    powerManager.sleep();
+    Serial.println("NTP sync failed. Cannot validate the MQTT server certificate without current time.");
+    retryOrSleep();
   }
   printStatus("Time Sync", true);
   Serial.printf("Current timestamp: %lu\n", timeManager.getCurrentTimestamp());
@@ -305,7 +381,8 @@ void loop() {
     Serial.println("WiFi disconnected, attempting to reconnect...");
     if (!wifiManager.reconnect()) {
       printStatus("WiFi Reconnect", false, wifiManager.getLastError());
-      powerManager.sleep();
+      retryOrSleep();
+      return;
     }
     printStatus("WiFi Reconnect", true);
     Serial.printf("Reconnected to %s (IP: %s)\n", wifiManager.getSSID(), wifiManager.getIP());
@@ -319,7 +396,8 @@ void loop() {
   // Validate sensor readings
   if (std::isnan(data.temperature) || std::isnan(data.pressure) || std::isnan(data.humidity)) {
     Serial.println("ERROR: Sensor returned invalid readings");
-    powerManager.sleep();
+    retryOrSleep(); // A glitch on a new image's first reading mustn't roll it back
+    return;
   }
 
   // Print sensor readings
@@ -343,8 +421,18 @@ void loop() {
   Serial.println("\nPublishing data to MQTT server...");
   if (!mqttClient.publishWeatherData(data)) {
     printStatus("Data Publish", false, mqttClient.getLastError());
+    if (pendingVerify) {
+      mqttClient.disconnect();
+      retryOrSleep();
+      return;
+    }
   } else {
     printStatus("Data Publish", true);
+    if (pendingVerify) {
+      ota.markValid();
+      pendingVerify = false;
+    }
+    checkForUpdate();
   }
 
   // Disconnect from MQTT (reduces power consumption during sleep)

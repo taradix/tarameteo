@@ -70,7 +70,7 @@ bool provision(MockBleProvisioner &ble, StationSettings &settings) {
     return false;
   }
   ble.notifyStatus("provisioning");
-  bool saved = settings.apply(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval());
+  bool saved = settings.apply(ble.wifi(), ble.location(), ble.label(), ble.mqttServer(), ble.interval(), ble.autoUpdate());
   ble.notifyStatus(settings.getStatus());
   return saved;
 }
@@ -78,7 +78,7 @@ bool provision(MockBleProvisioner &ble, StationSettings &settings) {
 // Opens a session as main() does: the transport starts with the board's current settings.
 void startSession(MockBleProvisioner &ble, const StationSettings &settings) {
   ble.begin("tm-test", 123456, settings.getLabel(), settings.getLocation(), settings.getMqttServer(),
-            settings.getInterval(), nullptr, 0);
+            settings.getInterval(), settings.getAutoUpdate(), nullptr, 0);
 }
 
 void test_ble_provision_valid_payload(void) {
@@ -136,14 +136,14 @@ void test_ble_provision_credential_lengths(void) {
   const std::string ssid32(32, 's');
   const std::string password64(64, 'a');
   TEST_ASSERT_TRUE(
-      settings.apply({ssid32.c_str(), password64.c_str()}, {45.5f, -73.6f}, "", DEFAULT_SERVER, DEFAULT_INTERVAL));
+      settings.apply({ssid32.c_str(), password64.c_str()}, {45.5f, -73.6f}, "", DEFAULT_SERVER, DEFAULT_INTERVAL, true));
   TEST_ASSERT_EQUAL_STRING(ssid32.c_str(), wifiMgr.getSSID());
 
   TEST_ASSERT_FALSE(
-      settings.apply({(ssid32 + "s").c_str(), "my-password"}, {45.5f, -73.6f}, "", DEFAULT_SERVER, DEFAULT_INTERVAL));
+      settings.apply({(ssid32 + "s").c_str(), "my-password"}, {45.5f, -73.6f}, "", DEFAULT_SERVER, DEFAULT_INTERVAL, true));
   TEST_ASSERT_EQUAL_STRING("error:ssid", settings.getStatus());
   TEST_ASSERT_FALSE(settings.apply({"my-network", (password64 + "a").c_str()}, {45.5f, -73.6f}, "", DEFAULT_SERVER,
-                                   DEFAULT_INTERVAL));
+                                   DEFAULT_INTERVAL, true));
   TEST_ASSERT_EQUAL_STRING("error:password", settings.getStatus());
   TEST_ASSERT_EQUAL_STRING(ssid32.c_str(), wifiMgr.getSSID());
 }
@@ -153,7 +153,7 @@ void test_ble_provision_failed_join_saves_nothing(void) {
   StationSettings settings(testPrefs, &mockArduino, wifiMgr);
   TEST_ASSERT_TRUE(settings.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
   TEST_ASSERT_TRUE(
-      settings.apply({"old-network", "old-password"}, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL));
+      settings.apply({"old-network", "old-password"}, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL, true));
   MockBleProvisioner ble;
   startSession(ble, settings);
 
@@ -203,7 +203,7 @@ void test_ble_provision_rejects_failed_location_write(void) {
   StationSettings settings(testPrefs, &mockArduino, wifiMgr);
   testPrefs.begin("tarameteo_certs", true); // read-only: every put* returns 0
 
-  bool ok = settings.apply(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL);
+  bool ok = settings.apply(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL, true);
 
   TEST_ASSERT_FALSE(ok);
   TEST_ASSERT_TRUE(strstr(settings.getLastError(), "Failed to store location") != NULL);
@@ -217,7 +217,7 @@ void test_ble_provision_rejects_failed_label_write(void) {
   StationSettings settings(testPrefs, &mockArduino, wifiMgr);
   testPrefs.failWritesTo("label");
 
-  bool ok = settings.apply(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL);
+  bool ok = settings.apply(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL, true);
 
   TEST_ASSERT_FALSE(ok);
   TEST_ASSERT_TRUE(strstr(settings.getLastError(), "Failed to store label") != NULL);
@@ -240,7 +240,7 @@ void test_ble_provision_location_persists_across_instances(void) {
     StationSettings settings1(testPrefs, &mockArduino, wifiMgr);
     settings1.begin(DEFAULT_SERVER, DEFAULT_INTERVAL);
 
-    TEST_ASSERT_TRUE(settings1.apply(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL));
+    TEST_ASSERT_TRUE(settings1.apply(HOME_WIFI, {45.504f, -73.617f}, "Gazebo", DEFAULT_SERVER, DEFAULT_INTERVAL, true));
   }
 
   WiFiManager reloadedWifi(wifiPrefs, WIFI_TIMEOUT_MS);
@@ -263,7 +263,7 @@ void test_ble_provision_rejects_bad_label(void) {
       "\xed\xa0\x80",                      // surrogate
   };
   for (const char *label : bad) {
-    TEST_ASSERT_FALSE_MESSAGE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, label, DEFAULT_SERVER, DEFAULT_INTERVAL),
+    TEST_ASSERT_FALSE_MESSAGE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, label, DEFAULT_SERVER, DEFAULT_INTERVAL, true),
                               label);
     TEST_ASSERT_TRUE(strstr(settings.getLastError(), "Invalid label") != NULL);
     TEST_ASSERT_EQUAL_STRING("error:label", settings.getStatus());
@@ -276,10 +276,10 @@ void test_ble_provision_accepts_utf8_and_empty_labels(void) {
   StationSettings settings(testPrefs, &mockArduino, wifiMgr);
 
   // 16 two-byte characters: 32 bytes, the most there is room for.
-  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "éééééééééééééééé", DEFAULT_SERVER, DEFAULT_INTERVAL));
-  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "Abri 🌧", DEFAULT_SERVER, DEFAULT_INTERVAL));
+  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "éééééééééééééééé", DEFAULT_SERVER, DEFAULT_INTERVAL, true));
+  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "Abri 🌧", DEFAULT_SERVER, DEFAULT_INTERVAL, true));
   TEST_ASSERT_EQUAL_STRING("Abri 🌧", settings.getLabel());
-  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", DEFAULT_SERVER, DEFAULT_INTERVAL));
+  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", DEFAULT_SERVER, DEFAULT_INTERVAL, true));
   TEST_ASSERT_EQUAL_STRING("", settings.getLabel());
 }
 
@@ -349,7 +349,7 @@ void test_rejects_bad_host(void) {
 
   const char *bad[] = {"", "mqtt://meteo.taram.ca", "meteo.taram.ca:8883", "my server", "météo.ca", host254.c_str()};
   for (const char *host : bad) {
-    TEST_ASSERT_FALSE_MESSAGE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {host, 8883}, DEFAULT_INTERVAL), host);
+    TEST_ASSERT_FALSE_MESSAGE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {host, 8883}, DEFAULT_INTERVAL, true), host);
     TEST_ASSERT_EQUAL_STRING_MESSAGE("error:server", settings.getStatus(), host);
   }
   TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
@@ -360,7 +360,7 @@ void test_rejects_port_zero(void) {
   WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
   StationSettings settings(testPrefs, &mockArduino, wifiMgr);
 
-  TEST_ASSERT_FALSE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {"meteo.taram.ca", 0}, DEFAULT_INTERVAL));
+  TEST_ASSERT_FALSE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {"meteo.taram.ca", 0}, DEFAULT_INTERVAL, true));
 
   TEST_ASSERT_EQUAL_STRING("error:port", settings.getStatus());
   TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
@@ -374,7 +374,7 @@ void test_rejects_interval_out_of_range(void) {
   for (uint32_t interval : bad) {
     char message[16];
     snprintf(message, sizeof(message), "%lu s", (unsigned long)interval);
-    TEST_ASSERT_FALSE_MESSAGE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", DEFAULT_SERVER, interval), message);
+    TEST_ASSERT_FALSE_MESSAGE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", DEFAULT_SERVER, interval, true), message);
     TEST_ASSERT_EQUAL_STRING_MESSAGE("error:interval", settings.getStatus(), message);
   }
   TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
@@ -385,11 +385,32 @@ void test_accepts_host_port_and_interval_bounds(void) {
   StationSettings settings(testPrefs, &mockArduino, wifiMgr);
   const std::string host253(253, 'a');
 
-  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {host253.c_str(), 65535}, 60));
+  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {host253.c_str(), 65535}, 60, true));
   TEST_ASSERT_EQUAL_UINT32(60, settings.getInterval());
 
-  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {"10.0.0.1", 1}, 86400));
+  TEST_ASSERT_TRUE(settings.apply(HOME_WIFI, {45.5f, -73.6f}, "", {"10.0.0.1", 1}, 86400, true));
   TEST_ASSERT_EQUAL_UINT32(86400, settings.getInterval());
+}
+
+void test_auto_update_is_on_until_provisioned_off(void) {
+  WiFiManager wifiMgr(wifiPrefs, WIFI_TIMEOUT_MS);
+  StationSettings settings(testPrefs, &mockArduino, wifiMgr);
+  TEST_ASSERT_TRUE(settings.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
+  TEST_ASSERT_TRUE(settings.getAutoUpdate());
+  MockBleProvisioner ble;
+  startSession(ble, settings);
+
+  ble.setPayload(HOME_WIFI, {45.5f, -73.6f});
+  ble.setAutoUpdate(false);
+  TEST_ASSERT_TRUE(provision(ble, settings));
+  TEST_ASSERT_FALSE(settings.getAutoUpdate());
+
+  // A later session that doesn't write AutoUpdate keeps it off.
+  MockBleProvisioner next;
+  startSession(next, settings);
+  next.setPayload(HOME_WIFI, {45.5f, -73.6f});
+  TEST_ASSERT_TRUE(provision(next, settings));
+  TEST_ASSERT_FALSE(settings.getAutoUpdate());
 }
 
 // ========================================
@@ -399,12 +420,12 @@ void test_accepts_host_port_and_interval_bounds(void) {
 // What the board holds before the payload that fails.
 void provisionOldSettings(StationSettings &settings) {
   TEST_ASSERT_TRUE(
-      settings.apply({"old-network", "old-password"}, {45.504f, -73.617f}, "Gazebo", {"old.example", 8884}, 600));
+      settings.apply({"old-network", "old-password"}, {45.504f, -73.617f}, "Gazebo", {"old.example", 8884}, 600, false));
 }
 
 void applyNewSettings(StationSettings &settings) {
   TEST_ASSERT_FALSE(
-      settings.apply({"new-network", "new-password"}, {10.0f, 20.0f}, "Garden", {"new.example", 1883}, 120));
+      settings.apply({"new-network", "new-password"}, {10.0f, 20.0f}, "Garden", {"new.example", 1883}, 120, true));
   TEST_ASSERT_EQUAL_STRING("error:storage", settings.getStatus());
 }
 
@@ -419,6 +440,7 @@ void assertStoredSettingsAreOld(void) {
   TEST_ASSERT_EQUAL_STRING("old.example", reloaded.getMqttServer().host);
   TEST_ASSERT_EQUAL_UINT16(8884, reloaded.getMqttServer().port);
   TEST_ASSERT_EQUAL_UINT32(600, reloaded.getInterval());
+  TEST_ASSERT_FALSE(reloaded.getAutoUpdate());
 
   TEST_ASSERT_TRUE(reloadedWifi.begin());
   TEST_ASSERT_EQUAL_STRING("old-network", reloadedWifi.getSSID());
@@ -433,6 +455,7 @@ void assertNothingIsStored(void) {
   TEST_ASSERT_EQUAL_STRING("default.example", reloaded.getMqttServer().host);
   TEST_ASSERT_EQUAL_UINT16(1, reloaded.getMqttServer().port);
   TEST_ASSERT_EQUAL_UINT32(3600, reloaded.getInterval());
+  TEST_ASSERT_TRUE(reloaded.getAutoUpdate());
 
   TEST_ASSERT_FALSE(reloadedWifi.begin());
 }
@@ -442,13 +465,14 @@ void test_failed_settings_write_keeps_the_stored_ones(void) {
   StationSettings settings(testPrefs, &mockArduino, wifiMgr);
   TEST_ASSERT_TRUE(settings.begin(DEFAULT_SERVER, DEFAULT_INTERVAL));
   provisionOldSettings(settings);
-  testPrefs.failWritesTo("interval"); // The last setting, after the others are written
+  testPrefs.failWritesTo("auto_update"); // The last setting, after the others are written
 
   applyNewSettings(settings);
 
-  TEST_ASSERT_TRUE(strstr(settings.getLastError(), "Failed to store interval") != NULL);
+  TEST_ASSERT_TRUE(strstr(settings.getLastError(), "Failed to store auto-update") != NULL);
   TEST_ASSERT_EQUAL_STRING("old.example", settings.getMqttServer().host);
   TEST_ASSERT_EQUAL_UINT32(600, settings.getInterval());
+  TEST_ASSERT_FALSE(settings.getAutoUpdate());
   TEST_ASSERT_EQUAL_STRING("old-network", wifiMgr.getSSID());
   assertStoredSettingsAreOld();
 }
@@ -461,6 +485,7 @@ void test_failed_settings_write_on_a_new_board_stores_nothing(void) {
 
   applyNewSettings(settings);
 
+  TEST_ASSERT_TRUE(strstr(settings.getLastError(), "Failed to store interval") != NULL);
   TEST_ASSERT_TRUE(wifiMgr.needsProvisioning());
   assertNothingIsStored();
 }
@@ -524,6 +549,7 @@ void test_reset_forgets_everything_provisioning_saved(void) {
   TEST_ASSERT_EQUAL_STRING("", settings.getLabel());
   TEST_ASSERT_EQUAL_STRING(DEFAULT_SERVER.host, settings.getMqttServer().host);
   TEST_ASSERT_EQUAL_UINT32(DEFAULT_INTERVAL, settings.getInterval());
+  TEST_ASSERT_TRUE(settings.getAutoUpdate());
   assertNothingIsStored();
 }
 
@@ -621,6 +647,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_reset_of_a_new_board_succeeds);
   RUN_TEST(test_failed_reset_still_forgets_the_wifi);
   RUN_TEST(test_unknown_commit_is_neither_provision_nor_reset);
+  RUN_TEST(test_auto_update_is_on_until_provisioned_off);
 
   return UNITY_END();
 }

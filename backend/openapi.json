@@ -1066,6 +1066,155 @@
           }
         }
       }
+    },
+    "/api/firmware/{board}/{version}.bin": {
+      "put": {
+        "summary": "Put Firmware",
+        "description": "Store a board's image, sent as the request body, and offer it to the boards as their latest.",
+        "operationId": "put_firmware_api_firmware__board___version__bin_put",
+        "parameters": [
+          {
+            "name": "board",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+              "title": "Board"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+              "title": "Version"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareManifest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Get Firmware Image",
+        "operationId": "get_firmware_image_api_firmware__board___version__bin_get",
+        "parameters": [
+          {
+            "name": "board",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+              "title": "Board"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/firmware/{board}": {
+      "get": {
+        "summary": "Get Firmware",
+        "description": "The board's latest image: version, sha256, size and url.",
+        "operationId": "get_firmware_api_firmware__board__get",
+        "parameters": [
+          {
+            "name": "board",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+              "title": "Board"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareManifest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1449,6 +1598,39 @@
           "below"
         ],
         "title": "Condition"
+      },
+      "FirmwareManifest": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Release version, from the firmware-v<version> tag"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256",
+            "description": "SHA-256 of the image, in lowercase hex"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Size of the image in bytes"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Where the boards download the image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "sha256",
+          "size",
+          "url"
+        ],
+        "title": "FirmwareManifest",
+        "description": "The latest image of a board, which the boards parse (firmware/lib/OtaUpdater)."
       },
       "HTTPValidationError": {
         "properties": {

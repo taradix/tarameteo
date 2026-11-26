@@ -250,3 +250,16 @@ async def test_retries_when_sending_fails(alert_store, notifier):
     await _check(alert_store, notifier, temperature=-25.0)
 
     assert_that(notifier.send.call_count, equal_to(2))
+
+
+def test_from_env_requires_base_url():
+    """Without ALERT_BASE_URL, the links in the emails would be relative, so the service isn't made."""
+    with pytest.raises(KeyError):
+        AlertService.from_env(AsyncMock(), None, {"ALERT_SECRET": "s"})
+
+
+def test_from_env_links_on_base_url():
+    """The links in the emails start with ALERT_BASE_URL, without doubling its trailing slash."""
+    alerts = AlertService.from_env(AsyncMock(), None, {"ALERT_SECRET": "s", "ALERT_BASE_URL": "https://example.test/"})
+
+    assert_that(alerts.base_url, equal_to("https://example.test"))
