@@ -29,7 +29,7 @@ install -o mosquitto -g mosquitto -m 600 /dev/null "$MOSQUITTO_SENSOR_ACL"
 cat <<EOF > "$MOSQUITTO_SENSOR_ACL"
 pattern write weather/%u/#
 pattern write status/%u
-topic read firmware/+
+pattern read firmware/+
 EOF
 
 # Consumer ACL — password-authenticated backend service; may read all sensor events
