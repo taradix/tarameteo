@@ -2146,6 +2146,45 @@
             ],
             "title": "Retry Count",
             "description": "Number of retry attempts"
+          },
+          "board": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board",
+            "description": "Board the station's firmware is built for"
+          },
+          "firmware": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firmware",
+            "description": "Firmware version the station runs"
+          },
+          "firmware_failed": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firmware Failed",
+            "description": "Last firmware version that failed to install, when one did"
           }
         },
         "type": "object",

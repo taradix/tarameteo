@@ -728,6 +728,21 @@ export interface components {
              * @description Number of retry attempts
              */
             retry_count?: number | null;
+            /**
+             * Board
+             * @description Board the station's firmware is built for
+             */
+            board?: string | null;
+            /**
+             * Firmware
+             * @description Firmware version the station runs
+             */
+            firmware?: string | null;
+            /**
+             * Firmware Failed
+             * @description Last firmware version that failed to install, when one did
+             */
+            firmware_failed?: string | null;
         };
     };
     responses: never;

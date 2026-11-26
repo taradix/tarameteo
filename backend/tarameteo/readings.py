@@ -41,6 +41,12 @@ class WeatherReading(BaseModel):
     snow: float | None = Field(None, description="Snowfall in mm")
     rssi: int | None = Field(None, description="WiFi RSSI in dBm")
     retry_count: int | None = Field(None, description="Number of retry attempts")
+    # From TaraMeteo stations only, like retry_count; the 64 bytes of their version buffers.
+    board: str | None = Field(None, max_length=64, description="Board the station's firmware is built for")
+    firmware: str | None = Field(None, max_length=64, description="Firmware version the station runs")
+    firmware_failed: str | None = Field(
+        None, max_length=64, description="Last firmware version that failed to install, when one did",
+    )
     server_time: datetime | None = Field(
         None,
         exclude=True,

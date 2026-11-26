@@ -28,6 +28,10 @@ TS = datetime(2026, 1, 1, tzinfo=UTC)
         latitude=46.81, longitude=-71.21, rain=1.5, rssi=-60, retry_count=2,
     ),
     WeatherReading(
+        sensor="tm-3f9a1c", timestamp=TS, temperature=1.0, humidity=2.0, pressure=3.0,
+        latitude=46.81, longitude=-71.21, board="esp32s3", firmware="1.2.0", firmware_failed="1.3.0",
+    ),
+    WeatherReading(
         sensor="tm-3f9a1c", label="Serre à tomates", timestamp=TS, temperature=1.0, humidity=2.0, pressure=3.0,
         latitude=46.81, longitude=-71.21,
     ),
@@ -60,6 +64,11 @@ def test_from_point_reverses_to_point(reading):
         '{"timestamp":1767225600,"temperature":20.5,"humidity":50,"pressure":1013.25,'
         '"latitude":46.81,"longitude":-71.21,"label":"Abri été"}',
         {"label": "Abri été"},
+    ),
+    (
+        '{"timestamp":1767225600,"temperature":20.5,"humidity":50,"pressure":1013.25,'
+        '"latitude":46.81,"longitude":-71.21,"board":"esp32s3","firmware":"1.2.0","firmware_failed":"1.3.0"}',
+        {"board": "esp32s3", "firmware": "1.2.0", "firmware_failed": "1.3.0"},
     ),
 ])
 def test_weather_reading_parses_firmware_payload(payload, expected):

@@ -17,6 +17,7 @@ struct WeatherData {
     unsigned long timestamp;
     Location location;
     const char* label;  // Empty when the owner gave none
+    const char* firmwareFailed;  // The last version that failed to install, empty when none did
 };
 
 class MqttClient {

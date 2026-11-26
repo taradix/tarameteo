@@ -1,4 +1,5 @@
 #include "MqttClient.h"
+#include "Firmware.h"
 #include "WiFiClientSecureAdapter.h"
 #include <WiFi.h>
 
@@ -246,6 +247,13 @@ bool MqttClient::buildPayload(const WeatherData &data, int retryCount, char *buf
 
   if (retryCount > 0) {
     doc["retry_count"] = retryCount;
+  }
+
+  // Which updates worked: the backend stores them with the reading.
+  doc["board"] = FIRMWARE_BOARD;
+  doc["firmware"] = FIRMWARE_VERSION;
+  if (data.firmwareFailed[0] != '\0') {
+    doc["firmware_failed"] = data.firmwareFailed;
   }
 
   size_t len = serializeJson(doc, buffer, size);

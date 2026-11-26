@@ -392,7 +392,7 @@ void loop() {
   // Read sensor data
   const WeatherData data = {sensor.getTemperature(), sensor.getPressure(),  sensor.getHumidity(),
                             sensor.getAltitude(),    wifiManager.getRSSI(), timeManager.getCurrentTimestamp(),
-                            settings.getLocation(),  settings.getLabel()};
+                            settings.getLocation(),  settings.getLabel(),   ota.getBad()};
 
   // Validate sensor readings
   if (std::isnan(data.temperature) || std::isnan(data.pressure) || std::isnan(data.humidity)) {
