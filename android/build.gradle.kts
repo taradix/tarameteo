@@ -1,6 +1,6 @@
 // One module: the app lives at the project root. The Kotlin plugins' version is in settings.gradle.kts.
 plugins {
-    id("com.android.application") version "9.5.2"
+    id("com.android.application") version "9.5.3"
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.gms.google-services") version "4.6.0" apply false
