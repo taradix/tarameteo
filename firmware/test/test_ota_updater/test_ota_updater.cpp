@@ -129,6 +129,27 @@ void test_begin_keeps_the_try_until_the_bad_version_is_stored() {
   TEST_ASSERT_EQUAL_STRING("1.3.0", later.getBad());
 }
 
+void test_mark_bad_keeps_the_version_across_boots() {
+  OtaUpdater ota(prefs);
+  TEST_ASSERT_TRUE(ota.begin("1.2.0"));
+
+  TEST_ASSERT_TRUE(ota.markBad("1.3.0"));
+
+  TEST_ASSERT_EQUAL_STRING("1.3.0", ota.getBad());
+  OtaUpdater later(prefs);
+  TEST_ASSERT_TRUE(later.begin("1.2.0"));
+  TEST_ASSERT_EQUAL_STRING("1.3.0", later.getBad());
+}
+
+void test_mark_bad_failure_keeps_it_bad_for_this_boot() {
+  OtaUpdater ota(prefs);
+  TEST_ASSERT_TRUE(ota.begin("1.2.0"));
+  prefs.failWritesTo("bad");
+
+  TEST_ASSERT_FALSE(ota.markBad("1.3.0"));
+  TEST_ASSERT_EQUAL_STRING("1.3.0", ota.getBad());
+}
+
 void test_begin_on_a_new_board_has_nothing_bad() {
   OtaUpdater ota(prefs);
 
@@ -157,6 +178,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_begin_marks_a_rolled_back_version_bad);
   RUN_TEST(test_begin_keeps_the_try_while_it_runs);
   RUN_TEST(test_begin_keeps_the_try_until_the_bad_version_is_stored);
+  RUN_TEST(test_mark_bad_keeps_the_version_across_boots);
+  RUN_TEST(test_mark_bad_failure_keeps_it_bad_for_this_boot);
   RUN_TEST(test_begin_on_a_new_board_has_nothing_bad);
   RUN_TEST(test_record_try_failure_is_reported);
   return UNITY_END();

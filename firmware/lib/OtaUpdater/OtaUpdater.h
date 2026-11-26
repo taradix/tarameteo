@@ -52,6 +52,9 @@ public:
 
     // Remembers version as the one installed, before restarting into it.
     bool recordTry(const char* version);
+    // Never installs version again, for an image that can't ever work here. False when
+    // it is bad for this boot only, NVS failing to keep it.
+    bool markBad(const char* version);
 
     // Device only, defined apart from the host tests.
     // Whether the running image waits for markValid(); a reset now rolls it back.

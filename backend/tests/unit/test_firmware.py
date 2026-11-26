@@ -1,6 +1,8 @@
 """Unit tests for the firmware endpoints."""
 
+import csv
 import hashlib
+from pathlib import Path
 
 import pytest
 from hamcrest import assert_that, equal_to, has_entries
@@ -138,3 +140,13 @@ def test_get_firmware_unknown(firmware_app):
     """A board without images should answer 404."""
     assert_that(firmware_app.get("/api/firmware/esp32").status_code, equal_to(404))
     assert_that(firmware_app.get("/api/firmware/esp32/1.0.0.bin").status_code, equal_to(404))
+
+
+def test_max_size_is_the_app_slot():
+    """MAX_SIZE should match the app slots, or valid releases are refused or oversized ones offered."""
+    partitions = Path(__file__).parents[3] / "firmware" / "partitions.csv"
+    rows = csv.reader(line for line in partitions.read_text().splitlines() if not line.startswith("#"))
+    sizes = {row[0].strip(): int(row[4], 16) for row in rows if row}
+
+    assert_that(sizes["app0"], equal_to(MAX_SIZE))
+    assert_that(sizes["app1"], equal_to(MAX_SIZE))

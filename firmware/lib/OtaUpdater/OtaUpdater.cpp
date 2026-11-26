@@ -73,15 +73,18 @@ bool OtaUpdater::begin(const char *running) {
     char tried[sizeof(_bad)];
     _prefs.getString("tried", tried, sizeof(tried));
     // Not running the version installed: it never got as far as markValid().
-    if (strcmp(tried, running) != 0) {
-      memcpy(_bad, tried, sizeof(_bad));
-      // Kept until bad is stored, so a failed write gets another go at the next boot.
-      if (_prefs.putString("bad", _bad) > 0) {
-        _prefs.remove("tried");
-      }
+    // Kept until bad is stored, so a failed write gets another go at the next boot.
+    if (strcmp(tried, running) != 0 && markBad(tried)) {
+      _prefs.remove("tried");
     }
   }
   return true;
+}
+
+bool OtaUpdater::markBad(const char *version) {
+  strncpy(_bad, version, sizeof(_bad) - 1);
+  _bad[sizeof(_bad) - 1] = '\0';
+  return _prefs.putString("bad", _bad) > 0;
 }
 
 bool OtaUpdater::recordTry(const char *version) {
@@ -154,9 +157,11 @@ bool OtaUpdater::install(const FirmwareManifest &manifest) {
     http.end();
     return false;
   }
+  // The size came from the manifest, so an image too big for the slot is bad for good.
   if (!Update.begin(manifest.size)) {
     setError(Update.errorString());
     http.end();
+    markBad(manifest.version);
     return false;
   }
 
@@ -195,12 +200,15 @@ bool OtaUpdater::install(const FirmwareManifest &manifest) {
   }
   if (memcmp(digest, manifest.sha256, sizeof(digest)) != 0) {
     Update.abort();
+    // Not marked bad: without a certificate check, anyone on the network could send wrong bytes.
     setError("Firmware sha256 differs from the manifest");
     return false;
   }
-  // Checks the image (chip, header) and makes it the one to boot.
+  // Checks the image (chip, header) and makes it the one to boot. An image the sha256
+  // vouched for that fails here is bad for good, like one for another chip.
   if (!Update.end()) {
     setError(Update.errorString());
+    markBad(manifest.version);
     return false;
   }
   // Not recorded, the next boot couldn't tell a rollback from success, and would retry the image.
