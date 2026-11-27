@@ -1,4 +1,4 @@
-name: tarameteo
+name: tarameteo-test
 
 services:
   api:
