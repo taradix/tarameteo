@@ -15,12 +15,7 @@ from tarameteo.ts import (
 
 
 @pytest.fixture(scope="session")
-def project():
-    return "test"
-
-
-@pytest.fixture(scope="session")
-def env_vars(project):
+def env_vars():
     """Environment variables for the services.
 
     Static because they are persisted in volumes, e.g. mysql-vol-1.
@@ -30,7 +25,6 @@ def env_vars(project):
 
     return {
         "CA_TOKEN": "test",
-        "COMPOSE_PROJECT_NAME": project,
         "INFLUX_PASSWORD": "testtest",  # must be between 8 and 72 characters long
         "INFLUX_TOKEN": "test",
         "MQTT_PASSWORD": "test",
@@ -54,10 +48,9 @@ def env_file(env_vars, request):
 
 
 @pytest.fixture(scope="session")
-def compose_server(project, env_file, process, request):
+def compose_server(env_file, process, request):
     return partial(
         ComposeServer,
-        project=project,
         env_file=env_file,
         compose_files=find_compose_files(request.config.rootdir),
         process=process,
